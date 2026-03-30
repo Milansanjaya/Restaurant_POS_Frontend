@@ -555,3 +555,106 @@ export interface PaginatedResponse<T> {
     pages: number;
   };
 }
+
+// ==================== TABLE ====================
+export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING';
+
+export interface RestaurantTable {
+  _id: string;
+  tableNumber: string;
+  branch_id: string;
+  capacity: number;
+  status: TableStatus;
+  currentSale?: string | Sale;
+  section?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TableFormData {
+  tableNumber: string;
+  capacity: number;
+  section?: string;
+}
+
+// ==================== KITCHEN ====================
+export type KitchenOrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'SERVED';
+
+export interface KitchenOrderItem {
+  product: string | Product;
+  name: string;
+  quantity: number;
+}
+
+export interface KitchenOrder {
+  _id: string;
+  sale: string | Sale;
+  branch_id: string;
+  items: KitchenOrderItem[];
+  status: KitchenOrderStatus;
+  createdBy: string;
+  tableNumber?: string;
+  section?: string;
+  waitingMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KitchenDashboardSummary {
+  pendingCount: number;
+  preparingCount: number;
+  readyCount: number;
+  totalActive: number;
+}
+
+export interface KitchenDashboard {
+  branch_id: string;
+  summary: KitchenDashboardSummary;
+  orders: KitchenOrder[];
+}
+
+// ==================== RESERVATION ====================
+export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'SEATED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW';
+
+export interface Reservation {
+  _id: string;
+  branch_id: string;
+  table: string | RestaurantTable;
+  customerName: string;
+  customerPhone: string;
+  guestCount: number;
+  reservationDateTime: string;
+  status: ReservationStatus;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReservationFormData {
+  tableId: string;
+  customerName: string;
+  customerPhone: string;
+  guestCount: number;
+  reservationDateTime: string;
+  notes?: string;
+}
+
+// ==================== SHIFT ====================
+export type ShiftStatus = 'OPEN' | 'CLOSED';
+
+export interface Shift {
+  _id: string;
+  branch_id: string;
+  cashier: string | User;
+  openingCash: number;
+  closingCash?: number;
+  expectedCash?: number;
+  cashDifference?: number;
+  status: ShiftStatus;
+  openedAt: string;
+  closedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

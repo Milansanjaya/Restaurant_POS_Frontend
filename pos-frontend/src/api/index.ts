@@ -15,3 +15,7 @@ export { configApi } from './config.api';
 export { returnsApi } from './returns.api';
 export { dashboardApi } from './dashboard.api';
 export { reportsApi } from './reports.api';
+export { tablesApi } from './tables.api';
+export { kitchenApi } from './kitchen.api';
+export { reservationsApi } from './reservations.api';
+export { shiftsApi } from './shifts.api';
