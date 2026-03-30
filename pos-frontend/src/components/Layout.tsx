@@ -7,7 +7,7 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-export default function Layout({ children }: LayoutProps) {
+export function Layout({ children }: LayoutProps) {
   const token = useAuthStore((s) => s.token);
 
   if (!token) {
@@ -23,6 +23,8 @@ export default function Layout({ children }: LayoutProps) {
     </div>
   );
 }
+
+export default Layout;
 
 interface PageHeaderProps {
   title: string;

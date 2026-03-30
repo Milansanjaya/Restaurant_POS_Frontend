@@ -17,10 +17,14 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     sku: '',
+    barcode: '',
     category: '',
     price: 0,
     cost: 0,
     taxRate: 0,
+    trackStock: false,
+    lowStockThreshold: 5,
+    preparationTime: undefined,
   });
 
   const loadProducts = async () => {
@@ -52,7 +56,18 @@ export default function ProductsPage() {
 
   const openCreateModal = () => {
     setEditingProduct(null);
-    setFormData({ name: '', sku: '', category: '', price: 0, cost: 0, taxRate: 0 });
+    setFormData({ 
+      name: '', 
+      sku: '', 
+      barcode: '', 
+      category: '', 
+      price: 0, 
+      cost: 0, 
+      taxRate: 0,
+      trackStock: false,
+      lowStockThreshold: 5,
+      preparationTime: undefined,
+    });
     setModalOpen(true);
   };
 
@@ -61,10 +76,14 @@ export default function ProductsPage() {
     setFormData({
       name: product.name,
       sku: product.sku,
+      barcode: product.barcode || '',
       category: typeof product.category === 'string' ? product.category : product.category._id,
       price: product.price,
       cost: product.cost,
       taxRate: product.taxRate || 0,
+      trackStock: product.trackStock || false,
+      lowStockThreshold: product.lowStockThreshold || 5,
+      preparationTime: product.preparationTime,
     });
     setModalOpen(true);
   };
@@ -201,34 +220,44 @@ export default function ProductsPage() {
         }
       >
         <div className="space-y-4">
-          <Input
-            label="Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-          <Input
-            label="SKU"
-            value={formData.sku}
-            onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-            required
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              Category
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select Category</option>
-              {flattenCategories(categories).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+            />
+            <Input
+              label="SKU"
+              value={formData.sku}
+              onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Barcode"
+              value={formData.barcode || ''}
+              onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+              placeholder="Optional"
+            />
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Category
+              </label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Select Category</option>
+                {flattenCategories(categories).map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <Input
@@ -236,18 +265,48 @@ export default function ProductsPage() {
               type="number"
               value={formData.price}
               onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              required
             />
             <Input
               label="Cost"
               type="number"
               value={formData.cost}
               onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) || 0 })}
+              required
             />
             <Input
               label="Tax Rate (%)"
               type="number"
               value={formData.taxRate}
               onChange={(e) => setFormData({ ...formData, taxRate: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4 items-end">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="trackStock"
+                checked={formData.trackStock || false}
+                onChange={(e) => setFormData({ ...formData, trackStock: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <label htmlFor="trackStock" className="text-sm font-medium text-slate-700">
+                Track Stock
+              </label>
+            </div>
+            <Input
+              label="Low Stock Threshold"
+              type="number"
+              value={formData.lowStockThreshold || 5}
+              onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value) || 5 })}
+              disabled={!formData.trackStock}
+            />
+            <Input
+              label="Prep Time (min)"
+              type="number"
+              value={formData.preparationTime || ''}
+              onChange={(e) => setFormData({ ...formData, preparationTime: parseInt(e.target.value) || undefined })}
+              placeholder="Optional"
             />
           </div>
         </div>

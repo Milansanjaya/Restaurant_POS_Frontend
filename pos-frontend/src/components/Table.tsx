@@ -54,7 +54,9 @@ export default function Table<T extends Record<string, any>>({
     );
   }
 
-  if (data.length === 0) {
+  const safeData = Array.isArray(data) ? data : [];
+
+  if (safeData.length === 0) {
     return (
       <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white">
         <p className="text-slate-500">{emptyMessage}</p>
@@ -79,7 +81,7 @@ export default function Table<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {data.map((item) => (
+            {safeData.map((item) => (
               <tr
                 key={keyExtractor(item)}
                 onClick={() => onRowClick?.(item)}

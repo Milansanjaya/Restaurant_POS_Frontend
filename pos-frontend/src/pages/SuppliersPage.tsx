@@ -20,6 +20,7 @@ export default function SuppliersPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
 
   const [formData, setFormData] = useState<SupplierFormData>({
+    code: '',
     name: '',
     contactPerson: '',
     phone: '',
@@ -27,6 +28,8 @@ export default function SuppliersPage() {
     address: '',
     creditLimit: 0,
     paymentTerms: 30,
+    gstNumber: '',
+    panNumber: '',
   });
 
   const loadSuppliers = async () => {
@@ -48,6 +51,7 @@ export default function SuppliersPage() {
   const openCreateModal = () => {
     setEditingSupplier(null);
     setFormData({
+      code: '',
       name: '',
       contactPerson: '',
       phone: '',
@@ -55,6 +59,8 @@ export default function SuppliersPage() {
       address: '',
       creditLimit: 0,
       paymentTerms: 30,
+      gstNumber: '',
+      panNumber: '',
     });
     setModalOpen(true);
   };
@@ -62,6 +68,7 @@ export default function SuppliersPage() {
   const openEditModal = (supplier: Supplier) => {
     setEditingSupplier(supplier);
     setFormData({
+      code: supplier.code,
       name: supplier.name,
       contactPerson: supplier.contactPerson,
       phone: supplier.phone,
@@ -69,8 +76,8 @@ export default function SuppliersPage() {
       address: supplier.address,
       creditLimit: supplier.creditLimit,
       paymentTerms: supplier.paymentTerms,
-      gstNumber: supplier.gstNumber,
-      panNumber: supplier.panNumber,
+      gstNumber: supplier.gstNumber || '',
+      panNumber: supplier.panNumber || '',
     });
     setModalOpen(true);
   };
@@ -209,25 +216,35 @@ export default function SuppliersPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input
+              label="Supplier Code"
+              value={formData.code}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+              required
+              disabled={!!editingSupplier}
+              placeholder="e.g., SUP001"
+            />
+            <Input
               label="Company Name"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Contact Person"
               value={formData.contactPerson}
               onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
               required
             />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Phone"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               required
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Email"
               type="email"
@@ -235,18 +252,20 @@ export default function SuppliersPage() {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
             />
+            <Input
+              label="Address"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              required
+            />
           </div>
-          <Input
-            label="Address"
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          />
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Credit Limit"
               type="number"
               value={formData.creditLimit}
               onChange={(e) => setFormData({ ...formData, creditLimit: parseFloat(e.target.value) || 0 })}
+              required
             />
             <Input
               label="Payment Terms (days)"
@@ -258,13 +277,15 @@ export default function SuppliersPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="GST Number"
-              value={formData.gstNumber || ''}
+              value={formData.gstNumber}
               onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value })}
+              required
             />
             <Input
               label="PAN Number"
-              value={formData.panNumber || ''}
+              value={formData.panNumber}
               onChange={(e) => setFormData({ ...formData, panNumber: e.target.value })}
+              required
             />
           </div>
         </div>

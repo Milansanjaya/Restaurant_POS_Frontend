@@ -19,3 +19,4 @@ export { tablesApi } from './tables.api';
 export { kitchenApi } from './kitchen.api';
 export { reservationsApi } from './reservations.api';
 export { shiftsApi } from './shifts.api';
+export { couponsApi } from './coupons.api';

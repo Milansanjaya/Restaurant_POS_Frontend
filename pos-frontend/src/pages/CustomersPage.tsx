@@ -40,7 +40,7 @@ export default function CustomersPage() {
 
   const openCreateModal = () => {
     setEditingCustomer(null);
-    setFormData({ name: '', phone: '', email: '', address: '' });
+    setFormData({ name: '', phone: '', email: '', address: '', dob: '', anniversary: '', notes: '' });
     setModalOpen(true);
   };
 
@@ -51,6 +51,8 @@ export default function CustomersPage() {
       phone: customer.phone,
       email: customer.email || '',
       address: customer.address || '',
+      dob: customer.dob ? customer.dob.split('T')[0] : '',
+      anniversary: customer.anniversary ? customer.anniversary.split('T')[0] : '',
       notes: customer.notes || '',
     });
     setModalOpen(true);
@@ -201,6 +203,20 @@ export default function CustomersPage() {
             value={formData.address || ''}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
           />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Date of Birth"
+              type="date"
+              value={formData.dob || ''}
+              onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+            />
+            <Input
+              label="Anniversary"
+              type="date"
+              value={formData.anniversary || ''}
+              onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
+            />
+          </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">
               Notes

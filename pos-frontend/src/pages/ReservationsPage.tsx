@@ -215,13 +215,12 @@ export default function ReservationsPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
           </div>
         ) : (
-          <Table data={reservations} columns={columns} />
-        )}
-
-        {!loading && reservations.length === 0 && (
-          <div className="rounded-lg bg-slate-50 p-12 text-center">
-            <p className="text-slate-500">No reservations found</p>
-          </div>
+          <Table 
+            data={reservations} 
+            columns={columns} 
+            keyExtractor={(r) => r._id}
+            emptyMessage="No reservations found"
+          />
         )}
       </PageContent>
 

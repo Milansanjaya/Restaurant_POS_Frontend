@@ -67,6 +67,7 @@ export interface CategoryFormData {
   description?: string;
   parentId?: string;
   icon?: string;
+  image?: string;
   displayOrder?: number;
 }
 
@@ -83,7 +84,7 @@ export interface Inventory {
 export interface InventoryAdjustment {
   productId: string;
   quantityChange: number;
-  type: 'PURCHASE' | 'ADJUSTMENT' | 'RETURN';
+  type: 'SALE' | 'PURCHASE' | 'ADJUSTMENT' | 'RETURN';
 }
 
 // ==================== SUPPLIER ====================
@@ -109,25 +110,29 @@ export interface Supplier {
 }
 
 export interface SupplierFormData {
+  code: string;
   name: string;
   contactPerson: string;
   phone: string;
   email: string;
   address: string;
-  creditLimit?: number;
+  creditLimit: number;
   paymentTerms?: number;
-  gstNumber?: string;
-  panNumber?: string;
+  gstNumber: string;
+  panNumber: string;
 }
 
 export interface SupplierTransaction {
   _id: string;
   supplier_id: string;
-  transactionType: 'PAYMENT' | 'PURCHASE';
+  transactionType: 'PURCHASE' | 'PAYMENT' | 'RETURN' | 'ADJUSTMENT';
   amount: number;
+  description?: string;
+  referenceDocument?: string;
   branch_id: string;
   createdBy: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface SupplierPaymentData {
@@ -158,7 +163,7 @@ export interface PurchaseOrder {
   approvedBy?: string;
   approvedAt?: string;
   branch_id: string;
-  expectedDeliveryDate?: string;
+  deliveryDate?: string;
   notes?: string;
   createdBy: string;
   createdAt: string;
@@ -169,7 +174,7 @@ export interface PurchaseOrderFormData {
   supplier_id: string;
   items: PurchaseOrderItem[];
   totalAmount: number;
-  expectedDeliveryDate?: string;
+  deliveryDate?: string;
   notes?: string;
 }
 
@@ -180,14 +185,20 @@ export type QualityStatus = 'ACCEPTED' | 'REJECTED' | 'PARTIAL';
 export interface GRNItem {
   product_id: string;
   productName: string;
-  orderedQuantity: number;
+  purchasedQuantity: number;
   receivedQuantity: number;
   unitPrice: number;
   totalPrice: number;
-  batchNumber?: string;
-  expiryDate?: string;
   qualityStatus: QualityStatus;
   rejectionReason?: string;
+}
+
+export interface GRNBatch {
+  batchNumber: string;
+  product_id?: string;
+  expiryDate: string;
+  quantity: number;
+  costPerUnit: number;
 }
 
 export interface GRN {
@@ -196,6 +207,7 @@ export interface GRN {
   purchaseOrder_id: string | PurchaseOrder;
   supplier_id: string | Supplier;
   items: GRNItem[];
+  batches: GRNBatch[];
   totalAmount: number;
   status: GRNStatus;
   receivedDate: string;
@@ -203,6 +215,7 @@ export interface GRN {
   approvedAt?: string;
   branch_id: string;
   notes?: string;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -211,6 +224,7 @@ export interface GRNFormData {
   purchaseOrder_id: string;
   supplier_id: string;
   items: GRNItem[];
+  batches?: GRNBatch[];
   totalAmount: number;
   notes?: string;
 }
@@ -299,24 +313,29 @@ export interface LoyaltyAccount {
 export interface LoyaltyTransaction {
   _id: string;
   customer_id: string;
-  type: 'EARNED' | 'REDEEMED';
+  type: 'EARNED' | 'REDEEMED' | 'EXPIRED' | 'ADJUSTED';
   points: number;
   balance: number;
   sale_id?: string;
-  description: string;
+  expiryDate?: string;
+  description?: string;
+  createdBy?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface WalletTransaction {
   _id: string;
   customer_id: string;
-  type: 'CREDIT' | 'DEBIT';
+  type: 'CREDIT' | 'DEBIT' | 'REFUND';
   amount: number;
   balance: number;
   paymentMethod?: string;
   sale_id?: string;
-  description: string;
+  description?: string;
+  createdBy?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface EarnPointsData {
@@ -657,4 +676,54 @@ export interface Shift {
   closedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==================== COUPON ====================
+export interface Coupon {
+  _id: string;
+  code: string;
+  discountType: DiscountType;
+  value: number;
+  expiryDate: string;
+  isActive: boolean;
+  minOrderValue: number;
+  maxDiscount?: number;
+  validFrom?: string;
+  validTo?: string;
+  usageLimit?: number;
+  timesUsed: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CouponFormData {
+  code: string;
+  discountType: DiscountType;
+  value: number;
+  expiryDate: string;
+  minOrderValue?: number;
+  maxDiscount?: number;
+  validFrom?: string;
+  validTo?: string;
+  usageLimit?: number;
+}
+
+// ==================== ROLE ====================
+export interface Permission {
+  _id: string;
+  name: string;
+  description?: string;
+}
+
+export interface Role {
+  _id: string;
+  name: string;
+  permissions: Permission[] | string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoleFormData {
+  name: string;
+  permissions: string[];
 }

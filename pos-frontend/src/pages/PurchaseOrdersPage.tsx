@@ -16,7 +16,7 @@ export default function PurchaseOrdersPage() {
     supplier_id: '',
     items: [],
     totalAmount: 0,
-    expectedDeliveryDate: '',
+    deliveryDate: '',
     notes: '',
   });
 
@@ -53,7 +53,7 @@ export default function PurchaseOrdersPage() {
       supplier_id: '',
       items: [],
       totalAmount: 0,
-      expectedDeliveryDate: '',
+      deliveryDate: '',
       notes: '',
     });
     setModalOpen(true);
@@ -232,8 +232,8 @@ export default function PurchaseOrdersPage() {
             <Input
               label="Expected Delivery"
               type="date"
-              value={formData.expectedDeliveryDate || ''}
-              onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+              value={formData.deliveryDate || ''}
+              onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
             />
           </div>
 
