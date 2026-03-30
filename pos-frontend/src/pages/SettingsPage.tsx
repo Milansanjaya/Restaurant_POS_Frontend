@@ -1,0 +1,214 @@
+import { useEffect, useState } from 'react';
+import { Layout, PageHeader, PageContent, Card, Button, Input, PageLoader } from '../components';
+import { configApi } from '../api';
+import type { SystemConfig, TaxSetting } from '../types';
+
+export default function SettingsPage() {
+  const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [taxes, setTaxes] = useState<TaxSetting[]>([]);
+  const [currency, setCurrency] = useState({ code: 'USD', symbol: '$', position: 'BEFORE' as const });
+  const [invoicePrefix, setInvoicePrefix] = useState('INV');
+  const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
+  const [expiryAlertDays, setExpiryAlertDays] = useState(30);
+
+  const loadConfig = async () => {
+    try {
+      setLoading(true);
+      const data = await configApi.get();
+      setConfig(data);
+      setTaxes(data.taxes || []);
+      setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' });
+      setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
+      setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
+      setExpiryAlertDays(data.expiryAlertDays || 30);
+    } catch (error) {
+      console.error('Failed to load config:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await configApi.update({
+        taxes,
+        currency,
+        invoiceFormat: {
+          prefix: invoicePrefix,
+          numberLength: 6,
+          footer: invoiceFooter,
+        },
+        expiryAlertDays,
+      });
+      alert('Settings saved successfully');
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addTax = () => {
+    setTaxes([...taxes, { name: '', rate: 0, isDefault: false, type: 'EXCLUSIVE' }]);
+  };
+
+  const updateTax = (index: number, field: string, value: any) => {
+    const newTaxes = [...taxes];
+    (newTaxes[index] as any)[field] = value;
+    setTaxes(newTaxes);
+  };
+
+  const removeTax = (index: number) => {
+    setTaxes(taxes.filter((_, i) => i !== index));
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <PageLoader />
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <PageHeader
+        title="Settings"
+        subtitle="Configure your POS system"
+        actions={
+          <Button onClick={handleSave} loading={saving}>
+            Save Changes
+          </Button>
+        }
+      />
+      <PageContent>
+        <div className="max-w-3xl space-y-6">
+          {/* Tax Settings */}
+          <Card>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Tax Settings</h3>
+              <Button size="sm" variant="outline" onClick={addTax}>
+                + Add Tax
+              </Button>
+            </div>
+            
+            {taxes.length === 0 ? (
+              <p className="text-slate-500">No taxes configured</p>
+            ) : (
+              <div className="space-y-3">
+                {taxes.map((tax, index) => (
+                  <div key={index} className="flex items-center gap-3 rounded-lg border p-3">
+                    <Input
+                      placeholder="Tax Name"
+                      value={tax.name}
+                      onChange={(e) => updateTax(index, 'name', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Rate %"
+                      value={tax.rate}
+                      onChange={(e) => updateTax(index, 'rate', parseFloat(e.target.value) || 0)}
+                      className="w-24"
+                    />
+                    <select
+                      value={tax.type}
+                      onChange={(e) => updateTax(index, 'type', e.target.value)}
+                      className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                    >
+                      <option value="EXCLUSIVE">Exclusive</option>
+                      <option value="INCLUSIVE">Inclusive</option>
+                    </select>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={tax.isDefault}
+                        onChange={(e) => updateTax(index, 'isDefault', e.target.checked)}
+                      />
+                      <span className="text-sm">Default</span>
+                    </label>
+                    <Button size="sm" variant="ghost" onClick={() => removeTax(index)}>
+                      ×
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Currency Settings */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Currency</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <Input
+                label="Code"
+                value={currency.code}
+                onChange={(e) => setCurrency({ ...currency, code: e.target.value })}
+                placeholder="USD"
+              />
+              <Input
+                label="Symbol"
+                value={currency.symbol}
+                onChange={(e) => setCurrency({ ...currency, symbol: e.target.value })}
+                placeholder="$"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Position</label>
+                <select
+                  value={currency.position}
+                  onChange={(e) => setCurrency({ ...currency, position: e.target.value as 'BEFORE' | 'AFTER' })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="BEFORE">Before ($100)</option>
+                  <option value="AFTER">After (100$)</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+
+          {/* Invoice Settings */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Invoice Settings</h3>
+            <div className="space-y-4">
+              <Input
+                label="Invoice Prefix"
+                value={invoicePrefix}
+                onChange={(e) => setInvoicePrefix(e.target.value)}
+                placeholder="INV"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Invoice Footer</label>
+                <textarea
+                  value={invoiceFooter}
+                  onChange={(e) => setInvoiceFooter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={2}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* Other Settings */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Other Settings</h3>
+            <Input
+              label="Expiry Alert Days"
+              type="number"
+              value={expiryAlertDays}
+              onChange={(e) => setExpiryAlertDays(parseInt(e.target.value) || 30)}
+              helperText="Days before expiry to show warning alerts"
+            />
+          </Card>
+        </div>
+      </PageContent>
+    </Layout>
+  );
+}

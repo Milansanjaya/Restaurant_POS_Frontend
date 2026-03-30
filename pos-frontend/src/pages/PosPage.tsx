@@ -1,22 +1,31 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
 import { createSale } from "../api/sales.api";
+import { categoriesApi } from "../api";
+import type { Category } from "../types";
+
 type Product = {
   _id: string;
   name: string;
   price: number;
-  category?: string;
+  category?: string | { _id: string; name: string };
   taxRate?: number;
   lowStock?: boolean;
 };
 
 export default function PosPage() {
+  const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
+  const token = useAuthStore((s) => s.token);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
@@ -29,19 +38,58 @@ export default function PosPage() {
   const grandTotal = useCartStore((s) => s.grandTotal);
 
   useEffect(() => {
-    const loadProducts = async () => {
+    if (!token) {
+      navigate("/");
+      return;
+    }
+
+    const loadData = async () => {
       try {
-        const res = await api.get("/products");
-        setProducts(res.data.products || []);
+        const [productsRes, categoriesRes] = await Promise.all([
+          api.get("/products"),
+          categoriesApi.getAll(),
+        ]);
+        setProducts(productsRes.data.products || []);
+        setCategories(categoriesRes || []);
       } catch (error) {
-        alert("Failed to load products");
+        console.error("Failed to load data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadProducts();
-  }, []);
+    loadData();
+  }, [token, navigate]);
+
+  const getCategoryName = (product: Product) => {
+    if (!product.category) return "General";
+    if (typeof product.category === "object") return product.category.name;
+    const cat = categories.find((c) => c._id === product.category);
+    return cat?.name || "General";
+  };
+
+  const getCategoryId = (product: Product) => {
+    if (!product.category) return "";
+    if (typeof product.category === "object") return product.category._id;
+    return product.category;
+  };
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = !selectedCategory || getCategoryId(product) === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const flattenCategories = (cats: Category[]): Category[] => {
+    let result: Category[] = [];
+    for (const cat of cats) {
+      result.push(cat);
+      if (cat.children?.length) {
+        result = result.concat(flattenCategories(cat.children));
+      }
+    }
+    return result;
+  };
 
 const handleCreateSale = async () => {
   if (items.length === 0) {
@@ -77,12 +125,20 @@ const handleCreateSale = async () => {
           <p className="text-sm text-slate-500">Restaurant Point of Sale</p>
         </div>
 
-        <button
-          onClick={logout}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={logout}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="flex h-[calc(100vh-4rem)]">
@@ -92,18 +148,30 @@ const handleCreateSale = async () => {
           </h2>
 
           <div className="space-y-2">
-            <button className="w-full rounded-xl bg-slate-900 px-4 py-3 text-left text-sm font-medium text-white">
+            <button
+              onClick={() => setSelectedCategory("")}
+              className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                selectedCategory === ""
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
               All Products
             </button>
-            <button className="w-full rounded-xl bg-slate-100 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-200">
-              Rice
-            </button>
-            <button className="w-full rounded-xl bg-slate-100 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-200">
-              Drinks
-            </button>
-            <button className="w-full rounded-xl bg-slate-100 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-200">
-              Desserts
-            </button>
+            {flattenCategories(categories).map((cat) => (
+              <button
+                key={cat._id}
+                onClick={() => setSelectedCategory(cat._id)}
+                className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                  selectedCategory === cat._id
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {cat.icon && <span className="mr-2">{cat.icon}</span>}
+                {cat.name}
+              </button>
+            ))}
           </div>
         </aside>
 
@@ -111,6 +179,8 @@ const handleCreateSale = async () => {
           <div className="mb-6">
             <input
               placeholder="Search products..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
             />
           </div>
@@ -121,7 +191,7 @@ const handleCreateSale = async () => {
             <p className="text-slate-500">Loading products...</p>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {products.map((product) => (
+              {filteredProducts.map((product) => (
                 <div
                   key={product._id}
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
@@ -139,7 +209,7 @@ const handleCreateSale = async () => {
                   </div>
 
                   <p className="mb-4 text-sm text-slate-500">
-                    {product.category || "General"}
+                    {getCategoryName(product)}
                   </p>
 
                   <div className="flex items-center justify-between">

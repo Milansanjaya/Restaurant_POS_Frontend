@@ -21,7 +21,7 @@ export default function LoginPage() {
       });
 
       login(res.data.token, res.data.user);
-      navigate("/pos");
+      navigate("/dashboard");
     } catch (error) {
       alert("Login failed");
     } finally {
