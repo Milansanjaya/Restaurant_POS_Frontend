@@ -106,13 +106,13 @@ export default function GRNPage() {
       key: 'supplier',
       header: 'Supplier',
       render: (item: GRN) =>
-        typeof item.supplier_id === 'object' ? item.supplier_id.name : '-',
+        (item.supplier_id && typeof item.supplier_id === 'object') ? item.supplier_id.name : '-',
     },
     {
       key: 'po',
       header: 'PO Number',
       render: (item: GRN) =>
-        typeof item.purchaseOrder_id === 'object' ? item.purchaseOrder_id.poNumber : '-',
+        (item.purchaseOrder_id && typeof item.purchaseOrder_id === 'object') ? item.purchaseOrder_id.poNumber : '-',
     },
     {
       key: 'totalAmount',
@@ -163,8 +163,8 @@ export default function GRNPage() {
                   <div>
                     <p className="font-medium">{po.poNumber}</p>
                     <p className="text-sm text-slate-500">
-                      {typeof po.supplier_id === 'object' ? po.supplier_id.name : ''} • 
-                      {po.items.length} items • Rs. {po.totalAmount.toLocaleString()}
+                      {(po.supplier_id && typeof po.supplier_id === 'object') ? po.supplier_id.name : '-'} • 
+                      {po.items?.length || 0} items • Rs. {po.totalAmount?.toLocaleString() || 0}
                     </p>
                   </div>
                   <Button onClick={() => openCreateModal(po)}>Receive</Button>

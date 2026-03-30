@@ -143,13 +143,12 @@ export default function CouponsPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
           </div>
         ) : (
-          <Table data={coupons} columns={columns} />
-        )}
-
-        {!loading && coupons.length === 0 && (
-          <div className="rounded-lg bg-slate-50 p-12 text-center">
-            <p className="text-slate-500">No coupons found. Create your first coupon!</p>
-          </div>
+          <Table 
+            data={coupons} 
+            columns={columns} 
+            keyExtractor={(c) => c._id}
+            emptyMessage="No coupons found. Create your first coupon!"
+          />
         )}
       </PageContent>
 

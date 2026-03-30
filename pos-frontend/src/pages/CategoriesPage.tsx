@@ -22,9 +22,10 @@ export default function CategoriesPage() {
     try {
       setLoading(true);
       const cats = await categoriesApi.getAll();
-      setCategories(cats);
+      setCategories(cats || []);
     } catch (error) {
       console.error('Failed to load categories:', error);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -83,6 +84,7 @@ export default function CategoriesPage() {
   };
 
   const flattenForSelect = (cats: Category[], prefix = '', excludeId?: string): { value: string; label: string }[] => {
+    if (!Array.isArray(cats)) return [];
     let result: { value: string; label: string }[] = [];
     for (const cat of cats) {
       if (cat._id !== excludeId) {
@@ -96,6 +98,7 @@ export default function CategoriesPage() {
   };
 
   const renderCategoryTree = (cats: Category[], level = 0) => {
+    if (!Array.isArray(cats)) return null;
     return cats.map((cat) => (
       <div key={cat._id} style={{ marginLeft: level * 24 }}>
         <div className="mb-2 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">

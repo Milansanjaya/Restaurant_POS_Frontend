@@ -43,9 +43,10 @@ export default function ProductsPage() {
   const loadCategories = async () => {
     try {
       const cats = await categoriesApi.getAll();
-      setCategories(cats);
+      setCategories(cats || []);
     } catch (error) {
       console.error('Failed to load categories:', error);
+      setCategories([]);
     }
   };
 
@@ -116,6 +117,7 @@ export default function ProductsPage() {
   };
 
   const flattenCategories = (cats: Category[], prefix = ''): { value: string; label: string }[] => {
+    if (!Array.isArray(cats)) return [];
     let result: { value: string; label: string }[] = [];
     for (const cat of cats) {
       result.push({ value: cat._id, label: prefix + cat.name });

@@ -124,12 +124,12 @@ export default function PurchaseOrdersPage() {
       key: 'supplier',
       header: 'Supplier',
       render: (item: PurchaseOrder) =>
-        typeof item.supplier_id === 'object' ? item.supplier_id.name : '-',
+        (item.supplier_id && typeof item.supplier_id === 'object') ? item.supplier_id.name : '-',
     },
     {
       key: 'items',
       header: 'Items',
-      render: (item: PurchaseOrder) => item.items.length,
+      render: (item: PurchaseOrder) => item.items?.length || 0,
     },
     {
       key: 'totalAmount',

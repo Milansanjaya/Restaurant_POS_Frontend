@@ -16,9 +16,12 @@ export default function InventoryPage() {
     try {
       setLoading(true);
       const data = await inventoryApi.getAll();
-      setInventory(data);
+      // Filter out null items and items with null product
+      const validData = (data || []).filter(item => item != null && item.product != null);
+      setInventory(validData);
     } catch (error) {
       console.error('Failed to load inventory:', error);
+      setInventory([]);
     } finally {
       setLoading(false);
     }
@@ -54,8 +57,9 @@ export default function InventoryPage() {
     }
   };
 
-  const getProduct = (item: Inventory): Product | null => {
-    return typeof item.product === 'object' ? item.product : null;
+  const getProduct = (item: Inventory | null): Product | null => {
+    if (!item) return null;
+    return (item.product && typeof item.product === 'object') ? item.product : null;
   };
 
   const filteredInventory = inventory.filter((item) => {

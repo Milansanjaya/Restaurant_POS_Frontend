@@ -4,7 +4,7 @@ import type { Inventory, InventoryAdjustment } from '../types';
 export const inventoryApi = {
   getAll: async () => {
     const res = await api.get<{ inventory: Inventory[] }>('/inventory');
-    return res.data.inventory;
+    return res.data.inventory || [];
   },
 
   adjust: async (data: InventoryAdjustment) => {
