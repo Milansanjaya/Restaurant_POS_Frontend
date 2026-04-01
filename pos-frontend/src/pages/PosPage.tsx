@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast, { Toaster } from "react-hot-toast";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
-import { createSale } from "../api/sales.api";
+import { createSale, getSaleById, paySale } from "../api/sales.api";
 import { categoriesApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
-import type { Category, RestaurantTable, Shift } from "../types";
+import type { Category, RestaurantTable, Shift, Sale } from "../types";
 
 type Product = {
   _id: string;
@@ -43,6 +44,20 @@ export default function PosPage() {
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
   
+  // Table orders (tracking items for occupied tables before creating sale)
+  type TableOrder = {
+    tableId: string;
+    items: Array<{ _id: string; name: string; price: number; taxRate: number; quantity: number }>;
+  };
+  const [tableOrders, setTableOrders] = useState<TableOrder[]>([]);
+  
+  // Table bill/payment modal
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedTableForPayment, setSelectedTableForPayment] = useState<RestaurantTable | null>(null);
+  const [tableSale, setTableSale] = useState<Sale | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [processingPayment, setProcessingPayment] = useState(false);
+
   // Shift modal
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [openingCash, setOpeningCash] = useState<number>(0);
@@ -88,7 +103,7 @@ export default function PosPage() {
 
   const handleOpenShift = async () => {
     if (openingCash < 0) {
-      alert("Opening cash cannot be negative");
+      toast.error("Opening cash cannot be negative");
       return;
     }
     
@@ -98,13 +113,108 @@ export default function PosPage() {
       setCurrentShift(shift);
       setShowShiftModal(false);
       setOpeningCash(0);
-      alert("Shift opened successfully!");
+      toast.success("✅ Shift opened successfully!");
     } catch (error: any) {
-      alert(error?.response?.data?.message || "Failed to open shift");
+      toast.error(error?.response?.data?.message || "Failed to open shift");
     } finally {
       setProcessingShift(false);
     }
   };
+
+  // Handle opening table bill for payment
+  const handleOpenTableBill = async (table: RestaurantTable) => {
+    // Find table order in our local state
+    const tableOrder = tableOrders.find(order => order.tableId === table._id);
+    
+    if (!tableOrder || tableOrder.items.length === 0) {
+      toast.error("No items in this table order");
+      return;
+    }
+
+    // Load items into the cart for this table
+    clearCart();
+    tableOrder.items.forEach(item => {
+      for (let i = 0; i < item.quantity; i++) {
+        addItem({
+          _id: item._id,
+          name: item.name,
+          price: item.price,
+          taxRate: item.taxRate
+        });
+      }
+    });
+
+    setSelectedTableForPayment(table);
+    setShowPaymentModal(true);
+  };
+
+  // Handle payment for table
+  const handleTablePayment = async () => {
+    if (!selectedTableForPayment || items.length === 0) {
+      toast.error("No items to pay for");
+      return;
+    }
+
+    if (!currentShift) {
+      toast.error("No open shift");
+      return;
+    }
+
+    setProcessingPayment(true);
+    try {
+      // Create the sale with all items and payment
+      const payload: any = {
+        items: items.map((item) => ({
+          product: item._id,
+          quantity: item.quantity
+        })),
+        paymentMethod: paymentMethod,
+      };
+
+      // Add discount if applied
+      if (discountType && discountValue > 0) {
+        payload.discountType = discountType;
+        payload.discountValue = discountValue;
+      }
+
+      // Add coupon if entered
+      if (couponCode.trim()) {
+        payload.couponCode = couponCode.trim();
+      }
+
+      const sale = await createSale(payload);
+
+      // Update table status to AVAILABLE
+      await tablesApi.updateStatus(selectedTableForPayment._id, 'AVAILABLE');
+
+      // Remove table order from state
+      setTableOrders(tableOrders.filter(order => order.tableId !== selectedTableForPayment._id));
+
+      // Refresh tables
+      const tablesRes = await tablesApi.getAll();
+      setTables(tablesRes || []);
+
+      toast.success(`💰 Payment complete! Invoice: ${sale.invoiceNumber}`, {
+        duration: 4000,
+      });
+      
+      clearCart();
+      setDiscountType('');
+      setDiscountValue(0);
+      setCouponCode('');
+      setShowPaymentModal(false);
+      setSelectedTableForPayment(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Payment failed");
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  // Get occupied tables (show tables with OCCUPIED status OR in local tableOrders)
+  const occupiedTables = tables.filter(t => 
+    t.status === 'OCCUPIED' || tableOrders.some(order => order.tableId === t._id)
+  );
 
   // Calculate discount amount
   const calculateDiscount = () => {
@@ -158,14 +268,67 @@ export default function PosPage() {
     return result;
   };
 
+const handleAddToTable = async () => {
+  if (items.length === 0) {
+    toast.error("Cart is empty");
+    return;
+  }
+
+  if (!selectedTable) {
+    toast.error("Please select a table");
+    return;
+  }
+
+  try {
+    // Check if table already has an order
+    const existingOrderIndex = tableOrders.findIndex(order => order.tableId === selectedTable);
+    
+    if (existingOrderIndex >= 0) {
+      // Add to existing table order
+      const updatedOrders = [...tableOrders];
+      const existingOrder = updatedOrders[existingOrderIndex];
+      
+      items.forEach(newItem => {
+        const existingItemIndex = existingOrder.items.findIndex(i => i._id === newItem._id);
+        if (existingItemIndex >= 0) {
+          existingOrder.items[existingItemIndex].quantity += newItem.quantity;
+        } else {
+          existingOrder.items.push({ ...newItem });
+        }
+      });
+      
+      setTableOrders(updatedOrders);
+    } else {
+      // Create new table order
+      setTableOrders([...tableOrders, {
+        tableId: selectedTable,
+        items: items.map(item => ({ ...item }))
+      }]);
+    }
+
+    // Update table status to OCCUPIED
+    await tablesApi.updateStatus(selectedTable, 'OCCUPIED');
+    
+    // Refresh tables
+    const tablesRes = await tablesApi.getAll();
+    setTables(tablesRes || []);
+    
+    clearCart();
+    toast.success("🍽️ Items added to table! Table is now OCCUPIED.");
+  } catch (error: any) {
+    console.error("Add to table error:", error);
+    toast.error(error?.response?.data?.message || "Failed to add items to table");
+  }
+};
+
 const handleCreateSale = async () => {
   if (items.length === 0) {
-    alert("Cart is empty");
+    toast.error("Cart is empty");
     return;
   }
 
   if (!currentShift) {
-    alert("No open shift. Please open a shift first.");
+    toast.error("No open shift. Please open a shift first.");
     setShowShiftModal(true);
     return;
   }
@@ -178,11 +341,6 @@ const handleCreateSale = async () => {
       })),
       paymentMethod: paymentMethod,
     };
-
-    // Add table if dine-in
-    if (orderType === 'DINE_IN' && selectedTable) {
-      payload.tableId = selectedTable;
-    }
 
     // Add discount if applied
     if (discountType && discountValue > 0) {
@@ -197,24 +355,58 @@ const handleCreateSale = async () => {
 
     const sale = await createSale(payload);
 
-    alert(`Sale created successfully! Invoice: ${sale.invoiceNumber}`);
+    toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, {
+      duration: 4000,
+    });
     clearCart();
     setDiscountType('');
     setDiscountValue(0);
     setCouponCode('');
-    setSelectedTable('');
     console.log("SALE:", sale);
   } catch (error: any) {
     console.error("Create sale error:", error?.response?.data || error);
-    alert(error?.response?.data?.message || "Failed to create sale");
+    toast.error(error?.response?.data?.message || "Failed to create sale");
   }
 };
 
-  // Get available tables (only AVAILABLE or OCCUPIED for adding items)
-  const availableTables = tables.filter(t => t.status === 'AVAILABLE' || t.status === 'OCCUPIED');
+  // Get available tables (only AVAILABLE tables for selection in dropdown)
+  const availableTables = tables.filter(t => t.status === 'AVAILABLE');
 
   return (
     <div className="min-h-screen bg-slate-100">
+      {/* Toast Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            fontSize: '14px',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+            style: {
+              background: '#10b981',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+            style: {
+              background: '#ef4444',
+            },
+          },
+        }}
+      />
+      
       {/* Shift Warning Banner */}
       {!currentShift && !loading && (
         <div className="bg-yellow-500 text-white px-6 py-2 flex items-center justify-between">
@@ -296,10 +488,80 @@ const handleCreateSale = async () => {
                 <option value="">-- Select Table --</option>
                 {availableTables.map((table) => (
                   <option key={table._id} value={table._id}>
-                    {table.name} ({table.capacity} seats) - {table.status}
+                    Table {table.tableNumber} {table.section ? `(${table.section})` : ''} - {table.capacity} seats - {table.status}
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Occupied Tables Section */}
+          {occupiedTables.length > 0 && (
+            <div className="mb-4">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                🍽️ Active Tables ({occupiedTables.length})
+              </h2>
+              <div className="space-y-2">
+                {occupiedTables.map((table) => {
+                  const isSelected = selectedTable === table._id;
+                  return (
+                  <div
+                    key={table._id}
+                    className={`rounded-lg border p-3 transition-all ${
+                      isSelected 
+                        ? 'border-blue-500 bg-blue-50 shadow-md' 
+                        : 'border-orange-200 bg-orange-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-orange-800'}`}>
+                          Table {table.tableNumber}
+                        </span>
+                        {table.section && (
+                          <span className={`text-xs ml-1 ${isSelected ? 'text-blue-600' : 'text-orange-600'}`}>
+                            ({table.section})
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
+                            ✓ Selected
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        isSelected 
+                          ? 'bg-blue-200 text-blue-700' 
+                          : 'bg-orange-200 text-orange-700'
+                      }`}>
+                        OCCUPIED
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setOrderType('DINE_IN');
+                          setSelectedTable(table._id);
+                        }}
+                        className={`flex-1 text-xs rounded px-2 py-1 ${
+                          isSelected
+                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                        }`}
+                      >
+                        {isSelected ? '✓ Adding Items' : '+ Add Items'}
+                      </button>
+                      <button
+                        onClick={() => handleOpenTableBill(table)}
+                        className="flex-1 text-xs bg-green-600 text-white rounded px-2 py-1 hover:bg-green-700"
+                      >
+                        💳 Pay Bill
+                      </button>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -431,7 +693,32 @@ const handleCreateSale = async () => {
         </section>
 
         <aside className="w-96 border-l border-slate-200 bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-slate-800">Cart</h2>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
+            {orderType === 'DINE_IN' && selectedTable && (
+              <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-600">🍽️</span>
+                    <span className="text-sm font-medium text-blue-800">
+                      Table {tables.find(t => t._id === selectedTable)?.tableNumber}
+                      {tables.find(t => t._id === selectedTable)?.section && (
+                        <span className="text-blue-600 ml-1">
+                          ({tables.find(t => t._id === selectedTable)?.section})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTable('')}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex h-full flex-col">
             <div className="flex-1 space-y-3 overflow-auto">
@@ -584,8 +871,8 @@ const handleCreateSale = async () => {
                 </button>
 
                 <button
-                  onClick={handleCreateSale}
-                  disabled={!currentShift}
+                  onClick={orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale}
+                  disabled={!currentShift || (orderType === 'DINE_IN' && !selectedTable)}
                   className="w-1/2 rounded-xl bg-slate-900 px-4 py-3 font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {orderType === 'DINE_IN' && selectedTable ? 'Add to Table' : 'Create Sale'}
@@ -631,6 +918,154 @@ const handleCreateSale = async () => {
               >
                 {processingShift ? 'Opening...' : 'Open Shift'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedTableForPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">
+                💳 Pay Bill - Table {selectedTableForPayment.tableNumber}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setSelectedTableForPayment(null);
+                  clearCart();
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Bill Items */}
+            <div className="mb-4 bg-slate-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-slate-600 mb-2">Order Items</h4>
+              <div className="space-y-2">
+                {items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-sm">
+                    <span>
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span className="font-medium">Rs. {(item.price * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bill Summary */}
+            <div className="mb-4 space-y-2 border-t border-slate-200 pt-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Subtotal</span>
+                <span>Rs. {subtotal().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Tax</span>
+                <span>Rs. {taxTotal().toFixed(2)}</span>
+              </div>
+              {calculateDiscount() > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount</span>
+                  <span>- Rs. {calculateDiscount().toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-lg text-green-600 pt-2 border-t">
+                <span>Total Amount</span>
+                <span>Rs. {finalTotal().toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Payment Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['CASH', 'CARD', 'UPI', 'WALLET'] as const).map((method) => (
+                    <button
+                      key={method}
+                      onClick={() => setPaymentMethod(method)}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        paymentMethod === method
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {method === 'CASH' && '💵'} {method === 'CARD' && '💳'} 
+                      {method === 'UPI' && '📱'} {method === 'WALLET' && '👛'}
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Discount Section */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Discount (Optional)
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={discountType}
+                    onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                    className="w-1/2 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                  >
+                    <option value="">No Discount</option>
+                    <option value="PERCENTAGE">Percentage (%)</option>
+                    <option value="FIXED">Fixed Amount</option>
+                  </select>
+                  {discountType && (
+                    <input
+                      type="number"
+                      min="0"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
+                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Coupon Code */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Coupon Code (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="Enter coupon code"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowPaymentModal(false);
+                    setSelectedTableForPayment(null);
+                    clearCart();
+                  }}
+                  className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTablePayment}
+                  disabled={processingPayment}
+                  className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {processingPayment ? 'Processing...' : `Pay Rs. ${finalTotal().toFixed(2)}`}
+                </button>
+              </div>
             </div>
           </div>
         </div>

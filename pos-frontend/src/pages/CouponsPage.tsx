@@ -78,13 +78,22 @@ export default function CouponsPage() {
     }
   };
 
+  const handleToggle = async (coupon: Coupon) => {
+    try {
+      await couponsApi.toggle(coupon._id);
+      loadCoupons();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to toggle coupon status');
+    }
+  };
+
   const handleDelete = async (coupon: Coupon) => {
     if (!confirm(`Delete coupon "${coupon.code}"?`)) return;
     try {
       await couponsApi.delete(coupon._id);
       loadCoupons();
-    } catch (err) {
-      console.error('Failed to delete coupon:', err);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete coupon');
     }
   };
 
@@ -114,9 +123,17 @@ export default function CouponsPage() {
       c.usageLimit ? `${c.timesUsed}/${c.usageLimit}` : `${c.timesUsed}/∞`
     )},
     { key: 'status', header: 'Status', render: (c: Coupon) => (
-      <Badge variant={c.isActive && !isExpired(c.expiryDate) ? 'success' : 'danger'}>
+      <button
+        onClick={() => handleToggle(c)}
+        disabled={isExpired(c.expiryDate)}
+        className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+          c.isActive && !isExpired(c.expiryDate)
+            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+        } ${isExpired(c.expiryDate) ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
         {!c.isActive ? 'Inactive' : isExpired(c.expiryDate) ? 'Expired' : 'Active'}
-      </Badge>
+      </button>
     )},
     { key: 'actions', header: 'Actions', render: (c: Coupon) => (
       <div className="flex gap-1">
@@ -134,7 +151,7 @@ export default function CouponsPage() {
     <Layout>
       <PageHeader
         title="Coupons"
-        action={<Button onClick={openCreateModal}>+ Add Coupon</Button>}
+        actions={<Button onClick={openCreateModal}>+ Add Coupon</Button>}
       />
 
       <PageContent>

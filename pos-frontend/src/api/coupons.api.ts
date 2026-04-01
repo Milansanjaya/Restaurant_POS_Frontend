@@ -8,20 +8,17 @@ export const couponsApi = {
 
   // Create a new coupon
   create: (data: CouponFormData) => 
-    api.post<Coupon>('/coupons', data).then(res => res.data),
+    api.post<{ coupon: Coupon }>('/coupons', data).then(res => res.data.coupon),
 
   // Update a coupon
   update: (id: string, data: Partial<CouponFormData>) =>
-    api.patch<Coupon>(`/coupons/${id}`, data).then(res => res.data),
+    api.patch<{ coupon: Coupon }>(`/coupons/${id}`, data).then(res => res.data.coupon),
+
+  // Toggle coupon active status
+  toggle: (id: string) =>
+    api.patch<{ coupon: Coupon }>(`/coupons/${id}/toggle`).then(res => res.data.coupon),
 
   // Delete a coupon
   delete: (id: string) =>
     api.delete(`/coupons/${id}`).then(res => res.data),
-
-  // Validate a coupon code
-  validate: (code: string, orderTotal: number) =>
-    api.post<{ valid: boolean; coupon?: Coupon; discount?: number; message?: string }>(
-      '/coupons/validate',
-      { code, orderTotal }
-    ).then(res => res.data),
 };

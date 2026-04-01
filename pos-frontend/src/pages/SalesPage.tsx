@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
@@ -55,17 +56,17 @@ const SalesPage: React.FC = () => {
 
   const handleVoidSale = async () => {
     if (!selectedSale || !voidReason.trim()) {
-      alert('Please provide a reason for voiding the sale');
+      toast.error('Please provide a reason for voiding the sale');
       return;
     }
 
     try {
       await salesApi.voidSale(selectedSale._id, voidReason);
-      alert('Sale voided successfully');
+      toast.success('✅ Sale voided successfully');
       setShowVoidModal(false);
       loadSales();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to void sale');
+      toast.error(error.response?.data?.message || 'Failed to void sale');
     }
   };
 
@@ -78,7 +79,7 @@ const SalesPage: React.FC = () => {
 
   const handleRefund = async () => {
     if (!selectedSale || !refundReason.trim()) {
-      alert('Please provide a reason for the refund');
+      toast.error('Please provide a reason for the refund');
       return;
     }
 
@@ -87,11 +88,11 @@ const SalesPage: React.FC = () => {
         reason: refundReason,
         amount: refundAmount,
       });
-      alert('Refund processed successfully');
+      toast.success('💰 Refund processed successfully');
       setShowRefundModal(false);
       loadSales();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to process refund');
+      toast.error(error.response?.data?.message || 'Failed to process refund');
     }
   };
 
