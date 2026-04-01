@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Layout, PageHeader, PageContent, Button } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { rolesApi } from '../api';
 import type { Role, Permission } from '../types';
+import { useAuthStore } from '../store/auth.store';
 
 const RolesPage: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
@@ -16,6 +17,8 @@ const RolesPage: React.FC = () => {
     description: '',
     permissions: [] as string[],
   });
+  
+  const { user } = useAuthStore();
 
   const loadRoles = async () => {
     setLoading(true);
@@ -102,19 +105,31 @@ const RolesPage: React.FC = () => {
     }));
   };
 
+  // Filter permissions based on current user's permissions
+  const allowedPermissions = useMemo(() => {
+    if (!user) return [];
+    // Super admin can assign all permissions
+    if (user.role?.name === 'SUPER_ADMIN') return permissions;
+    
+    // Other users can only assign permissions they have
+    return permissions.filter(perm => 
+      user.permissions?.includes(perm.name) || false
+    );
+  }, [permissions, user]);
+
   const toggleAllPermissions = () => {
-    if (formData.permissions.length === permissions.length) {
+    if (formData.permissions.length === allowedPermissions.length) {
       setFormData(prev => ({ ...prev, permissions: [] }));
     } else {
       setFormData(prev => ({ 
         ...prev, 
-        permissions: permissions.map(p => p._id) 
+        permissions: allowedPermissions.map(p => p._id) 
       }));
     }
   };
 
   // Group permissions by category
-  const groupedPermissions = permissions.reduce((acc, perm) => {
+  const groupedPermissions = allowedPermissions.reduce((acc, perm) => {
     const category = perm.name.split('_').slice(1).join('_') || 'OTHER';
     if (!acc[category]) acc[category] = [];
     acc[category].push(perm);
@@ -211,12 +226,17 @@ const RolesPage: React.FC = () => {
                 onClick={toggleAllPermissions}
                 className="text-sm text-blue-500 hover:text-blue-700"
               >
-                {formData.permissions.length === permissions.length ? 'Deselect All' : 'Select All'}
+                {formData.permissions.length === allowedPermissions.length ? 'Deselect All' : 'Select All'}
               </button>
             </div>
             
             <div className="border rounded p-4 max-h-96 overflow-y-auto">
-              {Object.entries(groupedPermissions).map(([category, perms]) => (
+              {allowedPermissions.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  You don't have permissions to assign to roles
+                </p>
+              ) : (
+                Object.entries(groupedPermissions).map(([category, perms]) => (
                 <div key={category} className="mb-4">
                   <h4 className="font-semibold text-sm text-gray-700 mb-2">
                     {category.replace(/_/g, ' ')}
@@ -240,10 +260,15 @@ const RolesPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
             <p className="text-sm text-gray-500 mt-2">
-              Selected: {formData.permissions.length} / {permissions.length}
+              Selected: {formData.permissions.length} / {allowedPermissions.length}
+              {user?.role?.name !== 'SUPER_ADMIN' && allowedPermissions.length < permissions.length && (
+                <span className="ml-2 text-xs text-amber-600">
+                  (Showing only permissions you can assign)
+                </span>
+              )}
             </p>
           </div>
 
