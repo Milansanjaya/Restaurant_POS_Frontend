@@ -22,6 +22,11 @@ export const purchaseOrdersApi = {
     return res.data.purchaseOrder;
   },
 
+  update: async (id: string, data: Partial<PurchaseOrderFormData>) => {
+    const res = await api.put<{ purchaseOrder: PurchaseOrder }>(`/purchase-orders/${id}`, data);
+    return res.data.purchaseOrder;
+  },
+
   approve: async (id: string) => {
     const res = await api.put(`/purchase-orders/${id}/approve`);
     return res.data;

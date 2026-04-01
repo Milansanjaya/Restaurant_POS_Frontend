@@ -11,6 +11,7 @@ export default function ReturnsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<SupplierReturnFormData>({
     supplier_id: '',
@@ -51,11 +52,24 @@ export default function ReturnsPage() {
   }, [statusFilter]);
 
   const openCreateModal = () => {
+    setEditingId(null);
     setFormData({
       supplier_id: '',
       items: [],
       totalAmount: 0,
       notes: '',
+    });
+    setModalOpen(true);
+  };
+
+  const openEditModal = (ret: SupplierReturn) => {
+    setEditingId(ret._id);
+    setFormData({
+      supplier_id: typeof ret.supplier_id === 'object' ? ret.supplier_id._id : ret.supplier_id,
+      grn_id: ret.grn_id,
+      items: ret.items,
+      totalAmount: ret.totalAmount,
+      notes: ret.notes || '',
     });
     setModalOpen(true);
   };
@@ -88,13 +102,27 @@ export default function ReturnsPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await returnsApi.create(formData);
+      if (editingId) {
+        await returnsApi.update(editingId, formData);
+      } else {
+        await returnsApi.create(formData);
+      }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to create return');
+      alert(error?.response?.data?.message || 'Failed to save return');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this return? This cannot be undone.')) return;
+    try {
+      await returnsApi.delete(id);
+      loadData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to delete return');
     }
   };
 
@@ -144,9 +172,17 @@ export default function ReturnsPage() {
       render: (item: SupplierReturn) => (
         <div className="flex gap-1">
           {item.status === 'PENDING' && (
-            <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
-              Approve
-            </Button>
+            <>
+              <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
+                Approve
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
+                Delete
+              </Button>
+            </>
           )}
         </div>
       ),

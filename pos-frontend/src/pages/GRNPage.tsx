@@ -10,6 +10,7 @@ export default function GRNPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<GRNFormData>({
     purchaseOrder_id: '',
@@ -40,6 +41,7 @@ export default function GRNPage() {
   }, []);
 
   const openCreateModal = (po: PurchaseOrder) => {
+    setEditingId(null);
     setSelectedPO(po);
     const supplierId = typeof po.supplier_id === 'object' ? po.supplier_id._id : po.supplier_id;
     
@@ -65,6 +67,19 @@ export default function GRNPage() {
     setModalOpen(true);
   };
 
+  const openEditModal = (grn: GRN) => {
+    setEditingId(grn._id);
+    setSelectedPO(null);
+    setFormData({
+      purchaseOrder_id: typeof grn.purchaseOrder_id === 'object' ? grn.purchaseOrder_id._id : grn.purchaseOrder_id,
+      supplier_id: typeof grn.supplier_id === 'object' ? grn.supplier_id._id : grn.supplier_id,
+      items: grn.items,
+      totalAmount: grn.totalAmount,
+      notes: grn.notes || '',
+    });
+    setModalOpen(true);
+  };
+
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...formData.items];
     (newItems[index] as any)[field] = value;
@@ -80,13 +95,27 @@ export default function GRNPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await grnApi.create(formData);
+      if (editingId) {
+        await grnApi.update(editingId, formData);
+      } else {
+        await grnApi.create(formData);
+      }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to create GRN');
+      alert(error?.response?.data?.message || 'Failed to save GRN');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this GRN? This cannot be undone.')) return;
+    try {
+      await grnApi.delete(id);
+      loadData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to delete GRN');
     }
   };
 
@@ -137,9 +166,17 @@ export default function GRNPage() {
       render: (item: GRN) => (
         <div className="flex gap-1">
           {item.status === 'DRAFT' && (
-            <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
-              Approve
-            </Button>
+            <>
+              <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
+                Approve
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
+                Delete
+              </Button>
+            </>
           )}
         </div>
       ),

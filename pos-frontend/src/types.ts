@@ -36,6 +36,8 @@ export const PERMISSIONS = {
   VIEW_DASHBOARD: 'VIEW_DASHBOARD',
   // POS
   CREATE_SALE: 'CREATE_SALE',
+  VIEW_SALES: 'VIEW_SALES',
+  VOID_SALE: 'VOID_SALE',
   // Products
   VIEW_PRODUCTS: 'VIEW_PRODUCTS',
   CREATE_PRODUCT: 'CREATE_PRODUCT',
@@ -101,6 +103,7 @@ export interface Product {
   preparationTime?: number;
   branch_id: string;
   isActive: boolean;
+  isAvailable: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -501,6 +504,51 @@ export interface SaleFormData {
   discountValue?: number;
   couponCode?: string;
   customer_id?: string;
+}
+
+// Sale filters for querying
+export interface SaleFilters {
+  page?: number;
+  limit?: number;
+  status?: SaleStatus;
+  from?: string;
+  to?: string;
+}
+
+// Invoice data
+export interface Invoice {
+  sale: Sale;
+  company: {
+    name: string;
+    address: string;
+    phone: string;
+    email: string;
+    logo?: string;
+  };
+  customer?: {
+    name: string;
+    phone: string;
+    email?: string;
+  };
+}
+
+// Refund request data
+export interface RefundData {
+  reason: string;
+  items?: { product: string; quantity: number }[];
+  amount?: number;
+}
+
+// Payment request data
+export interface PaymentData {
+  amount: number;
+  paymentMethod: string;
+}
+
+// Close table sale data
+export interface CloseSaleData {
+  paymentMethod: string;
+  amount?: number;
 }
 
 // ==================== UNIT ====================

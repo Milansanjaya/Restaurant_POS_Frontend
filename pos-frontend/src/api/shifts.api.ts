@@ -1,7 +1,19 @@
 import api from './axios';
-import type { Shift } from '../types';
+import type { Shift, PaginationParams } from '../types';
 
 export const shiftsApi = {
+  // Get all shifts (history)
+  getAll: (params?: PaginationParams & { status?: 'OPEN' | 'CLOSED' }) =>
+    api.get<{ shifts: Shift[] }>('/shifts', { params }).then(res => res.data.shifts),
+
+  // Get shift by ID
+  getById: (id: string) =>
+    api.get<{ shift: Shift }>(`/shifts/${id}`).then(res => res.data.shift),
+
+  // Get current open shift
+  getCurrent: () =>
+    api.get<{ shift: Shift | null }>('/shifts/current').then(res => res.data.shift),
+
   // Open a new shift
   open: (openingCash: number) => 
     api.post<{ shift: Shift }>('/shifts/open', { openingCash }).then(res => res.data.shift),

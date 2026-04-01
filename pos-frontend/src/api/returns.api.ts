@@ -22,6 +22,15 @@ export const returnsApi = {
     return res.data.return;
   },
 
+  update: async (id: string, data: Partial<SupplierReturnFormData>) => {
+    const res = await api.put<{ return: SupplierReturn }>(`/returns/${id}`, data);
+    return res.data.return;
+  },
+
+  delete: async (id: string) => {
+    await api.delete(`/returns/${id}`);
+  },
+
   approve: async (id: string) => {
     const res = await api.post(`/returns/${id}/approve`);
     return res.data;

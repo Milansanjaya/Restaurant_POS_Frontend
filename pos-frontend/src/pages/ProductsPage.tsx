@@ -116,6 +116,15 @@ export default function ProductsPage() {
     }
   };
 
+  const handleToggleAvailability = async (product: Product) => {
+    try {
+      await productsApi.toggleAvailability(product._id, !product.isAvailable);
+      loadProducts();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to update availability');
+    }
+  };
+
   const flattenCategories = (cats: Category[], prefix = ''): { value: string; label: string }[] => {
     if (!Array.isArray(cats)) return [];
     let result: { value: string; label: string }[] = [];
@@ -146,6 +155,22 @@ export default function ProductsPage() {
       key: 'taxRate',
       header: 'Tax',
       render: (item: Product) => `${item.taxRate || 0}%`,
+    },
+    {
+      key: 'isAvailable',
+      header: 'Available',
+      render: (item: Product) => (
+        <button
+          onClick={() => handleToggleAvailability(item)}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+            item.isAvailable !== false
+              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              : 'bg-red-100 text-red-700 hover:bg-red-200'
+          }`}
+        >
+          {item.isAvailable !== false ? '✓ In Stock' : '✗ Out of Stock'}
+        </button>
+      ),
     },
     {
       key: 'isActive',

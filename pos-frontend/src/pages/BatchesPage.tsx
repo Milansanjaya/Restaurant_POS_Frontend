@@ -1,23 +1,38 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, getStatusBadgeVariant, Button, PageLoader } from '../components';
-import { batchesApi } from '../api';
-import type { Batch, ExpiryDashboard } from '../types';
+import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
+import { batchesApi, productsApi } from '../api';
+import type { Batch, ExpiryDashboard, Product } from '../types';
+import type { CreateBatchData } from '../api/batches.api';
 
 export default function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [dashboard, setDashboard] = useState<ExpiryDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [alertFilter, setAlertFilter] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  const [formData, setFormData] = useState<CreateBatchData>({
+    batchNumber: '',
+    product_id: '',
+    quantity: 0,
+    costPerUnit: 0,
+    expiryDate: '',
+    manufactureDate: '',
+  });
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [batchRes, dashboardData] = await Promise.all([
+      const [batchRes, dashboardData, productsRes] = await Promise.all([
         batchesApi.getAll({ alertStatus: alertFilter as any || undefined }),
         batchesApi.getExpiryDashboard(),
+        productsApi.getAll({ limit: 1000 }),
       ]);
       setBatches(batchRes.batches || []);
       setDashboard(dashboardData);
+      setProducts(productsRes.products || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -35,6 +50,41 @@ export default function BatchesPage() {
       loadData();
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Failed to toggle batch');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this batch? This cannot be undone.')) return;
+    try {
+      await batchesApi.delete(id);
+      loadData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to delete batch');
+    }
+  };
+
+  const openCreateModal = () => {
+    setFormData({
+      batchNumber: `BATCH-${Date.now()}`,
+      product_id: '',
+      quantity: 0,
+      costPerUnit: 0,
+      expiryDate: '',
+      manufactureDate: '',
+    });
+    setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await batchesApi.create(formData);
+      setModalOpen(false);
+      loadData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to create batch');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -91,13 +141,22 @@ export default function BatchesPage() {
       key: 'actions',
       header: 'Actions',
       render: (item: Batch) => (
-        <Button
-          size="sm"
-          variant={item.status === 'BLOCKED' ? 'ghost' : 'danger'}
-          onClick={() => handleToggleBlock(item._id)}
-        >
-          {item.status === 'BLOCKED' ? 'Unblock' : 'Block'}
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant={item.status === 'BLOCKED' ? 'ghost' : 'danger'}
+            onClick={() => handleToggleBlock(item._id)}
+          >
+            {item.status === 'BLOCKED' ? 'Unblock' : 'Block'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handleDelete(item._id)}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -115,6 +174,7 @@ export default function BatchesPage() {
       <PageHeader
         title="Batch & Expiry Management"
         subtitle="Track product batches and expiry dates"
+        actions={<Button onClick={openCreateModal}>+ Create Batch</Button>}
       />
       <PageContent>
         {/* Dashboard Stats */}
@@ -150,6 +210,75 @@ export default function BatchesPage() {
           loading={loading}
           emptyMessage="No batches found"
         />
+
+        {/* Create Batch Modal */}
+        <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Create Batch">
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Batch Number</label>
+              <Input
+                value={formData.batchNumber}
+                onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
+                placeholder="BATCH-001"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Product</label>
+              <select
+                value={formData.product_id}
+                onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Select Product</option>
+                {products.map((p) => (
+                  <option key={p._id} value={p._id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Quantity</label>
+                <Input
+                  type="number"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Cost Per Unit</label>
+                <Input
+                  type="number"
+                  value={formData.costPerUnit}
+                  onChange={(e) => setFormData({ ...formData, costPerUnit: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Manufacture Date</label>
+                <Input
+                  type="date"
+                  value={formData.manufactureDate}
+                  onChange={(e) => setFormData({ ...formData, manufactureDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Expiry Date *</label>
+                <Input
+                  type="date"
+                  value={formData.expiryDate}
+                  onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Creating...' : 'Create Batch'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </PageContent>
     </Layout>
   );

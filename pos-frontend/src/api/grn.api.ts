@@ -17,6 +17,15 @@ export const grnApi = {
     return res.data.grn;
   },
 
+  update: async (id: string, data: Partial<GRNFormData>) => {
+    const res = await api.put<{ grn: GRN }>(`/grn/${id}`, data);
+    return res.data.grn;
+  },
+
+  delete: async (id: string) => {
+    await api.delete(`/grn/${id}`);
+  },
+
   approve: async (id: string) => {
     const res = await api.put(`/grn/${id}/approve`);
     return res.data;

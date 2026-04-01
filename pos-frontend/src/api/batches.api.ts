@@ -7,6 +7,15 @@ import type {
   AlertStatus,
 } from '../types';
 
+export interface CreateBatchData {
+  batchNumber: string;
+  product_id: string;
+  quantity: number;
+  costPerUnit: number;
+  expiryDate: string;
+  manufactureDate?: string;
+}
+
 export const batchesApi = {
   getAll: async (
     params?: PaginationParams & { status?: BatchStatus; alertStatus?: AlertStatus }
@@ -18,6 +27,15 @@ export const batchesApi = {
   getById: async (id: string) => {
     const res = await api.get<{ batch: Batch }>(`/batches/${id}`);
     return res.data.batch;
+  },
+
+  create: async (data: CreateBatchData) => {
+    const res = await api.post<{ batch: Batch }>('/batches', data);
+    return res.data.batch;
+  },
+
+  delete: async (id: string) => {
+    await api.delete(`/batches/${id}`);
   },
 
   getNearExpiry: async (days?: number) => {

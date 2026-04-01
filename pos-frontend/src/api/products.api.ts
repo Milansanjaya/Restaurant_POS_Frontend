@@ -30,4 +30,9 @@ export const productsApi = {
     const res = await api.delete(`/products/${id}`);
     return res.data;
   },
+
+  toggleAvailability: async (id: string, isAvailable: boolean) => {
+    const res = await api.patch<{ product: Product }>(`/products/${id}/availability`, { isAvailable });
+    return res.data.product;
+  },
 };

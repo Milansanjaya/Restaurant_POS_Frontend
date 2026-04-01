@@ -6,9 +6,20 @@ export const reservationsApi = {
   getAll: (params?: { status?: ReservationStatus; date?: string }) => 
     api.get<{ reservations: Reservation[] }>('/reservations', { params }).then(res => res.data.reservations),
 
+  // Get reservation by ID
+  getById: (id: string) =>
+    api.get<{ reservation: Reservation }>(`/reservations/${id}`).then(res => res.data.reservation),
+
   // Create a new reservation
   create: (data: ReservationFormData) => 
     api.post<{ reservation: Reservation }>('/reservations', data).then(res => res.data.reservation),
+
+  // Update reservation (full update)
+  update: (id: string, data: Partial<ReservationFormData>) =>
+    api.put<{ reservation: Reservation }>(`/reservations/${id}`, data).then(res => res.data.reservation),
+
+  // Delete/cancel reservation
+  delete: (id: string) => api.delete(`/reservations/${id}`),
 
   // Update reservation status
   updateStatus: (id: string, status: ReservationStatus) =>

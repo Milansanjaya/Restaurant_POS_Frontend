@@ -11,6 +11,7 @@ export default function PurchaseOrdersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<PurchaseOrderFormData>({
     supplier_id: '',
@@ -49,12 +50,25 @@ export default function PurchaseOrdersPage() {
   }, [statusFilter]);
 
   const openCreateModal = () => {
+    setEditingId(null);
     setFormData({
       supplier_id: '',
       items: [],
       totalAmount: 0,
       deliveryDate: '',
       notes: '',
+    });
+    setModalOpen(true);
+  };
+
+  const openEditModal = (order: PurchaseOrder) => {
+    setEditingId(order._id);
+    setFormData({
+      supplier_id: typeof order.supplier_id === 'object' ? order.supplier_id._id : order.supplier_id,
+      items: order.items,
+      totalAmount: order.totalAmount,
+      deliveryDate: order.deliveryDate || '',
+      notes: order.notes || '',
     });
     setModalOpen(true);
   };
@@ -88,11 +102,15 @@ export default function PurchaseOrdersPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await purchaseOrdersApi.create(formData);
+      if (editingId) {
+        await purchaseOrdersApi.update(editingId, formData);
+      } else {
+        await purchaseOrdersApi.create(formData);
+      }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to create PO');
+      alert(error?.response?.data?.message || 'Failed to save PO');
     } finally {
       setSaving(false);
     }
@@ -153,6 +171,11 @@ export default function PurchaseOrdersPage() {
       header: 'Actions',
       render: (item: PurchaseOrder) => (
         <div className="flex gap-1">
+          {(item.status === 'DRAFT' || item.status === 'PENDING') && (
+            <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
+              Edit
+            </Button>
+          )}
           {item.status === 'PENDING' && (
             <>
               <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
