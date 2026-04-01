@@ -20,6 +20,8 @@ import KitchenPage from "./pages/KitchenPage";
 import ReservationsPage from "./pages/ReservationsPage";
 import ShiftsPage from "./pages/ShiftsPage";
 import CouponsPage from "./pages/CouponsPage";
+import RolesPage from "./pages/RolesPage";
+import UsersPage from "./pages/UsersPage";
 import { useAuthStore } from "./store/auth.store";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +54,8 @@ export default function App() {
         <Route path="/kitchen" element={<KitchenPage />} />
         <Route path="/reservations" element={<ReservationsPage />} />
         <Route path="/shifts" element={<ShiftsPage />} />
+        <Route path="/roles" element={<RolesPage />} />
+        <Route path="/users" element={<UsersPage />} />
       </Routes>
     </BrowserRouter>
   );

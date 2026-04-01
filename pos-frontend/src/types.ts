@@ -1,16 +1,90 @@
 // ==================== AUTH ====================
+export interface Permission {
+  _id: string;
+  name: string;
+  description?: string;
+}
+
+export interface Role {
+  _id: string;
+  name: string;
+  description?: string;
+  permissions?: Permission[] | string[];
+}
+
 export interface User {
   _id: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   branch_id: string;
+  permissions: string[];
+  isActive?: boolean;
 }
 
 export interface LoginResponse {
   token: string;
   user: User;
 }
+
+// Role names
+export type RoleName = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'CASHIER' | 'COOK';
+
+// Permission names for sidebar access
+export const PERMISSIONS = {
+  // Dashboard
+  VIEW_DASHBOARD: 'VIEW_DASHBOARD',
+  // POS
+  CREATE_SALE: 'CREATE_SALE',
+  // Products
+  VIEW_PRODUCTS: 'VIEW_PRODUCTS',
+  CREATE_PRODUCT: 'CREATE_PRODUCT',
+  // Categories
+  VIEW_CATEGORIES: 'VIEW_CATEGORIES',
+  // Inventory
+  VIEW_INVENTORY: 'VIEW_INVENTORY',
+  ADJUST_INVENTORY: 'ADJUST_INVENTORY',
+  // Suppliers
+  VIEW_SUPPLIERS: 'VIEW_SUPPLIERS',
+  // Purchase Orders
+  VIEW_PURCHASE_ORDERS: 'VIEW_PURCHASE_ORDERS',
+  CREATE_PURCHASE_ORDER: 'CREATE_PURCHASE_ORDER',
+  // GRN
+  VIEW_GRN: 'VIEW_GRN',
+  CREATE_GRN: 'CREATE_GRN',
+  // Customers
+  VIEW_CUSTOMERS: 'VIEW_CUSTOMERS',
+  // Tables
+  VIEW_TABLES: 'VIEW_TABLES',
+  // Kitchen
+  VIEW_KITCHEN: 'VIEW_KITCHEN',
+  // Reservations
+  VIEW_RESERVATIONS: 'VIEW_RESERVATIONS',
+  // Shifts
+  VIEW_SHIFTS: 'VIEW_SHIFTS',
+  MANAGE_SHIFTS: 'MANAGE_SHIFTS',
+  // Reports
+  VIEW_REPORTS: 'VIEW_REPORTS',
+  // Settings
+  VIEW_SETTINGS: 'VIEW_SETTINGS',
+  // Loyalty
+  VIEW_LOYALTY: 'VIEW_LOYALTY',
+  // Coupons
+  VIEW_COUPONS: 'VIEW_COUPONS',
+  // Batches
+  VIEW_BATCHES: 'VIEW_BATCHES',
+  // Returns
+  VIEW_RETURNS: 'VIEW_RETURNS',
+  // Units
+  VIEW_UNITS: 'VIEW_UNITS',
+  // Users
+  VIEW_USERS: 'VIEW_USERS',
+  CREATE_USER: 'CREATE_USER',
+  EDIT_USER: 'EDIT_USER',
+  DELETE_USER: 'DELETE_USER',
+  // Roles
+  MANAGE_ROLES: 'MANAGE_ROLES',
+} as const;
 
 // ==================== PRODUCT ====================
 export interface Product {
@@ -706,24 +780,4 @@ export interface CouponFormData {
   validFrom?: string;
   validTo?: string;
   usageLimit?: number;
-}
-
-// ==================== ROLE ====================
-export interface Permission {
-  _id: string;
-  name: string;
-  description?: string;
-}
-
-export interface Role {
-  _id: string;
-  name: string;
-  permissions: Permission[] | string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface RoleFormData {
-  name: string;
-  permissions: string[];
 }

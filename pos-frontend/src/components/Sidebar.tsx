@@ -1,16 +1,19 @@
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
+import { PERMISSIONS } from '../types';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
+  permission?: string; // Permission required to see this item
 }
 
 const navItems: NavItem[] = [
   {
     label: 'Dashboard',
     path: '/dashboard',
+    permission: PERMISSIONS.VIEW_DASHBOARD,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -20,6 +23,7 @@ const navItems: NavItem[] = [
   {
     label: 'POS',
     path: '/pos',
+    permission: PERMISSIONS.CREATE_SALE,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -29,6 +33,7 @@ const navItems: NavItem[] = [
   {
     label: 'Tables',
     path: '/tables',
+    permission: PERMISSIONS.VIEW_TABLES,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
@@ -38,6 +43,7 @@ const navItems: NavItem[] = [
   {
     label: 'Kitchen',
     path: '/kitchen',
+    permission: PERMISSIONS.VIEW_KITCHEN,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
@@ -48,6 +54,7 @@ const navItems: NavItem[] = [
   {
     label: 'Reservations',
     path: '/reservations',
+    permission: PERMISSIONS.VIEW_RESERVATIONS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -57,6 +64,7 @@ const navItems: NavItem[] = [
   {
     label: 'Shifts',
     path: '/shifts',
+    permission: PERMISSIONS.VIEW_SHIFTS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -66,6 +74,7 @@ const navItems: NavItem[] = [
   {
     label: 'Products',
     path: '/products',
+    permission: PERMISSIONS.VIEW_PRODUCTS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -75,6 +84,7 @@ const navItems: NavItem[] = [
   {
     label: 'Categories',
     path: '/categories',
+    permission: PERMISSIONS.VIEW_CATEGORIES,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -84,6 +94,7 @@ const navItems: NavItem[] = [
   {
     label: 'Inventory',
     path: '/inventory',
+    permission: PERMISSIONS.VIEW_INVENTORY,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
@@ -93,6 +104,7 @@ const navItems: NavItem[] = [
   {
     label: 'Suppliers',
     path: '/suppliers',
+    permission: PERMISSIONS.VIEW_SUPPLIERS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -102,6 +114,7 @@ const navItems: NavItem[] = [
   {
     label: 'Purchase Orders',
     path: '/purchase-orders',
+    permission: PERMISSIONS.VIEW_PURCHASE_ORDERS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -111,6 +124,7 @@ const navItems: NavItem[] = [
   {
     label: 'GRN',
     path: '/grn',
+    permission: PERMISSIONS.VIEW_GRN,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -120,6 +134,7 @@ const navItems: NavItem[] = [
   {
     label: 'Batches',
     path: '/batches',
+    permission: PERMISSIONS.VIEW_BATCHES,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -129,6 +144,7 @@ const navItems: NavItem[] = [
   {
     label: 'Customers',
     path: '/customers',
+    permission: PERMISSIONS.VIEW_CUSTOMERS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m9 5.197v-1a6 6 0 00-3-5.197" />
@@ -138,6 +154,7 @@ const navItems: NavItem[] = [
   {
     label: 'Loyalty',
     path: '/loyalty',
+    permission: PERMISSIONS.VIEW_LOYALTY,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -147,6 +164,7 @@ const navItems: NavItem[] = [
   {
     label: 'Coupons',
     path: '/coupons',
+    permission: PERMISSIONS.VIEW_COUPONS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
@@ -156,6 +174,7 @@ const navItems: NavItem[] = [
   {
     label: 'Returns',
     path: '/returns',
+    permission: PERMISSIONS.VIEW_RETURNS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
@@ -165,6 +184,7 @@ const navItems: NavItem[] = [
   {
     label: 'Reports',
     path: '/reports',
+    permission: PERMISSIONS.VIEW_REPORTS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -172,8 +192,29 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    label: 'Users',
+    path: '/users',
+    permission: 'VIEW_USERS',
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Roles',
+    path: '/roles',
+    permission: 'MANAGE_ROLES',
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+  },
+  {
     label: 'Settings',
     path: '/settings',
+    permission: PERMISSIONS.VIEW_SETTINGS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -184,6 +225,7 @@ const navItems: NavItem[] = [
   {
     label: 'Units',
     path: '/units',
+    permission: PERMISSIONS.VIEW_UNITS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
@@ -195,6 +237,15 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+
+  // Filter nav items based on user permissions
+  const visibleNavItems = navItems.filter((item) => {
+    // If no permission specified, show to everyone
+    if (!item.permission) return true;
+    // Check if user has the required permission
+    return hasPermission(item.permission);
+  });
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
@@ -206,7 +257,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-4">
         <ul className="space-y-1">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <li key={item.path}>
               <NavLink
                 to={item.path}
@@ -237,7 +288,7 @@ export default function Sidebar() {
               {user?.name || 'User'}
             </p>
             <p className="truncate text-xs text-slate-500">
-              {user?.email || 'user@example.com'}
+              {user?.role?.name || 'User'}
             </p>
           </div>
           <button
