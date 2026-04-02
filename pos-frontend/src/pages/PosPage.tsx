@@ -8,7 +8,10 @@ import { createSale, getSaleById, paySale } from "../api/sales.api";
 import { categoriesApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
-import type { Category, RestaurantTable, Shift, Sale } from "../types";
+import { customersApi } from "../api/customers.api";
+import { loyaltyApi } from "../api/loyalty.api";
+import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
+import type { Category, RestaurantTable, Shift, Sale, Customer } from "../types";
 
 type Product = {
   _id: string;
@@ -21,7 +24,15 @@ type Product = {
 };
 
 type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'WALLET' | 'SPLIT';
-type DiscountType = 'PERCENTAGE' | 'FIXED' | '';
+type DiscountType = 'PERCENTAGE' | 'FLAT' | '';  // Changed FIXED to FLAT to match backend
+
+type CustomerOption = {
+  _id: string;
+  name: string;
+  phone: string;
+  tier: string;
+  loyaltyPoints?: number;
+};
 
 export default function PosPage() {
   const navigate = useNavigate();
@@ -43,6 +54,23 @@ export default function PosPage() {
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
+  
+  // Coupon validation
+  const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+  
+  // Customer selection & Loyalty
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [customerSearch, setCustomerSearch] = useState<string>("");
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [selectedCustomerLoyalty, setSelectedCustomerLoyalty] = useState<number | null>(null);
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({ name: "", phone: "", email: "" });
+  
+  // Loyalty Points Payment
+  const [usePoints, setUsePoints] = useState(false);
+  const [pointsToUse, setPointsToUse] = useState<number>(0);
   
   // Table orders (tracking items for occupied tables before creating sale)
   type TableOrder = {
@@ -81,16 +109,27 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, categoriesRes, tablesRes, shiftRes] = await Promise.all([
+        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes] = await Promise.all([
           api.get("/products"),
           categoriesApi.getAll(),
           tablesApi.getAll(),
           shiftsApi.getCurrent().catch(() => null),
+          customersApi.getAll({ limit: 100 }).catch(() => ({ customers: [] })),
         ]);
         setProducts(productsRes.data.products || []);
         setCategories(categoriesRes || []);
         setTables(tablesRes || []);
         setCurrentShift(shiftRes);
+        setCustomers(
+          (customersRes.customers || [])
+            .filter((c: Customer) => !c.isWalkIn && c.status === 'ACTIVE')
+            .map((c: Customer) => ({
+              _id: c._id,
+              name: c.name,
+              phone: c.phone,
+              tier: c.tier,
+            }))
+        );
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -100,6 +139,41 @@ export default function PosPage() {
 
     loadData();
   }, [token, navigate]);
+
+  // Fetch loyalty points when customer is selected
+  useEffect(() => {
+    const fetchLoyalty = async () => {
+      if (selectedCustomerId) {
+        try {
+          const account = await loyaltyApi.getAccount(selectedCustomerId);
+          setSelectedCustomerLoyalty(account?.pointsBalance || 0);
+        } catch {
+          setSelectedCustomerLoyalty(0);
+        }
+      } else {
+        setSelectedCustomerLoyalty(null);
+      }
+    };
+    fetchLoyalty();
+  }, [selectedCustomerId]);
+
+  // Re-validate coupon when cart changes
+  useEffect(() => {
+    const revalidateCoupon = async () => {
+      if (couponValidation?.success && couponCode.trim()) {
+        const orderTotal = subtotal() + taxTotal();
+        if (orderTotal > 0) {
+          try {
+            const result = await couponsApi.validate(couponCode.trim(), orderTotal);
+            setCouponValidation(result);
+          } catch {
+            // Keep existing validation if re-validation fails
+          }
+        }
+      }
+    };
+    revalidateCoupon();
+  }, [items]); // Re-validate when items change
 
   const handleOpenShift = async () => {
     if (openingCash < 0) {
@@ -119,6 +193,87 @@ export default function PosPage() {
     } finally {
       setProcessingShift(false);
     }
+  };
+
+  // Create new customer from POS
+  const handleCreateCustomer = async () => {
+    if (!newCustomerData.name.trim() || !newCustomerData.phone.trim()) {
+      toast.error("Name and phone are required");
+      return;
+    }
+    
+    try {
+      console.log("Creating customer:", {
+        name: newCustomerData.name.trim(),
+        phone: newCustomerData.phone.trim(),
+        email: newCustomerData.email.trim() || undefined,
+      });
+      
+      const customer = await customersApi.create({
+        name: newCustomerData.name.trim(),
+        phone: newCustomerData.phone.trim(),
+        email: newCustomerData.email.trim() || undefined,
+      });
+      
+      console.log("Customer created:", customer);
+      
+      setCustomers([...customers, {
+        _id: customer._id,
+        name: customer.name,
+        phone: customer.phone,
+        tier: customer.tier,
+      }]);
+      setSelectedCustomerId(customer._id);
+      setShowNewCustomerModal(false);
+      setNewCustomerData({ name: "", phone: "", email: "" });
+      toast.success("✅ Customer created and selected!");
+    } catch (error: any) {
+      console.error("Create customer error:", error?.response?.data || error);
+      toast.error(error?.response?.data?.message || "Failed to create customer");
+    }
+  };
+
+  // Filter customers for search
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.phone.includes(customerSearch)
+  );
+
+  // Validate coupon code
+  const handleValidateCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCouponValidation(null);
+      return;
+    }
+
+    const orderTotal = subtotal() + taxTotal();
+    if (orderTotal <= 0) {
+      toast.error("Add items to cart first");
+      return;
+    }
+
+    setValidatingCoupon(true);
+    try {
+      const result = await couponsApi.validate(couponCode.trim(), orderTotal);
+      setCouponValidation(result);
+      if (result.success) {
+        toast.success(`🎫 Coupon applied! Discount: Rs. ${result.discount?.toFixed(2)}`);
+      }
+    } catch (error: any) {
+      setCouponValidation({
+        success: false,
+        message: error?.response?.data?.message || "Invalid coupon"
+      });
+      toast.error(error?.response?.data?.message || "Invalid coupon");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  // Clear coupon
+  const handleClearCoupon = () => {
+    setCouponCode("");
+    setCouponValidation(null);
   };
 
   // Handle opening table bill for payment
@@ -171,6 +326,11 @@ export default function PosPage() {
         paymentMethod: paymentMethod,
       };
 
+      // Add customer if selected
+      if (selectedCustomerId) {
+        payload.customerId = selectedCustomerId;
+      }
+
       // Add discount if applied
       if (discountType && discountValue > 0) {
         payload.discountType = discountType;
@@ -183,6 +343,19 @@ export default function PosPage() {
       }
 
       const sale = await createSale(payload);
+
+      // Earn loyalty points for customer if selected
+      if (selectedCustomerId && sale.grandTotal > 0) {
+        try {
+          await loyaltyApi.earnPoints(selectedCustomerId, sale.grandTotal, sale._id);
+          const pointsEarned = Math.floor(sale.grandTotal / 10);
+          if (pointsEarned > 0) {
+            toast.success(`🎉 Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
+          }
+        } catch (loyaltyError) {
+          console.log("Loyalty points earning failed:", loyaltyError);
+        }
+      }
 
       // Update table status to AVAILABLE
       await tablesApi.updateStatus(selectedTableForPayment._id, 'AVAILABLE');
@@ -202,6 +375,9 @@ export default function PosPage() {
       setDiscountType('');
       setDiscountValue(0);
       setCouponCode('');
+      setCouponValidation(null);
+      setSelectedCustomerId('');
+      setSelectedCustomerLoyalty(null);
       setShowPaymentModal(false);
       setSelectedTableForPayment(null);
     } catch (error: any) {
@@ -216,8 +392,8 @@ export default function PosPage() {
     t.status === 'OCCUPIED' || tableOrders.some(order => order.tableId === t._id)
   );
 
-  // Calculate discount amount
-  const calculateDiscount = () => {
+  // Calculate manual discount amount
+  const calculateManualDiscount = () => {
     const total = subtotal() + taxTotal();
     if (!discountType || discountValue <= 0) return 0;
     if (discountType === 'PERCENTAGE') {
@@ -226,8 +402,35 @@ export default function PosPage() {
     return Math.min(total, discountValue);
   };
 
+  // Calculate coupon discount amount
+  const calculateCouponDiscount = () => {
+    if (couponValidation?.success && couponValidation.discount) {
+      return couponValidation.discount;
+    }
+    return 0;
+  };
+
+  // Calculate loyalty points discount (1 point = Rs. 0.1, so 100 points = Rs. 10)
+  const calculatePointsDiscount = () => {
+    if (!usePoints || pointsToUse <= 0) return 0;
+    return (pointsToUse / 100) * 10;
+  };
+
+  // Maximum points that can be used (based on available points and order total)
+  const getMaxUsablePoints = () => {
+    if (!selectedCustomerLoyalty) return 0;
+    const remainingTotal = grandTotal() - calculateManualDiscount() - calculateCouponDiscount();
+    const maxPointsForTotal = Math.floor((remainingTotal / 10) * 100); // Convert amount to points
+    return Math.min(selectedCustomerLoyalty, maxPointsForTotal);
+  };
+
+  // Total discount (manual + coupon + points)
+  const calculateDiscount = () => {
+    return calculateManualDiscount() + calculateCouponDiscount() + calculatePointsDiscount();
+  };
+
   const finalTotal = () => {
-    return grandTotal() - calculateDiscount();
+    return Math.max(0, grandTotal() - calculateDiscount());
   };
 
   const getCategoryName = (product: Product) => {
@@ -342,6 +545,11 @@ const handleCreateSale = async () => {
       paymentMethod: paymentMethod,
     };
 
+    // Add customer if selected
+    if (selectedCustomerId) {
+      payload.customerId = selectedCustomerId;
+    }
+
     // Add discount if applied
     if (discountType && discountValue > 0) {
       payload.discountType = discountType;
@@ -355,6 +563,35 @@ const handleCreateSale = async () => {
 
     const sale = await createSale(payload);
 
+    // Redeem loyalty points if used
+    if (selectedCustomerId && usePoints && pointsToUse > 0) {
+      try {
+        await loyaltyApi.redeemPoints({
+          customer_id: selectedCustomerId,
+          points: pointsToUse,
+          sale_id: sale._id,
+        });
+        toast.success(`🎁 Redeemed ${pointsToUse} loyalty points! (Rs. ${calculatePointsDiscount().toFixed(2)} off)`, { duration: 3000 });
+      } catch (redeemError: any) {
+        console.log("Points redemption failed:", redeemError);
+        toast.error(redeemError?.response?.data?.message || "Failed to redeem points");
+      }
+    }
+
+    // Earn loyalty points for customer if selected (only if not paying with points)
+    if (selectedCustomerId && sale.grandTotal > 0 && !usePoints) {
+      try {
+        await loyaltyApi.earnPoints(selectedCustomerId, sale.grandTotal, sale._id);
+        const pointsEarned = Math.floor(sale.grandTotal / 10);
+        if (pointsEarned > 0) {
+          toast.success(`🎉 Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
+        }
+      } catch (loyaltyError) {
+        console.log("Loyalty points earning failed:", loyaltyError);
+        // Don't fail sale if loyalty fails
+      }
+    }
+
     toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, {
       duration: 4000,
     });
@@ -362,6 +599,11 @@ const handleCreateSale = async () => {
     setDiscountType('');
     setDiscountValue(0);
     setCouponCode('');
+    setCouponValidation(null);
+    setSelectedCustomerId('');
+    setSelectedCustomerLoyalty(null);
+    setUsePoints(false);
+    setPointsToUse(0);
     console.log("SALE:", sale);
   } catch (error: any) {
     console.error("Create sale error:", error?.response?.data || error);
@@ -778,6 +1020,88 @@ const handleCreateSale = async () => {
 
             {/* Payment & Discount Section */}
             <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+              {/* Customer Selection */}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  Customer (Optional)
+                </label>
+                <div className="relative">
+                  {selectedCustomerId ? (
+                    <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
+                      <div className="flex-1">
+                        <span className="font-medium text-blue-900">
+                          {customers.find(c => c._id === selectedCustomerId)?.name}
+                        </span>
+                        <span className="text-xs text-blue-600 ml-2">
+                          ({customers.find(c => c._id === selectedCustomerId)?.phone})
+                        </span>
+                        {selectedCustomerLoyalty !== null && (
+                          <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            🎁 {selectedCustomerLoyalty} pts
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedCustomerId('');
+                          setSelectedCustomerLoyalty(null);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={customerSearch}
+                          onChange={(e) => {
+                            setCustomerSearch(e.target.value);
+                            setShowCustomerSearch(true);
+                          }}
+                          onFocus={() => setShowCustomerSearch(true)}
+                          placeholder="Search customer by name/phone..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        />
+                        {showCustomerSearch && customerSearch && (
+                          <div className="absolute z-20 mt-1 w-full bg-white rounded-lg border shadow-lg max-h-48 overflow-y-auto">
+                            {filteredCustomers.length === 0 ? (
+                              <div className="p-3 text-sm text-slate-500 text-center">
+                                No customers found
+                              </div>
+                            ) : (
+                              filteredCustomers.slice(0, 10).map((customer) => (
+                                <button
+                                  key={customer._id}
+                                  onClick={() => {
+                                    setSelectedCustomerId(customer._id);
+                                    setCustomerSearch('');
+                                    setShowCustomerSearch(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b last:border-b-0"
+                                >
+                                  <div className="font-medium text-slate-900">{customer.name}</div>
+                                  <div className="text-xs text-slate-500">{customer.phone} • {customer.tier}</div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setShowNewCustomerModal(true)}
+                        className="px-3 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600"
+                        title="Add New Customer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Payment Method */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
@@ -808,7 +1132,7 @@ const handleCreateSale = async () => {
                   >
                     <option value="">No Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
-                    <option value="FIXED">Fixed Amount</option>
+                    <option value="FLAT">Fixed Amount</option>
                   </select>
                   {discountType && (
                     <input
@@ -828,14 +1152,141 @@ const handleCreateSale = async () => {
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Coupon Code
                 </label>
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="Enter coupon code"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+                {couponValidation?.success ? (
+                  <div className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+                    <div>
+                      <span className="font-medium text-green-800">{couponCode}</span>
+                      <span className="text-xs text-green-600 ml-2">
+                        ({couponValidation.coupon?.discountType === 'PERCENTAGE' 
+                          ? `${couponValidation.coupon?.value}% off`
+                          : `Rs. ${couponValidation.coupon?.value} off`})
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleClearCoupon}
+                      className="text-green-600 hover:text-green-800 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => {
+                        setCouponCode(e.target.value.toUpperCase());
+                        setCouponValidation(null);
+                      }}
+                      placeholder="Enter coupon code"
+                      className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+                        couponValidation?.success === false 
+                          ? 'border-red-300 bg-red-50' 
+                          : 'border-slate-300'
+                      }`}
+                    />
+                    <button
+                      onClick={handleValidateCoupon}
+                      disabled={!couponCode.trim() || validatingCoupon}
+                      className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {validatingCoupon ? '...' : 'Apply'}
+                    </button>
+                  </div>
+                )}
+                {couponValidation?.success === false && (
+                  <p className="text-xs text-red-500 mt-1">{couponValidation.message}</p>
+                )}
               </div>
+
+              {/* Loyalty Points Payment */}
+              {selectedCustomerId && selectedCustomerLoyalty !== null && selectedCustomerLoyalty > 0 && (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎁</span>
+                      <div>
+                        <h4 className="text-sm font-semibold text-purple-900">Loyalty Points</h4>
+                        <p className="text-xs text-purple-600">
+                          Available: <strong>{selectedCustomerLoyalty} points</strong> 
+                          <span className="text-purple-500 ml-1">(≈ Rs. {((selectedCustomerLoyalty / 100) * 10).toFixed(2)})</span>
+                        </p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={usePoints}
+                        onChange={(e) => {
+                          setUsePoints(e.target.checked);
+                          if (e.target.checked) {
+                            // Auto-select maximum usable points
+                            const maxPoints = getMaxUsablePoints();
+                            setPointsToUse(maxPoints);
+                          } else {
+                            setPointsToUse(0);
+                          }
+                        }}
+                        className="w-4 h-4 text-purple-600 rounded"
+                      />
+                      <span className="text-sm font-medium text-purple-900">Use Points</span>
+                    </label>
+                  </div>
+
+                  {usePoints && (
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-purple-700">
+                            Points to use: {pointsToUse}
+                          </label>
+                          <span className="text-xs text-purple-600 font-medium">
+                            Discount: Rs. {calculatePointsDiscount().toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max={getMaxUsablePoints()}
+                          step="10"
+                          value={pointsToUse}
+                          onChange={(e) => setPointsToUse(Number(e.target.value))}
+                          className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                        />
+                        <div className="flex justify-between text-xs text-purple-600 mt-1">
+                          <span>0</span>
+                          <span className="font-medium">Max: {getMaxUsablePoints()}</span>
+                        </div>
+                      </div>
+
+                      {/* Quick select buttons */}
+                      <div className="flex gap-2">
+                        {[25, 50, 75, 100].map(percent => {
+                          const pointsValue = Math.floor(getMaxUsablePoints() * (percent / 100));
+                          if (pointsValue <= 0) return null;
+                          return (
+                            <button
+                              key={percent}
+                              onClick={() => setPointsToUse(pointsValue)}
+                              className={`flex-1 px-2 py-1 text-xs rounded ${
+                                pointsToUse === pointsValue
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                              }`}
+                            >
+                              {percent}%
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <p className="text-xs text-purple-600 text-center">
+                        💡 Conversion: 100 points = Rs. 10
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Totals */}
@@ -850,10 +1301,24 @@ const handleCreateSale = async () => {
                 <span>Rs. {taxTotal().toFixed(2)}</span>
               </div>
 
-              {calculateDiscount() > 0 && (
+              {calculateManualDiscount() > 0 && (
                 <div className="flex items-center justify-between text-sm text-green-600">
-                  <span>Discount</span>
-                  <span>- Rs. {calculateDiscount().toFixed(2)}</span>
+                  <span>Manual Discount</span>
+                  <span>- Rs. {calculateManualDiscount().toFixed(2)}</span>
+                </div>
+              )}
+
+              {calculateCouponDiscount() > 0 && (
+                <div className="flex items-center justify-between text-sm text-green-600">
+                  <span>🎫 Coupon Discount</span>
+                  <span>- Rs. {calculateCouponDiscount().toFixed(2)}</span>
+                </div>
+              )}
+
+              {calculatePointsDiscount() > 0 && (
+                <div className="flex items-center justify-between text-sm text-purple-600">
+                  <span>🎁 Loyalty Points ({pointsToUse} pts)</span>
+                  <span>- Rs. {calculatePointsDiscount().toFixed(2)}</span>
                 </div>
               )}
 
@@ -1018,7 +1483,7 @@ const handleCreateSale = async () => {
                   >
                     <option value="">No Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
-                    <option value="FIXED">Fixed Amount</option>
+                    <option value="FLAT">Fixed Amount</option>
                   </select>
                   {discountType && (
                     <input
@@ -1066,6 +1531,85 @@ const handleCreateSale = async () => {
                   {processingPayment ? 'Processing...' : `Pay Rs. ${finalTotal().toFixed(2)}`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Customer Modal */}
+      {showNewCustomerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">➕ Add New Customer</h3>
+              <button
+                onClick={() => {
+                  setShowNewCustomerModal(false);
+                  setNewCustomerData({ name: "", phone: "", email: "" });
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Customer Name *
+                </label>
+                <input
+                  type="text"
+                  value={newCustomerData.name}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  placeholder="Enter customer name"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Phone Number *
+                </label>
+                <input
+                  type="tel"
+                  value={newCustomerData.phone}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  placeholder="Enter phone number"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  value={newCustomerData.email}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  placeholder="Enter email address"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowNewCustomerModal(false);
+                  setNewCustomerData({ name: "", phone: "", email: "" });
+                }}
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateCustomer}
+                className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-700"
+              >
+                Create Customer
+              </button>
             </div>
           </div>
         </div>

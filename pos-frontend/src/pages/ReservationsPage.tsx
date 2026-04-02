@@ -184,7 +184,7 @@ export default function ReservationsPage() {
     <Layout>
       <PageHeader
         title="Reservations"
-        action={
+        actions={
           <Button onClick={() => setShowModal(true)}>New Reservation</Button>
         }
       />

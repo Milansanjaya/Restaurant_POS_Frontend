@@ -262,12 +262,15 @@ export type QualityStatus = 'ACCEPTED' | 'REJECTED' | 'PARTIAL';
 export interface GRNItem {
   product_id: string;
   productName: string;
-  purchasedQuantity: number;
+  purchasedQuantity?: number;  // For backend compatibility
+  orderedQuantity?: number;    // For frontend
   receivedQuantity: number;
   unitPrice: number;
   totalPrice: number;
   qualityStatus: QualityStatus;
   rejectionReason?: string;
+  batchNumber?: string;        // Batch info per item
+  expiryDate?: string;         // Batch info per item
 }
 
 export interface GRNBatch {
@@ -450,6 +453,8 @@ export interface SaleItem {
   price: number;
   taxRate: number;
   subtotal: number;
+  batch_id?: string;      // FIFO: Track which batch was used
+  batchNumber?: string;   // FIFO: Batch number for display
 }
 
 export interface Payment {

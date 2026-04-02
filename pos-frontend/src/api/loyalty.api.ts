@@ -3,7 +3,6 @@ import type {
   LoyaltyAccount,
   LoyaltyTransaction,
   WalletTransaction,
-  EarnPointsData,
   RedeemPointsData,
   WalletTopupData,
   WalletPaymentData,
@@ -11,12 +10,16 @@ import type {
 
 export const loyaltyApi = {
   getAccount: async (customerId: string) => {
-    const res = await api.get<{ account: LoyaltyAccount }>(`/loyalty/${customerId}`);
-    return res.data.account;
+    const res = await api.get<{ success: boolean; data: LoyaltyAccount }>(`/loyalty/${customerId}`);
+    return res.data.data;
   },
 
-  earnPoints: async (data: EarnPointsData) => {
-    const res = await api.post('/loyalty/earn', data);
+  earnPoints: async (customerId: string, saleAmount: number, saleId?: string) => {
+    const res = await api.post('/loyalty/earn', {
+      customerId,
+      saleAmount,
+      sale_id: saleId,
+    });
     return res.data;
   },
 
@@ -26,10 +29,10 @@ export const loyaltyApi = {
   },
 
   getPointsHistory: async (customerId: string) => {
-    const res = await api.get<{ transactions: LoyaltyTransaction[] }>(
+    const res = await api.get<{ success: boolean; data: LoyaltyTransaction[] }>(
       `/loyalty/${customerId}/points-history`
     );
-    return res.data.transactions;
+    return res.data.data || [];
   },
 
   walletTopup: async (data: WalletTopupData) => {
@@ -43,9 +46,9 @@ export const loyaltyApi = {
   },
 
   getWalletHistory: async (customerId: string) => {
-    const res = await api.get<{ transactions: WalletTransaction[] }>(
+    const res = await api.get<{ success: boolean; data: WalletTransaction[] }>(
       `/loyalty/${customerId}/wallet-history`
     );
-    return res.data.transactions;
+    return res.data.data || [];
   },
 };

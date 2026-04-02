@@ -13,4 +13,8 @@ export const kitchenApi = {
   // Update order status
   updateStatus: (id: string, status: KitchenOrderStatus) =>
     api.patch<{ order: KitchenOrder }>(`/kitchen/${id}/status`, { status }).then(res => res.data.order),
+
+  // Debug endpoint
+  debug: () =>
+    api.get('/kitchen/debug').then(res => res.data),
 };

@@ -44,10 +44,13 @@ export default function LoyaltyPage() {
         loyaltyApi.getWalletHistory(customer._id),
       ]);
       setLoyaltyAccount(account);
-      setPointsHistory(points);
-      setWalletHistory(wallet);
+      setPointsHistory(points || []); // Ensure it's always an array
+      setWalletHistory(wallet || []); // Ensure it's always an array
     } catch (error) {
       console.error('Failed to load loyalty data:', error);
+      setLoyaltyAccount(null);
+      setPointsHistory([]); // Reset to empty array on error
+      setWalletHistory([]); // Reset to empty array on error
     } finally {
       setDetailLoading(false);
     }
@@ -173,7 +176,7 @@ export default function LoyaltyPage() {
                 {/* Points History */}
                 <Card>
                   <h4 className="mb-3 font-semibold">Points History</h4>
-                  {pointsHistory.length === 0 ? (
+                  {!pointsHistory || pointsHistory.length === 0 ? (
                     <p className="text-sm text-slate-500">No points history</p>
                   ) : (
                     <div className="max-h-48 space-y-2 overflow-y-auto">
@@ -194,7 +197,7 @@ export default function LoyaltyPage() {
                 {/* Wallet History */}
                 <Card>
                   <h4 className="mb-3 font-semibold">Wallet History</h4>
-                  {walletHistory.length === 0 ? (
+                  {!walletHistory || walletHistory.length === 0 ? (
                     <p className="text-sm text-slate-500">No wallet history</p>
                   ) : (
                     <div className="max-h-48 space-y-2 overflow-y-auto">

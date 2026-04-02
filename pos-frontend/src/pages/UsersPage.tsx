@@ -3,9 +3,11 @@ import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { usersApi, rolesApi } from '../api';
+import { useAuthStore } from '../store/auth.store';
 import type { User, Role } from '../types';
 
 const UsersPage: React.FC = () => {
+  const currentUser = useAuthStore((s) => s.user);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,7 +66,7 @@ const UsersPage: React.FC = () => {
         email: '',
         password: '',
         role: '',
-        branch_id: 'BRANCH001', // Default branch
+        branch_id: currentUser?.branch_id || 'BRANCH001', // Use current user's branch
         isActive: true,
       });
     }
@@ -79,7 +81,7 @@ const UsersPage: React.FC = () => {
       email: '',
       password: '',
       role: '',
-      branch_id: '',
+      branch_id: currentUser?.branch_id || '',
       isActive: true,
     });
   };
