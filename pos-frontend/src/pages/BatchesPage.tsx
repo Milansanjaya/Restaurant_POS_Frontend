@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
@@ -30,11 +31,12 @@ export default function BatchesPage() {
         batchesApi.getExpiryDashboard(),
         productsApi.getAll({ limit: 1000 }),
       ]);
-      setBatches(batchRes.batches || []);
+      setBatches(batchRes.data || batchRes.batches || []);
       setDashboard(dashboardData);
       setProducts(productsRes.products || []);
     } catch (error) {
       console.error('Failed to load data:', error);
+      toast.error('❌ Failed to load batches');
     } finally {
       setLoading(false);
     }
@@ -47,9 +49,10 @@ export default function BatchesPage() {
   const handleToggleBlock = async (id: string) => {
     try {
       await batchesApi.toggleBlock(id);
+      toast.success('✅ Batch status updated');
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to toggle batch');
+      toast.error(error?.response?.data?.message || 'Failed to toggle batch');
     }
   };
 
@@ -57,9 +60,10 @@ export default function BatchesPage() {
     if (!confirm('Delete this batch? This cannot be undone.')) return;
     try {
       await batchesApi.delete(id);
+      toast.success('✅ Batch deleted');
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to delete batch');
+      toast.error(error?.response?.data?.message || 'Failed to delete batch');
     }
   };
 
@@ -76,13 +80,31 @@ export default function BatchesPage() {
   };
 
   const handleSave = async () => {
+    if (!formData.product_id) {
+      toast.error('❌ Please select a product');
+      return;
+    }
+    if (!formData.batchNumber) {
+      toast.error('❌ Please enter a batch number');
+      return;
+    }
+    if (formData.quantity <= 0) {
+      toast.error('❌ Please enter a valid quantity');
+      return;
+    }
+    if (!formData.expiryDate) {
+      toast.error('❌ Please enter an expiry date');
+      return;
+    }
+    
     try {
       setSaving(true);
       await batchesApi.create(formData);
+      toast.success('✅ Batch created successfully');
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to create batch');
+      toast.error(error?.response?.data?.message || 'Failed to create batch');
     } finally {
       setSaving(false);
     }
@@ -109,7 +131,16 @@ export default function BatchesPage() {
     {
       key: 'remainingQuantity',
       header: 'Stock',
-      render: (item: Batch) => `${item.remainingQuantity} / ${item.quantity}`,
+      render: (item: Batch) => (
+        <span className={item.remainingQuantity === 0 ? 'text-red-600' : ''}>
+          {item.remainingQuantity} / {item.quantity}
+        </span>
+      ),
+    },
+    {
+      key: 'costPerUnit',
+      header: 'Cost/Unit',
+      render: (item: Batch) => `Rs. ${item.costPerUnit?.toLocaleString() || 0}`,
     },
     {
       key: 'expiryDate',
@@ -120,7 +151,7 @@ export default function BatchesPage() {
       key: 'daysUntilExpiry',
       header: 'Days Left',
       render: (item: Batch) => (
-        <span className={item.daysUntilExpiry < 0 ? 'text-red-600' : item.daysUntilExpiry < 7 ? 'text-yellow-600' : ''}>
+        <span className={item.daysUntilExpiry < 0 ? 'text-red-600 font-bold' : item.daysUntilExpiry < 7 ? 'text-yellow-600 font-medium' : ''}>
           {item.daysUntilExpiry < 0 ? `${Math.abs(item.daysUntilExpiry)} days ago` : `${item.daysUntilExpiry} days`}
         </span>
       ),
@@ -144,18 +175,20 @@ export default function BatchesPage() {
         <div className="flex gap-1">
           <Button
             size="sm"
-            variant={item.status === 'BLOCKED' ? 'ghost' : 'danger'}
+            variant={item.status === 'BLOCKED' ? 'outline' : 'danger'}
             onClick={() => handleToggleBlock(item._id)}
           >
             {item.status === 'BLOCKED' ? 'Unblock' : 'Block'}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleDelete(item._id)}
-          >
-            Delete
-          </Button>
+          {item.remainingQuantity === 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleDelete(item._id)}
+            >
+              🗑️
+            </Button>
+          )}
         </div>
       ),
     },
@@ -171,6 +204,7 @@ export default function BatchesPage() {
 
   return (
     <Layout>
+      <Toaster position="top-right" />
       <PageHeader
         title="Batch & Expiry Management"
         subtitle="Track product batches and expiry dates"

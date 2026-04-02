@@ -25,13 +25,13 @@ export const batchesApi = {
   },
 
   getById: async (id: string) => {
-    const res = await api.get<{ batch: Batch }>(`/batches/${id}`);
-    return res.data.batch;
+    const res = await api.get(`/batches/${id}`);
+    return res.data.data || res.data.batch;
   },
 
   create: async (data: CreateBatchData) => {
-    const res = await api.post<{ batch: Batch }>('/batches', data);
-    return res.data.batch;
+    const res = await api.post('/batches', data);
+    return res.data.data || res.data.batch;
   },
 
   delete: async (id: string) => {

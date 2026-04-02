@@ -1,8 +1,8 @@
 import { useEffect, useState, Fragment as React } from 'react';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input, PageLoader } from '../components';
 import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
-import type { GRN, GRNFormData, GRNItem, PurchaseOrder, Supplier, QualityStatus } from '../types';
+import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
 
 export default function GRNPage() {
   const [grns, setGrns] = useState<GRN[]>([]);
@@ -127,19 +127,39 @@ export default function GRNPage() {
         }
       }
 
+      // Validate batch info - if batch number provided, expiry date is required
       if (item.batchNumber && item.batchNumber.trim() !== '' && !item.expiryDate) {
         toast.error(`❌ Please provide expiry date for batch ${item.batchNumber}`);
         return;
       }
     }
 
+    // Build batches array from items that have batch info
+    const batches: GRNBatch[] = formData.items
+      .filter(item => item.batchNumber && item.batchNumber.trim() !== '' && item.expiryDate)
+      .map(item => ({
+        batchNumber: item.batchNumber!,
+        product_id: item.product_id,
+        expiryDate: item.expiryDate!,
+        quantity: item.receivedQuantity,
+        costPerUnit: item.unitPrice,
+      }));
+
+    // Prepare payload with explicit batches array
+    const payload = {
+      ...formData,
+      batches,
+    };
+
+    console.log('GRN Payload:', payload);
+
     try {
       setSaving(true);
       if (editingId) {
-        await grnApi.update(editingId, formData);
+        await grnApi.update(editingId, payload);
         toast.success('✅ GRN updated successfully');
       } else {
-        await grnApi.create(formData);
+        await grnApi.create(payload);
         toast.success('✅ GRN created successfully');
       }
       setModalOpen(false);
@@ -337,6 +357,7 @@ export default function GRNPage() {
 
   return (
     <Layout>
+      <Toaster position="top-right" />
       <PageHeader
         title="Goods Received Notes"
         subtitle="Receive goods against purchase orders"
@@ -617,6 +638,49 @@ export default function GRNPage() {
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-sm text-green-800">
                   ✅ Approved on {new Date(selectedGRN.approvedAt).toLocaleString()}
+                </p>
+              </div>
+            )}
+
+            {/* Batches Section */}
+            {selectedGRN.batches && selectedGRN.batches.length > 0 && (
+              <div>
+                <h3 className="font-medium text-slate-900 mb-3">📦 Batches Created</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-purple-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Batch Number</th>
+                        <th className="px-3 py-2 text-left">Product</th>
+                        <th className="px-3 py-2 text-right">Quantity</th>
+                        <th className="px-3 py-2 text-right">Cost/Unit</th>
+                        <th className="px-3 py-2 text-left">Expiry Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {selectedGRN.batches.map((batch, idx) => {
+                        // Find product name from items
+                        const item = selectedGRN.items.find(i => 
+                          i.product_id === batch.product_id || 
+                          (batch.batchNumber && i.batchNumber === batch.batchNumber)
+                        );
+                        return (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-medium text-purple-700">{batch.batchNumber}</td>
+                            <td className="px-3 py-2">{item?.productName || '-'}</td>
+                            <td className="px-3 py-2 text-right">{batch.quantity}</td>
+                            <td className="px-3 py-2 text-right">Rs. {batch.costPerUnit.toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              {batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString() : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  💡 These batches are tracked for FIFO costing and expiry alerts
                 </p>
               </div>
             )}
