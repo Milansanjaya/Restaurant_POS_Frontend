@@ -16,4 +16,9 @@ export const inventoryApi = {
     const res = await api.post('/inventory/fix');
     return res.data;
   },
+
+  cleanup: async () => {
+    const res = await api.post('/inventory/cleanup');
+    return res.data;
+  },
 };

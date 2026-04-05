@@ -90,12 +90,36 @@ export default function ProductsPage() {
   };
 
   const handleSave = async () => {
+    // Validation
+    if (!formData.name || !formData.name.trim()) {
+      alert('❌ Please enter a product name');
+      return;
+    }
+    if (!formData.sku || !formData.sku.trim()) {
+      alert('❌ Please enter a SKU');
+      return;
+    }
+    if (!formData.category) {
+      alert('❌ Please select a category');
+      return;
+    }
+    if (formData.price === undefined || formData.price < 0) {
+      alert('❌ Please enter a valid price');
+      return;
+    }
+    if (formData.cost === undefined || formData.cost < 0) {
+      alert('❌ Please enter a valid cost');
+      return;
+    }
+
     try {
       setSaving(true);
       if (editingProduct) {
         await productsApi.update(editingProduct._id, formData);
+        alert('✅ Product updated successfully');
       } else {
         await productsApi.create(formData);
+        alert('✅ Product created successfully');
       }
       setModalOpen(false);
       loadProducts();

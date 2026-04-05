@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Table, Badge, Button, Input, Modal, PageLoader } from '../components';
 import { inventoryApi } from '../api';
 import type { Inventory, Product } from '../types';
@@ -11,16 +12,30 @@ export default function InventoryPage() {
   const [selectedItem, setSelectedItem] = useState<Inventory | null>(null);
   const [adjustmentQty, setAdjustmentQty] = useState(0);
   const [adjustmentType, setAdjustmentType] = useState<'PURCHASE' | 'ADJUSTMENT' | 'RETURN'>('ADJUSTMENT');
+  const [cleaning, setCleaning] = useState(false);
 
   const loadInventory = async () => {
     try {
       setLoading(true);
       const data = await inventoryApi.getAll();
-      // Filter out null items and items with null product
-      const validData = (data || []).filter(item => item != null && item.product != null);
+      // Filter out items with null/undefined products (deleted products)
+      const validData = (data || []).filter(item => {
+        if (!item) return false;
+        // Check if product exists and is an object with _id
+        if (typeof item.product === 'object' && item.product && item.product._id) {
+          return true;
+        }
+        // If product is just an ID string, we can't verify it exists, so exclude it
+        return false;
+      });
       setInventory(validData);
+      
+      if (validData.length === 0 && data && data.length > 0) {
+        toast.error('⚠️ Some inventory items reference deleted products. Click "Cleanup" to remove them.');
+      }
     } catch (error) {
       console.error('Failed to load inventory:', error);
+      toast.error('❌ Failed to load inventory');
       setInventory([]);
     } finally {
       setLoading(false);
@@ -32,6 +47,11 @@ export default function InventoryPage() {
   }, []);
 
   const openAdjustModal = (item: Inventory) => {
+    const product = getProduct(item);
+    if (product && !product.trackStock) {
+      toast.error('❌ Cannot adjust stock for non-tracked products');
+      return;
+    }
     setSelectedItem(item);
     setAdjustmentQty(0);
     setAdjustmentType('ADJUSTMENT');
@@ -39,7 +59,10 @@ export default function InventoryPage() {
   };
 
   const handleAdjust = async () => {
-    if (!selectedItem || adjustmentQty === 0) return;
+    if (!selectedItem || adjustmentQty === 0) {
+      toast.error('❌ Please enter a quantity to adjust');
+      return;
+    }
     const productId = typeof selectedItem.product === 'object' 
       ? selectedItem.product._id 
       : selectedItem.product;
@@ -50,10 +73,31 @@ export default function InventoryPage() {
         quantityChange: adjustmentQty,
         type: adjustmentType,
       });
+      toast.success(`✅ Inventory adjusted by ${adjustmentQty > 0 ? '+' : ''}${adjustmentQty}`);
       setAdjustModalOpen(false);
       loadInventory();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to adjust inventory');
+      toast.error(error?.response?.data?.message || '❌ Failed to adjust inventory');
+    }
+  };
+
+  const handleCleanup = async () => {
+    if (!confirm('Deactivate inventory items for deleted/inactive products? This will hide them from the inventory list.')) return;
+    
+    try {
+      setCleaning(true);
+      const result = await inventoryApi.cleanup();
+      const count = result.deactivated || result.deleted || 0;
+      if (count > 0) {
+        toast.success(`✅ Cleanup complete! ${count} items deactivated`);
+      } else {
+        toast.success('✅ No orphaned items found');
+      }
+      loadInventory();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || '❌ Failed to cleanup inventory');
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -64,9 +108,21 @@ export default function InventoryPage() {
 
   const filteredInventory = inventory.filter((item) => {
     const product = getProduct(item);
+    if (!product) return false;
     if (!search) return true;
     return product?.name.toLowerCase().includes(search.toLowerCase()) ||
            product?.sku.toLowerCase().includes(search.toLowerCase());
+  });
+
+  // Separate tracked and untracked products
+  const trackedInventory = filteredInventory.filter((item) => {
+    const product = getProduct(item);
+    return product?.trackStock === true;
+  });
+
+  const untrackedInventory = filteredInventory.filter((item) => {
+    const product = getProduct(item);
+    return product?.trackStock === false;
   });
 
   const columns = [
@@ -92,6 +148,11 @@ export default function InventoryPage() {
     {
       key: 'lowStockThreshold',
       header: 'Min Stock',
+      render: (item: Inventory) => (
+        <span className="text-slate-600">
+          {item.lowStockThreshold || 0}
+        </span>
+      ),
     },
     {
       key: 'status',
@@ -117,18 +178,76 @@ export default function InventoryPage() {
     },
   ];
 
+  // Columns for non-tracked products (restaurant items)
+  const untrackedColumns = [
+    {
+      key: 'product',
+      header: 'Product',
+      render: (item: Inventory) => getProduct(item)?.name || 'Unknown',
+    },
+    {
+      key: 'sku',
+      header: 'SKU',
+      render: (item: Inventory) => getProduct(item)?.sku || '-',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (item: Inventory) => (
+        <Badge variant="success">Always Available</Badge>
+      ),
+    },
+  ];
+
   return (
     <Layout>
+      <Toaster position="top-right" />
       <PageHeader
         title="Inventory"
         subtitle="Monitor and adjust stock levels"
         actions={
-          <Button variant="outline" onClick={loadInventory}>
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={handleCleanup} disabled={cleaning}>
+              {cleaning ? '⏳ Cleaning...' : '🧹 Cleanup'}
+            </Button>
+            <Button variant="outline" onClick={loadInventory}>
+              🔄 Refresh
+            </Button>
+          </div>
         }
       />
       <PageContent>
+        {/* Summary Stats - Only for tracked products */}
+        {trackedInventory.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-slate-700 mb-3">📦 Stock Tracked Items</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="text-sm text-slate-600">Total Items</div>
+                <div className="text-2xl font-bold text-slate-900">{trackedInventory.length}</div>
+              </div>
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="text-sm text-slate-600">Out of Stock</div>
+                <div className="text-2xl font-bold text-red-600">
+                  {trackedInventory.filter(i => i.stockQuantity <= 0).length}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="text-sm text-slate-600">Low Stock</div>
+                <div className="text-2xl font-bold text-yellow-600">
+                  {trackedInventory.filter(i => i.stockQuantity > 0 && i.stockQuantity <= i.lowStockThreshold).length}
+                </div>
+              </div>
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="text-sm text-slate-600">In Stock</div>
+                <div className="text-2xl font-bold text-green-600">
+                  {trackedInventory.filter(i => i.stockQuantity > i.lowStockThreshold).length}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-4">
           <Input
             placeholder="Search by product name or SKU..."
@@ -138,13 +257,43 @@ export default function InventoryPage() {
           />
         </div>
 
-        <Table
-          columns={columns}
-          data={filteredInventory}
-          keyExtractor={(item) => item._id}
-          loading={loading}
-          emptyMessage="No inventory items found"
-        />
+        {/* Tracked Inventory */}
+        {trackedInventory.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">
+              📊 Stock Tracked Products ({trackedInventory.length})
+            </h3>
+            <Table
+              columns={columns}
+              data={trackedInventory}
+              keyExtractor={(item) => item._id}
+              loading={loading}
+              emptyMessage="No tracked inventory items found"
+            />
+          </div>
+        )}
+
+        {/* Untracked Inventory (Always Available) */}
+        {untrackedInventory.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">
+              🍽️ Restaurant Items (Always Available) ({untrackedInventory.length})
+            </h3>
+            <Table
+              columns={untrackedColumns}
+              data={untrackedInventory}
+              keyExtractor={(item) => item._id}
+              loading={loading}
+              emptyMessage="No untracked items found"
+            />
+          </div>
+        )}
+
+        {trackedInventory.length === 0 && untrackedInventory.length === 0 && !loading && (
+          <div className="text-center py-12 text-slate-500">
+            No inventory items found
+          </div>
+        )}
       </PageContent>
 
       <Modal
