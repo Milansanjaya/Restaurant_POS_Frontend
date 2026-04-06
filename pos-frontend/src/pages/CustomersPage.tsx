@@ -40,7 +40,7 @@ export default function CustomersPage() {
 
   const openCreateModal = () => {
     setEditingCustomer(null);
-    setFormData({ name: '', phone: '', email: '', address: '', dob: '', anniversary: '', notes: '' });
+    setFormData({ name: '', phone: '', email: '', address: '', dob: '', anniversary: '', notes: '', tier: 'BASIC' });
     setModalOpen(true);
   };
 
@@ -54,6 +54,7 @@ export default function CustomersPage() {
       dob: customer.dob ? customer.dob.split('T')[0] : '',
       anniversary: customer.anniversary ? customer.anniversary.split('T')[0] : '',
       notes: customer.notes || '',
+      tier: customer.tier || 'BASIC',
     });
     setModalOpen(true);
   };
@@ -216,6 +217,21 @@ export default function CustomersPage() {
               value={formData.anniversary || ''}
               onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
             />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Tier
+            </label>
+            <select
+              value={formData.tier || 'BASIC'}
+              onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="BASIC">Basic</option>
+              <option value="SILVER">Silver</option>
+              <option value="GOLD">Gold</option>
+              <option value="PLATINUM">Platinum</option>
+            </select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">

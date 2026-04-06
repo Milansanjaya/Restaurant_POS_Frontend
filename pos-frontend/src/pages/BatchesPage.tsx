@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
@@ -204,7 +204,6 @@ export default function BatchesPage() {
 
   return (
     <Layout>
-      <Toaster position="top-right" />
       <PageHeader
         title="Batch & Expiry Management"
         subtitle="Track product batches and expiry dates"
@@ -214,11 +213,11 @@ export default function BatchesPage() {
         {/* Dashboard Stats */}
         {dashboard && (
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-            <StatCard title="Total Batches" value={dashboard.totalBatches} />
-            <StatCard title="Normal" value={dashboard.normalCount} />
-            <StatCard title="Warning (<30d)" value={dashboard.warningCount} />
-            <StatCard title="Critical (<7d)" value={dashboard.criticalCount} />
-            <StatCard title="Expired" value={dashboard.expiredCount} />
+            <StatCard title="Total Batches" value={dashboard.totalBatches ?? 0} />
+            <StatCard title="Normal" value={dashboard.normalCount ?? 0} />
+            <StatCard title="Warning (<30d)" value={dashboard.warningCount ?? 0} />
+            <StatCard title="Critical (<7d)" value={dashboard.criticalCount ?? 0} />
+            <StatCard title="Expired" value={dashboard.expiredCount ?? 0} />
           </div>
         )}
 

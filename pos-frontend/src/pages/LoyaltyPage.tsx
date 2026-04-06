@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, Button, Input, Modal, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Card, Table, Badge, Button, Input, PageLoader } from '../components';
 import { loyaltyApi, customersApi } from '../api';
-import type { LoyaltyAccount, LoyaltyTransaction, WalletTransaction, Customer } from '../types';
+import type { LoyaltyAccount, LoyaltyTransaction, Customer } from '../types';
 
 export default function LoyaltyPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -11,12 +11,7 @@ export default function LoyaltyPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [loyaltyAccount, setLoyaltyAccount] = useState<LoyaltyAccount | null>(null);
   const [pointsHistory, setPointsHistory] = useState<LoyaltyTransaction[]>([]);
-  const [walletHistory, setWalletHistory] = useState<WalletTransaction[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-
-  const [topupModalOpen, setTopupModalOpen] = useState(false);
-  const [topupAmount, setTopupAmount] = useState(0);
-  const [topupMethod, setTopupMethod] = useState('CASH');
 
   const loadCustomers = async () => {
     try {
@@ -38,36 +33,18 @@ export default function LoyaltyPage() {
     setSelectedCustomer(customer);
     setDetailLoading(true);
     try {
-      const [account, points, wallet] = await Promise.all([
+      const [account, points] = await Promise.all([
         loyaltyApi.getAccount(customer._id),
         loyaltyApi.getPointsHistory(customer._id),
-        loyaltyApi.getWalletHistory(customer._id),
       ]);
       setLoyaltyAccount(account);
-      setPointsHistory(points || []); // Ensure it's always an array
-      setWalletHistory(wallet || []); // Ensure it's always an array
+      setPointsHistory(points || []);
     } catch (error) {
       console.error('Failed to load loyalty data:', error);
       setLoyaltyAccount(null);
-      setPointsHistory([]); // Reset to empty array on error
-      setWalletHistory([]); // Reset to empty array on error
+      setPointsHistory([]);
     } finally {
       setDetailLoading(false);
-    }
-  };
-
-  const handleTopup = async () => {
-    if (!selectedCustomer || topupAmount <= 0) return;
-    try {
-      await loyaltyApi.walletTopup({
-        customer_id: selectedCustomer._id,
-        amount: topupAmount,
-        paymentMethod: topupMethod,
-      });
-      setTopupModalOpen(false);
-      viewLoyalty(selectedCustomer);
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to topup wallet');
     }
   };
 
@@ -109,8 +86,8 @@ export default function LoyaltyPage() {
   return (
     <Layout>
       <PageHeader
-        title="Loyalty & Wallet"
-        subtitle="Manage customer loyalty points and wallet"
+        title="Loyalty Points"
+        subtitle="Manage customer loyalty points"
       />
       <PageContent>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -158,19 +135,10 @@ export default function LoyaltyPage() {
                       <span className="font-bold text-lg">{loyaltyAccount?.pointsBalance || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600">Wallet Balance:</span>
-                      <span className="font-bold text-lg text-green-600">
-                        Rs. {(loyaltyAccount?.walletBalance || 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
                       <span className="text-slate-600">Lifetime Points:</span>
                       <span>{loyaltyAccount?.lifetimePoints || 0}</span>
                     </div>
                   </div>
-                  <Button className="mt-4 w-full" onClick={() => setTopupModalOpen(true)}>
-                    Topup Wallet
-                  </Button>
                 </Card>
 
                 {/* Points History */}
@@ -193,69 +161,11 @@ export default function LoyaltyPage() {
                     </div>
                   )}
                 </Card>
-
-                {/* Wallet History */}
-                <Card>
-                  <h4 className="mb-3 font-semibold">Wallet History</h4>
-                  {!walletHistory || walletHistory.length === 0 ? (
-                    <p className="text-sm text-slate-500">No wallet history</p>
-                  ) : (
-                    <div className="max-h-48 space-y-2 overflow-y-auto">
-                      {walletHistory.slice(0, 10).map((txn) => (
-                        <div key={txn._id} className="flex justify-between text-sm">
-                          <span className={txn.type === 'CREDIT' ? 'text-green-600' : 'text-red-600'}>
-                            {txn.type === 'CREDIT' ? '+' : '-'}Rs. {txn.amount}
-                          </span>
-                          <span className="text-slate-500">
-                            {new Date(txn.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
               </div>
             )}
           </div>
         </div>
       </PageContent>
-
-      {/* Topup Modal */}
-      <Modal
-        isOpen={topupModalOpen}
-        onClose={() => setTopupModalOpen(false)}
-        title={`Topup Wallet: ${selectedCustomer?.name || ''}`}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setTopupModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleTopup}>Topup</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Current Balance: Rs. {loyaltyAccount?.walletBalance?.toLocaleString() || 0}
-          </p>
-          <Input
-            label="Amount"
-            type="number"
-            value={topupAmount}
-            onChange={(e) => setTopupAmount(parseFloat(e.target.value) || 0)}
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Method</label>
-            <select
-              value={topupMethod}
-              onChange={(e) => setTopupMethod(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="CASH">Cash</option>
-              <option value="CARD">Card</option>
-              <option value="BANK_TRANSFER">Bank Transfer</option>
-            </select>
-          </div>
-        </div>
-      </Modal>
     </Layout>
   );
 }

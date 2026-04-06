@@ -1,5 +1,5 @@
-import { useEffect, useState, Fragment as React } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import { useEffect, useState, Fragment } from 'react';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input, PageLoader } from '../components';
 import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
 import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
@@ -39,8 +39,22 @@ export default function GRNPage() {
         purchaseOrdersApi.getAll({ status: 'APPROVED' }),
         suppliersApi.getAll(),
       ]);
-      setGrns(grnRes.grns || []);
-      setPurchaseOrders(poRes.purchaseOrders || []);
+      
+      const allGrns = grnRes.grns || [];
+      const allPos = poRes.purchaseOrders || [];
+      
+      // Filter out POs that already have GRNs
+      const grnPoIds = allGrns.map(grn => {
+        const poId = typeof grn.purchaseOrder_id === 'object' 
+          ? grn.purchaseOrder_id._id 
+          : grn.purchaseOrder_id;
+        return poId;
+      });
+      
+      const pendingPos = allPos.filter(po => !grnPoIds.includes(po._id));
+      
+      setGrns(allGrns);
+      setPurchaseOrders(pendingPos); // Only show POs without GRNs
       setSuppliers(supplierRes.suppliers || []);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -54,12 +68,20 @@ export default function GRNPage() {
     loadData();
   }, [filterStatus, filterSupplier]);
 
+  const generateBatchNumber = (productName: string, index: number) => {
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
+    const prefix = productName.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${prefix}-${dateStr}-${random}`;
+  };
+
   const openCreateModal = (po: PurchaseOrder) => {
     setEditingId(null);
     setSelectedPO(po);
     const supplierId = typeof po.supplier_id === 'object' ? po.supplier_id._id : po.supplier_id;
     
-    const items: GRNItem[] = po.items.map((item) => ({
+    const items: GRNItem[] = po.items.map((item, index) => ({
       product_id: item.product_id,
       productName: item.productName,
       orderedQuantity: item.quantity,
@@ -67,7 +89,7 @@ export default function GRNPage() {
       unitPrice: item.unitPrice,
       totalPrice: item.totalPrice,
       qualityStatus: 'ACCEPTED' as QualityStatus,
-      batchNumber: '',
+      batchNumber: generateBatchNumber(item.productName, index),
       expiryDate: '',
     }));
 
@@ -178,7 +200,13 @@ export default function GRNPage() {
       toast.success('✅ GRN deleted successfully');
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || '❌ Failed to delete GRN');
+      if (error?.response?.status === 404) {
+        toast.error('❌ GRN not found (already deleted)');
+        // Refresh the list to remove the stale item
+        loadData();
+      } else {
+        toast.error(error?.response?.data?.message || '❌ Failed to delete GRN');
+      }
     }
   };
 
@@ -193,9 +221,18 @@ export default function GRNPage() {
     }
   };
 
-  const handleViewDetails = (grn: GRN) => {
-    setSelectedGRN(grn);
-    setDetailModalOpen(true);
+  const handleViewDetails = async (grn: GRN) => {
+    try {
+      // Fetch full GRN details to ensure all data is available
+      const fullGrn = await grnApi.getById(grn._id);
+      setSelectedGRN(fullGrn || grn);
+      setDetailModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch GRN details:', error);
+      // Fall back to using the list data
+      setSelectedGRN(grn);
+      setDetailModalOpen(true);
+    }
   };
 
   const handlePrintGRN = () => {
@@ -357,7 +394,6 @@ export default function GRNPage() {
 
   return (
     <Layout>
-      <Toaster position="top-right" />
       <PageHeader
         title="Goods Received Notes"
         subtitle="Receive goods against purchase orders"
@@ -487,12 +523,25 @@ export default function GRNPage() {
                 )}
                 
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Input
-                    label="Batch Number"
-                    value={item.batchNumber || ''}
-                    onChange={(e) => updateItem(index, 'batchNumber', e.target.value)}
-                    placeholder="BATCH-001"
-                  />
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700">Batch Number</label>
+                    <div className="flex gap-1">
+                      <input
+                        value={item.batchNumber || ''}
+                        onChange={(e) => updateItem(index, 'batchNumber', e.target.value)}
+                        placeholder="Auto-generated"
+                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateItem(index, 'batchNumber', generateBatchNumber(item.productName, index))}
+                        className="rounded-lg bg-slate-100 px-2 py-2 text-sm hover:bg-slate-200"
+                        title="Regenerate batch number"
+                      >
+                        🔄
+                      </button>
+                    </div>
+                  </div>
                   <Input
                     label="Expiry Date"
                     type="date"
@@ -593,7 +642,7 @@ export default function GRNPage() {
                   </thead>
                   <tbody className="divide-y">
                     {selectedGRN.items.map((item, idx) => (
-                      <React.Fragment key={idx}>
+                      <Fragment key={idx}>
                         <tr>
                           <td className="px-3 py-2">{item.productName}</td>
                           <td className="px-3 py-2">{item.orderedQuantity || item.purchasedQuantity || '-'}</td>
@@ -620,7 +669,7 @@ export default function GRNPage() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     ))}
                   </tbody>
                   <tfoot className="bg-slate-50 font-bold">

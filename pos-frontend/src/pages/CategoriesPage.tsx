@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader } from '../components';
 import { categoriesApi } from '../api';
 import type { Category, CategoryFormData } from '../types';
@@ -61,13 +62,15 @@ export default function CategoriesPage() {
       
       if (editingCategory) {
         await categoriesApi.update(editingCategory._id, data);
+        toast.success('✅ Category updated successfully');
       } else {
         await categoriesApi.create(data);
+        toast.success('✅ Category created successfully');
       }
       setModalOpen(false);
       loadCategories();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save category');
+      toast.error(error?.response?.data?.message || 'Failed to save category');
     } finally {
       setSaving(false);
     }
@@ -77,9 +80,10 @@ export default function CategoriesPage() {
     if (!confirm('Are you sure you want to delete this category?')) return;
     try {
       await categoriesApi.delete(id);
+      toast.success('🗑️ Category deleted successfully');
       loadCategories();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to delete category');
+      toast.error(error?.response?.data?.message || 'Failed to delete category');
     }
   };
 

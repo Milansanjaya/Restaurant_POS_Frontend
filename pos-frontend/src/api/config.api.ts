@@ -3,8 +3,8 @@ import type { SystemConfig, TaxSetting } from '../types';
 
 export const configApi = {
   get: async () => {
-    const res = await api.get<{ config: SystemConfig }>('/config');
-    return res.data.config;
+    const res = await api.get<{ data: SystemConfig }>('/config');
+    return res.data.data; // Backend returns { success, data: config }
   },
 
   update: async (data: Partial<SystemConfig>) => {

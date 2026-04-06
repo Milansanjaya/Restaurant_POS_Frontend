@@ -18,6 +18,10 @@ export default function SettingsPage() {
     try {
       setLoading(true);
       const data = await configApi.get();
+      if (!data) {
+        console.warn('Config API returned null/undefined');
+        return;
+      }
       setConfig(data);
       setTaxes(data.taxes || []);
       setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' });
@@ -26,6 +30,7 @@ export default function SettingsPage() {
       setExpiryAlertDays(data.expiryAlertDays || 30);
     } catch (error) {
       console.error('Failed to load config:', error);
+      alert('⚠️ Failed to load settings. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import LoginPage from "./pages/LoginPage";
 import PosPage from "./pages/PosPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -11,7 +12,7 @@ import GRNPage from "./pages/GRNPage";
 import BatchesPage from "./pages/BatchesPage";
 import CustomersPage from "./pages/CustomersPage";
 import ReturnsPage from "./pages/ReturnsPage";
-import ReportsPage from "./pages/ReportsPage";
+import ComprehensiveReportsPage from "./pages/ComprehensiveReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import UnitsPage from "./pages/UnitsPage";
 import LoyaltyPage from "./pages/LoyaltyPage";
@@ -33,6 +34,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
@@ -49,7 +51,7 @@ export default function App() {
         <Route path="/loyalty" element={<LoyaltyPage />} />
         <Route path="/coupons" element={<CouponsPage />} />
         <Route path="/returns" element={<ReturnsPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports" element={<ComprehensiveReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/units" element={<UnitsPage />} />
         <Route path="/tables" element={<TablesPage />} />

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, getStatusBadgeVariant, Modal, Card, PageLoader } from '../components';
-import { productsApi, categoriesApi } from '../api';
-import type { Product, Category, ProductFormData } from '../types';
+import { productsApi, categoriesApi, unitsApi } from '../api';
+import type { Product, Category, ProductFormData, Unit } from '../types';
+import toast from 'react-hot-toast';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -13,6 +15,11 @@ export default function ProductsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+  
+  // Unit creation modal
+  const [showUnitModal, setShowUnitModal] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+  const [newUnitSymbol, setNewUnitSymbol] = useState('');
 
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
@@ -25,6 +32,7 @@ export default function ProductsPage() {
     trackStock: false,
     lowStockThreshold: 5,
     preparationTime: undefined,
+    unit: '',
   });
 
   const loadProducts = async () => {
@@ -50,14 +58,43 @@ export default function ProductsPage() {
     }
   };
 
+  const loadUnits = async () => {
+    try {
+      const unitsData = await unitsApi.getAll();
+      const unitsArray = unitsData?.units || unitsData?.data || unitsData || [];
+      setUnits(Array.isArray(unitsArray) ? unitsArray : []);
+    } catch (error) {
+      console.error('Failed to load units:', error);
+      setUnits([]);
+    }
+  };
+
+  const handleCreateUnit = async () => {
+    if (!newUnitName.trim()) {
+      toast.error('Please enter unit name');
+      return;
+    }
+    try {
+      await unitsApi.create({ name: newUnitName, symbol: newUnitSymbol || newUnitName });
+      toast.success('Unit created successfully!');
+      setShowUnitModal(false);
+      setNewUnitName('');
+      setNewUnitSymbol('');
+      loadUnits();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to create unit');
+    }
+  };
+
   useEffect(() => {
     loadProducts();
     loadCategories();
+    loadUnits();
   }, [page, search]);
 
   const openCreateModal = () => {
     setEditingProduct(null);
-    setFormData({ 
+    setFormData({
       name: '', 
       sku: '', 
       barcode: '', 
@@ -68,6 +105,7 @@ export default function ProductsPage() {
       trackStock: false,
       lowStockThreshold: 5,
       preparationTime: undefined,
+      unit: '',
     });
     setModalOpen(true);
   };
@@ -85,6 +123,7 @@ export default function ProductsPage() {
       trackStock: product.trackStock || false,
       lowStockThreshold: product.lowStockThreshold || 5,
       preparationTime: product.preparationTime,
+      unit: typeof product.unit === 'string' ? product.unit : product.unit?._id || '',
     });
     setModalOpen(true);
   };
@@ -92,23 +131,23 @@ export default function ProductsPage() {
   const handleSave = async () => {
     // Validation
     if (!formData.name || !formData.name.trim()) {
-      alert('❌ Please enter a product name');
+      toast.error('Please enter a product name');
       return;
     }
     if (!formData.sku || !formData.sku.trim()) {
-      alert('❌ Please enter a SKU');
+      toast.error('Please enter a SKU');
       return;
     }
     if (!formData.category) {
-      alert('❌ Please select a category');
+      toast.error('Please select a category');
       return;
     }
     if (formData.price === undefined || formData.price < 0) {
-      alert('❌ Please enter a valid price');
+      toast.error('Please enter a valid price');
       return;
     }
     if (formData.cost === undefined || formData.cost < 0) {
-      alert('❌ Please enter a valid cost');
+      toast.error('Please enter a valid cost');
       return;
     }
 
@@ -116,15 +155,15 @@ export default function ProductsPage() {
       setSaving(true);
       if (editingProduct) {
         await productsApi.update(editingProduct._id, formData);
-        alert('✅ Product updated successfully');
+        toast.success('✅ Product updated successfully');
       } else {
         await productsApi.create(formData);
-        alert('✅ Product created successfully');
+        toast.success('✅ Product created successfully');
       }
       setModalOpen(false);
       loadProducts();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save product');
+      toast.error(error?.response?.data?.message || 'Failed to save product');
     } finally {
       setSaving(false);
     }
@@ -134,18 +173,20 @@ export default function ProductsPage() {
     if (!confirm('Are you sure you want to delete this product?')) return;
     try {
       await productsApi.delete(id);
+      toast.success('🗑️ Product deleted successfully');
       loadProducts();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to delete product');
+      toast.error(error?.response?.data?.message || 'Failed to delete product');
     }
   };
 
   const handleToggleAvailability = async (product: Product) => {
     try {
       await productsApi.toggleAvailability(product._id, !product.isAvailable);
+      toast.success(`${product.isAvailable ? '🔴' : '🟢'} Product availability updated`);
       loadProducts();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to update availability');
+      toast.error(error?.response?.data?.message || 'Failed to update availability');
     }
   };
 
@@ -310,6 +351,35 @@ export default function ProductsPage() {
               </select>
             </div>
           </div>
+          
+          {/* Unit Selection with Create Option */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Unit of Measurement
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={formData.unit || ''}
+                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Select Unit (Optional)</option>
+                {units.map((unit) => (
+                  <option key={unit._id} value={unit._id}>
+                    {unit.name} ({unit.symbol})
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowUnitModal(true)}
+              >
+                + New
+              </Button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-4">
             <Input
               label="Price"
@@ -360,6 +430,40 @@ export default function ProductsPage() {
               placeholder="Optional"
             />
           </div>
+        </div>
+      </Modal>
+
+      {/* Create Unit Modal */}
+      <Modal
+        isOpen={showUnitModal}
+        onClose={() => setShowUnitModal(false)}
+        title="Create New Unit"
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowUnitModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateUnit}>
+              Create Unit
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Unit Name"
+            value={newUnitName}
+            onChange={(e) => setNewUnitName(e.target.value)}
+            placeholder="e.g., Kilogram, Piece, Liter"
+            required
+          />
+          <Input
+            label="Symbol"
+            value={newUnitSymbol}
+            onChange={(e) => setNewUnitSymbol(e.target.value)}
+            placeholder="e.g., kg, pcs, L"
+          />
         </div>
       </Modal>
     </Layout>

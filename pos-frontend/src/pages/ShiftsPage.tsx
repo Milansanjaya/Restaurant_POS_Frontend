@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Card } from '../components';
 import { shiftsApi } from '../api/shifts.api';
@@ -9,7 +9,29 @@ export default function ShiftsPage() {
   const [openingCash, setOpeningCash] = useState('');
   const [closingCash, setClosingCash] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Load current shift on page mount
+  useEffect(() => {
+    loadCurrentShift();
+  }, []);
+
+  const loadCurrentShift = async () => {
+    try {
+      setInitialLoading(true);
+      const shift = await shiftsApi.getCurrent();
+      setCurrentShift(shift);
+    } catch (err: any) {
+      console.error('Failed to load current shift:', err);
+      // Don't show error if no shift found - that's expected
+      if (err?.response?.status !== 404) {
+        setError(err?.response?.data?.message || 'Failed to load shift');
+      }
+    } finally {
+      setInitialLoading(false);
+    }
+  };
 
   const handleOpenShift = async () => {
     const amount = parseFloat(openingCash);
@@ -75,8 +97,16 @@ export default function ShiftsPage() {
             </div>
           )}
 
+          {/* Loading State */}
+          {initialLoading && (
+            <div className="rounded-lg bg-slate-50 p-8 text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
+              <p className="mt-4 text-slate-600">Loading shift information...</p>
+            </div>
+          )}
+
           {/* Current Shift Status */}
-          {currentShift && currentShift.status === 'OPEN' && (
+          {!initialLoading && currentShift && currentShift.status === 'OPEN' && (
             <Card className="p-6">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">
                 Current Shift
@@ -209,7 +239,7 @@ export default function ShiftsPage() {
           )}
 
           {/* Open New Shift */}
-          {!currentShift && (
+          {!initialLoading && !currentShift && (
             <Card className="p-6">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">
                 Open New Shift

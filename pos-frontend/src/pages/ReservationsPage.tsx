@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table } from '../components';
 import { reservationsApi } from '../api/reservations.api';
@@ -73,6 +74,7 @@ export default function ReservationsPage() {
   const handleCreate = async () => {
     try {
       await reservationsApi.create(formData);
+      toast.success('📅 Reservation created successfully');
       setShowModal(false);
       setFormData({
         tableId: '',
@@ -83,7 +85,8 @@ export default function ReservationsPage() {
         notes: '',
       });
       loadData();
-    } catch (err) {
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to create reservation');
       console.error('Failed to create reservation:', err);
     }
   };
@@ -91,18 +94,61 @@ export default function ReservationsPage() {
   const handleStatusChange = async (reservation: Reservation, status: ReservationStatus) => {
     try {
       await reservationsApi.updateStatus(reservation._id, status);
+      toast.success(`✅ Reservation status changed to ${status}`);
       loadData();
-    } catch (err) {
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to update status');
       console.error('Failed to update status:', err);
     }
   };
 
   const handleSeat = async (reservation: Reservation) => {
     try {
+      // Seat the reservation (backend should set table to OCCUPIED)
       await reservationsApi.seat(reservation._id);
+      
+      // Also explicitly update table status to OCCUPIED
+      const tableId = typeof reservation.table === 'object' 
+        ? reservation.table._id 
+        : reservation.table;
+      
+      if (tableId) {
+        try {
+          await tablesApi.updateStatus(tableId, 'OCCUPIED');
+        } catch (e) {
+          console.warn('Table status might already be updated by backend');
+        }
+      }
+      
+      toast.success('🪑 Customer seated successfully');
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to seat reservation');
+      console.error('Failed to seat reservation:', err);
+    }
+  };
+
+  // Complete reservation (after payment)
+  const handleComplete = async (reservation: Reservation) => {
+    try {
+      await reservationsApi.updateStatus(reservation._id, 'COMPLETED');
+      
+      // Set table back to CLEANING
+      const tableId = typeof reservation.table === 'object' 
+        ? reservation.table._id 
+        : reservation.table;
+      
+      if (tableId) {
+        try {
+          await tablesApi.updateStatus(tableId, 'CLEANING');
+        } catch (e) {
+          console.warn('Table status update failed');
+        }
+      }
+      
       loadData();
     } catch (err) {
-      console.error('Failed to seat reservation:', err);
+      console.error('Failed to complete reservation:', err);
     }
   };
 

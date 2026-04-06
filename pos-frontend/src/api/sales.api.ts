@@ -58,3 +58,19 @@ export const closeTableSale = async (tableId: string, data: CloseSaleData): Prom
   const res = await api.post(`/sales/${tableId}/close`, data);
   return res.data.sale;
 };
+
+// Sales API object
+export const salesApi = {
+  getAll: async () => {
+    const res = await api.get('/sales');
+    return res.data.sales as Sale[];
+  },
+  getSales,
+  getById: getSaleById,
+  create: createSale,
+  void: voidSale,
+  getInvoice,
+  refund: refundSale,
+  pay: paySale,
+  closeTable: closeTableSale,
+};

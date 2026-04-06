@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Table, Badge, Button, Input, Modal, PageLoader } from '../components';
 import { inventoryApi } from '../api';
 import type { Inventory, Product } from '../types';
@@ -201,7 +201,6 @@ export default function InventoryPage() {
 
   return (
     <Layout>
-      <Toaster position="top-right" />
       <PageHeader
         title="Inventory"
         subtitle="Monitor and adjust stock levels"

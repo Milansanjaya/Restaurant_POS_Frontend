@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import toast, { Toaster } from "react-hot-toast";
+import { useNavigate, useLocation } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
@@ -11,7 +11,8 @@ import { shiftsApi } from "../api/shifts.api";
 import { customersApi } from "../api/customers.api";
 import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
-import type { Category, RestaurantTable, Shift, Sale, Customer } from "../types";
+import { reservationsApi } from "../api/reservations.api";
+import type { Category, RestaurantTable, Shift, Sale, Customer, Reservation } from "../types";
 
 type Product = {
   _id: string;
@@ -36,12 +37,14 @@ type CustomerOption = {
 
 export default function PosPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
   const token = useAuthStore((s) => s.token);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -85,7 +88,7 @@ export default function PosPage() {
   const [tableSale, setTableSale] = useState<Sale | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [processingPayment, setProcessingPayment] = useState(false);
-
+  
   // Shift modal
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [openingCash, setOpeningCash] = useState<number>(0);
@@ -109,17 +112,23 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes] = await Promise.all([
+        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes] = await Promise.all([
           api.get("/products"),
           categoriesApi.getAll(),
           tablesApi.getAll(),
           shiftsApi.getCurrent().catch(() => null),
           customersApi.getAll({ limit: 100 }).catch(() => ({ customers: [] })),
+          reservationsApi.getAll().catch(() => []),
         ]);
         setProducts(productsRes.data.products || []);
         setCategories(categoriesRes || []);
         setTables(tablesRes || []);
         setCurrentShift(shiftRes);
+        // Store active reservations (CONFIRMED or SEATED)
+        const activeReservations = (reservationsRes || []).filter(
+          (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
+        );
+        setReservations(activeReservations);
         setCustomers(
           (customersRes.customers || [])
             .filter((c: Customer) => !c.isWalkIn && c.status === 'ACTIVE')
@@ -139,6 +148,28 @@ export default function PosPage() {
 
     loadData();
   }, [token, navigate]);
+
+  // Handle incoming navigation state (from Tables page "Close & Pay")
+  useEffect(() => {
+    const state = location.state as { tableId?: string; saleId?: string; action?: string } | null;
+    if (state?.tableId && tables.length > 0) {
+      // Set the table as selected
+      setSelectedTable(state.tableId);
+      setOrderType('DINE_IN');
+      
+      // If action is 'pay', open the payment modal for this table
+      if (state.action === 'pay') {
+        const table = tables.find(t => t._id === state.tableId);
+        if (table && table.currentSale) {
+          // Trigger payment modal for this table
+          handleOpenTableBill(table);
+        }
+      }
+      
+      // Clear the location state to prevent re-triggering
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, tables]);
 
   // Fetch loyalty points when customer is selected
   useEffect(() => {
@@ -278,7 +309,23 @@ export default function PosPage() {
 
   // Handle opening table bill for payment
   const handleOpenTableBill = async (table: RestaurantTable) => {
-    // Find table order in our local state
+    // First check if there's a sale on this table (from database)
+    if (table.currentSale) {
+      try {
+        const sale = await getSaleById(table.currentSale);
+        if (sale && sale.items && sale.items.length > 0) {
+          setTableSale(sale);
+          setSelectedTableForPayment(table);
+          setPaymentAmount(sale.grandTotal);
+          setShowPaymentModal(true);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to fetch table sale:', error);
+      }
+    }
+    
+    // Otherwise check local table orders
     const tableOrder = tableOrders.find(order => order.tableId === table._id);
     
     if (!tableOrder || tableOrder.items.length === 0) {
@@ -360,16 +407,37 @@ export default function PosPage() {
       // Update table status to AVAILABLE
       await tablesApi.updateStatus(selectedTableForPayment._id, 'AVAILABLE');
 
+      // Check if this table has an active reservation and complete it
+      try {
+        const allReservations = await reservationsApi.getAll({ status: 'SEATED' });
+        const activeReservation = allReservations.find(r => {
+          const tableId = typeof r.table === 'object' ? r.table._id : r.table;
+          return tableId === selectedTableForPayment._id;
+        });
+        
+        if (activeReservation) {
+          await reservationsApi.updateStatus(activeReservation._id, 'COMPLETED');
+          toast.success('✅ Reservation completed', { duration: 2000 });
+        }
+      } catch (reservationError) {
+        console.log('No active reservation for this table or completion failed:', reservationError);
+      }
+
       // Remove table order from state
       setTableOrders(tableOrders.filter(order => order.tableId !== selectedTableForPayment._id));
 
-      // Refresh tables
-      const tablesRes = await tablesApi.getAll();
+      // Refresh tables and reservations
+      const [tablesRes, reservationsRes] = await Promise.all([
+        tablesApi.getAll(),
+        reservationsApi.getAll().catch(() => [])
+      ]);
       setTables(tablesRes || []);
+      const activeReservations = (reservationsRes || []).filter(
+        (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
+      );
+      setReservations(activeReservations);
 
-      toast.success(`💰 Payment complete! Invoice: ${sale.invoiceNumber}`, {
-        duration: 4000,
-      });
+      toast.success(`💰 Payment complete! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
       
       clearCart();
       setDiscountType('');
@@ -592,9 +660,7 @@ const handleCreateSale = async () => {
       }
     }
 
-    toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, {
-      duration: 4000,
-    });
+    toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
     clearCart();
     setDiscountType('');
     setDiscountValue(0);
@@ -611,43 +677,18 @@ const handleCreateSale = async () => {
   }
 };
 
-  // Get available tables (only AVAILABLE tables for selection in dropdown)
-  const availableTables = tables.filter(t => t.status === 'AVAILABLE');
+  // Get table IDs that have CONFIRMED reservations (reserved but not yet seated)
+  const confirmedReservationTableIds = reservations
+    .filter(r => r.status === 'CONFIRMED')
+    .map(r => typeof r.table === 'object' ? r.table._id : r.table);
+
+  // Get available tables (only AVAILABLE tables and NOT having CONFIRMED reservations)
+  const availableTables = tables.filter(t => 
+    t.status === 'AVAILABLE' && !confirmedReservationTableIds.includes(t._id)
+  );
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* Toast Notifications */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            fontSize: '14px',
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-            style: {
-              background: '#10b981',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-            style: {
-              background: '#ef4444',
-            },
-          },
-        }}
-      />
       
       {/* Shift Warning Banner */}
       {!currentShift && !loading && (

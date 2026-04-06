@@ -61,22 +61,54 @@ export default function UnitsPage() {
 
   const handleSave = async () => {
     try {
+      // Validate required fields
+      if (!formData.name?.trim()) {
+        alert('⚠️ Unit name is required');
+        return;
+      }
+      if (!formData.shortCode?.trim()) {
+        alert('⚠️ Short code is required');
+        return;
+      }
+      if (!formData.type) {
+        alert('⚠️ Unit type is required');
+        return;
+      }
+      
       setSaving(true);
       const data = { ...formData };
-      if (!data.baseUnit) {
+      
+      // Remove empty baseUnit and conversionFactor
+      if (!data.baseUnit || data.baseUnit.trim() === '') {
         delete data.baseUnit;
         delete data.conversionFactor;
       }
       
       if (editingUnit) {
         await unitsApi.update(editingUnit._id, data);
+        alert('✅ Unit updated successfully');
       } else {
         await unitsApi.create(data);
+        alert('✅ Unit created successfully');
       }
       setModalOpen(false);
       loadUnits();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save unit');
+      let message = error?.response?.data?.message || error?.response?.data?.error || 'Failed to save unit';
+      
+      // Handle duplicate shortCode error
+      if (message.includes('E11000') && message.includes('shortCode')) {
+        const match = message.match(/dup key: \{ shortCode: "([^"]+)" \}/);
+        const duplicateCode = match ? match[1] : formData.shortCode;
+        message = `Short code "${duplicateCode}" already exists. Please use a different code.`;
+      } else if (message.includes('duplicate key')) {
+        message = 'This unit already exists. Please use different values.';
+      } else if (message.includes('Validation error')) {
+        // Keep validation error as is
+      }
+      
+      alert(`❌ ${message}`);
+      console.error('Unit save error:', error?.response?.data);
     } finally {
       setSaving(false);
     }
@@ -89,6 +121,16 @@ export default function UnitsPage() {
       loadUnits();
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Failed to delete unit');
+    }
+  };
+
+  const handleToggleActive = async (unit: Unit) => {
+    try {
+      await unitsApi.update(unit._id, { isActive: !unit.isActive });
+      alert(unit.isActive ? '✅ Unit deactivated' : '✅ Unit activated');
+      loadUnits();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to update unit status');
     }
   };
 
@@ -132,6 +174,13 @@ export default function UnitsPage() {
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
             Edit
+          </Button>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={() => handleToggleActive(item)}
+          >
+            {item.isActive ? 'Deactivate' : 'Activate'}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
             Delete

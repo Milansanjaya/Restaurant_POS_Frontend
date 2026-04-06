@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Card } from '../components';
@@ -6,6 +7,12 @@ import { tablesApi } from '../api/tables.api';
 import type { RestaurantTable, TableFormData, TableStatus } from '../types';
 
 const statusOptions = [
+  { value: 'AVAILABLE', label: 'Available' },
+  { value: 'CLEANING', label: 'Cleaning' },
+];
+
+// Full status options for display only
+const allStatusOptions = [
   { value: 'AVAILABLE', label: 'Available' },
   { value: 'OCCUPIED', label: 'Occupied' },
   { value: 'RESERVED', label: 'Reserved' },
@@ -20,14 +27,13 @@ const statusColors: Record<TableStatus, 'success' | 'warning' | 'danger' | 'info
 };
 
 export default function TablesPage() {
+  const navigate = useNavigate();
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showCloseModal, setShowCloseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [formData, setFormData] = useState<TableFormData>({
     tableNumber: '',
     capacity: 2,
@@ -109,21 +115,28 @@ export default function TablesPage() {
 
   const handleCloseTable = async () => {
     if (!selectedTable) return;
-    try {
-      await tablesApi.close(selectedTable._id, paymentMethod);
-      toast.success('💰 Table closed successfully');
-      setShowCloseModal(false);
-      setSelectedTable(null);
-      setPaymentMethod('CASH');
-      loadTables();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to close table');
-    }
+    
+    // Navigate to POS page with the table selected for payment
+    navigate('/pos', { 
+      state: { 
+        tableId: selectedTable._id, 
+        saleId: selectedTable.currentSale,
+        action: 'pay' 
+      } 
+    });
+    
+    setSelectedTable(null);
   };
 
   const openCloseModal = (table: RestaurantTable) => {
-    setSelectedTable(table);
-    setShowCloseModal(true);
+    // Navigate directly to POS page with this table selected
+    navigate('/pos', { 
+      state: { 
+        tableId: table._id, 
+        saleId: table.currentSale,
+        action: 'pay' 
+      } 
+    });
   };
 
   // Group tables by section
@@ -183,14 +196,21 @@ export default function TablesPage() {
                         {table.status}
                       </Badge>
                       <div className="mt-3 space-y-2">
-                        <Select
-                          value={table.status}
-                          options={statusOptions}
-                          onChange={(e) =>
-                            handleStatusChange(table, e.target.value as TableStatus)
-                          }
-                        />
-                        {table.status === 'OCCUPIED' && table.currentSale && (
+                        {/* Only show dropdown for non-OCCUPIED/RESERVED tables */}
+                        {(table.status === 'AVAILABLE' || table.status === 'CLEANING') ? (
+                          <Select
+                            value={table.status}
+                            options={statusOptions}
+                            onChange={(e) =>
+                              handleStatusChange(table, e.target.value as TableStatus)
+                            }
+                          />
+                        ) : (
+                          <div className="text-xs text-slate-500 text-center py-2">
+                            {table.status === 'OCCUPIED' ? 'Table has active order' : 'Table is reserved'}
+                          </div>
+                        )}
+                        {table.status === 'OCCUPIED' && (
                           <Button
                             variant="primary"
                             size="sm"
@@ -256,37 +276,6 @@ export default function TablesPage() {
             </Button>
             <Button onClick={handleCreateTable} disabled={!formData.tableNumber}>
               {editingTable ? 'Update Table' : 'Create Table'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Close Table Modal */}
-      <Modal
-        isOpen={showCloseModal}
-        onClose={() => setShowCloseModal(false)}
-        title={`Close Table ${selectedTable?.tableNumber}`}
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Select payment method to close this table and finalize the sale.
-          </p>
-          <Select
-            label="Payment Method"
-            value={paymentMethod}
-            options={[
-              { value: 'CASH', label: 'Cash' },
-              { value: 'CARD', label: 'Card' },
-              { value: 'WALLET', label: 'Wallet' },
-            ]}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-          />
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="ghost" onClick={() => setShowCloseModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCloseTable}>
-              Close & Pay
             </Button>
           </div>
         </div>

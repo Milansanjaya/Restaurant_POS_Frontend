@@ -1,7 +1,7 @@
 // Re-export all API modules
 export { default as api } from './axios';
 export { authApi } from './auth.api';
-export { createSale } from './sales.api';
+export { createSale, salesApi } from './sales.api';
 export { productsApi } from './products.api';
 export { categoriesApi } from './categories.api';
 export { inventoryApi } from './inventory.api';

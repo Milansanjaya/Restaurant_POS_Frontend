@@ -101,6 +101,7 @@ export interface Product {
   trackStock: boolean;
   lowStockThreshold: number;
   preparationTime?: number;
+  unit?: string | Unit; // Add unit field
   branch_id: string;
   isActive: boolean;
   isAvailable: boolean;
@@ -120,6 +121,7 @@ export interface ProductFormData {
   trackStock?: boolean;
   lowStockThreshold?: number;
   preparationTime?: number;
+  unit?: string; // Add unit field
 }
 
 // ==================== CATEGORY ====================
@@ -376,6 +378,7 @@ export interface CustomerFormData {
   dob?: string;
   anniversary?: string;
   notes?: string;
+  tier?: CustomerTier;
 }
 
 // ==================== LOYALTY ====================
@@ -655,6 +658,7 @@ export interface DashboardSummary {
   branch_id: string;
   date: string;
   todayRevenue: number;
+  todayProfit?: number;
   todayOrders: number;
   lowStockCount: number;
   openShiftCount: number;

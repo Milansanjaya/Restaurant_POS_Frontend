@@ -1,7 +1,58 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader, Button } from '../components';
 import { reportsApi } from '../api';
 import type { DailyReport, PaymentSummary, Inventory, Product } from '../types';
+
+// Simple Pie Chart Component (CSS-based)
+const SimplePieChart = ({ data, height = 320 }: { data: { name: string; value?: number; qty?: number }[]; height?: number }) => {
+  if (!data || data.length === 0) {
+    return <div className="flex items-center justify-center" style={{ height }}>No data available</div>;
+  }
+  const total = data.reduce((sum, item) => sum + (item.value || item.qty || 0), 0);
+  const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4'];
+  
+  return (
+    <div className="flex items-center gap-6" style={{ height }}>
+      <div className="relative w-40 h-40">
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          {(() => {
+            let currentAngle = 0;
+            return data.slice(0, 7).map((item, index) => {
+              const value = item.value || item.qty || 0;
+              const percentage = total > 0 ? (value / total) * 100 : 0;
+              const angle = (percentage / 100) * 360;
+              const largeArc = angle > 180 ? 1 : 0;
+              const startX = 50 + 40 * Math.cos((currentAngle * Math.PI) / 180);
+              const startY = 50 + 40 * Math.sin((currentAngle * Math.PI) / 180);
+              const endX = 50 + 40 * Math.cos(((currentAngle + angle) * Math.PI) / 180);
+              const endY = 50 + 40 * Math.sin(((currentAngle + angle) * Math.PI) / 180);
+              const pathD = `M 50 50 L ${startX} ${startY} A 40 40 0 ${largeArc} 1 ${endX} ${endY} Z`;
+              currentAngle += angle;
+              return <path key={index} d={pathD} fill={colors[index % colors.length]} className="hover:opacity-80 transition-opacity" />;
+            });
+          })()}
+          <circle cx="50" cy="50" r="20" fill="white" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-bold text-slate-700">{total}</span>
+        </div>
+      </div>
+      <div className="flex-1 space-y-2">
+        {data.slice(0, 5).map((item, index) => {
+          const value = item.value || item.qty || 0;
+          const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+          return (
+            <div key={index} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
+              <span className="text-sm text-slate-600 flex-1 truncate">{item.name}</span>
+              <span className="text-sm font-medium text-slate-700">{percentage}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 export default function ReportsPage() {
   const [dailyReport, setDailyReport] = useState<DailyReport | null>(null);
@@ -49,12 +100,25 @@ export default function ReportsPage() {
         title="Reports"
         subtitle="Sales and inventory reports"
         actions={
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <Button 
+              onClick={() => alert('Install jspdf to enable PDF export')}
+            >
+              📥 Export PDF
+            </Button>
+            <Button 
+              onClick={() => alert('Export feature requires jspdf package')}
+              variant="outline"
+            >
+              📊 Export CSV
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -96,6 +160,76 @@ export default function ReportsPage() {
               </svg>
             }
           />
+        </div>
+
+        {/* Charts Section */}
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Top Products Pie Chart */}
+          <Card>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Top Selling Products (Chart)
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => alert('Install jspdf for PDF export')}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                  title="Export to PDF"
+                >
+                  📄 PDF
+                </button>
+                <button
+                  onClick={() => alert('Install jspdf for CSV export')}
+                  className="text-sm text-green-600 hover:text-green-800"
+                  title="Export to CSV"
+                >
+                  📊 CSV
+                </button>
+              </div>
+            </div>
+            {topProducts.length === 0 ? (
+              <div className="flex h-[350px] items-center justify-center text-slate-500">
+                No product sales data available
+              </div>
+            ) : (
+              <SimplePieChart data={topProducts} height={350} />
+            )}
+          </Card>
+
+          {/* Payment Methods Pie Chart */}
+          <Card>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Payment Methods Breakdown
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => alert('Install jspdf for PDF export')}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                  title="Export to PDF"
+                >
+                  📄 PDF
+                </button>
+                <button
+                  onClick={() => alert('Install jspdf for CSV export')}
+                  className="text-sm text-green-600 hover:text-green-800"
+                  title="Export to CSV"
+                >
+                  📊 CSV
+                </button>
+              </div>
+            </div>
+            {Object.keys(paymentSummary).length === 0 ? (
+              <div className="flex h-[350px] items-center justify-center text-slate-500">
+                No payment data available
+              </div>
+            ) : (
+              <SimplePieChart 
+                data={Object.entries(paymentSummary).map(([name, value]) => ({ name, value }))} 
+                height={350} 
+              />
+            )}
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
