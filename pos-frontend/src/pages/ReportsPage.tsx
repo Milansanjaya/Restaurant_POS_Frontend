@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader, Button } from '../components';
 import { reportsApi } from '../api';
-import type { DailyReport, PaymentSummary, Inventory, Product } from '../types';
+import type { DailyReport, PaymentSummary, Inventory } from '../types';
 
 // Simple Pie Chart Component (CSS-based)
 const SimplePieChart = ({ data, height = 320 }: { data: { name: string; value?: number; qty?: number }[]; height?: number }) => {

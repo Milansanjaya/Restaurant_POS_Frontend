@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input, PageLoader } from '../components';
-import { returnsApi, suppliersApi, grnApi } from '../api';
-import type { SupplierReturn, SupplierReturnFormData, SupplierReturnItem, Supplier, GRN } from '../types';
+import { useState, useEffect } from 'react';
+import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input } from '../components';
+import { returnsApi, suppliersApi } from '../api';
+import type { SupplierReturn, SupplierReturnFormData, SupplierReturnItem, Supplier } from '../types';
 
 export default function ReturnsPage() {
   const [returns, setReturns] = useState<SupplierReturn[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [grns, setGrns] = useState<GRN[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -32,14 +31,12 @@ export default function ReturnsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [returnsRes, suppliersRes, grnRes] = await Promise.all([
+      const [returnsRes, suppliersRes] = await Promise.all([
         returnsApi.getAll({ status: statusFilter as any || undefined }),
         suppliersApi.getAll({}),
-        grnApi.getAll({ status: 'APPROVED' }),
       ]);
       setReturns(returnsRes.returns || []);
       setSuppliers(suppliersRes.suppliers || []);
-      setGrns(grnRes.grns || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {

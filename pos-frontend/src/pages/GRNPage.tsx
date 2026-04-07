@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input } from '../components';
 import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
 import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
 
@@ -44,14 +44,14 @@ export default function GRNPage() {
       const allPos = poRes.purchaseOrders || [];
       
       // Filter out POs that already have GRNs
-      const grnPoIds = allGrns.map(grn => {
+      const grnPoIds = allGrns.map((grn: GRN) => {
         const poId = typeof grn.purchaseOrder_id === 'object' 
           ? grn.purchaseOrder_id._id 
           : grn.purchaseOrder_id;
         return poId;
       });
       
-      const pendingPos = allPos.filter(po => !grnPoIds.includes(po._id));
+      const pendingPos = allPos.filter((po: PurchaseOrder) => !grnPoIds.includes(po._id));
       
       setGrns(allGrns);
       setPurchaseOrders(pendingPos); // Only show POs without GRNs
@@ -68,7 +68,7 @@ export default function GRNPage() {
     loadData();
   }, [filterStatus, filterSupplier]);
 
-  const generateBatchNumber = (productName: string, index: number) => {
+  const generateBatchNumber = (productName: string) => {
     const date = new Date();
     const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
     const prefix = productName.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
@@ -80,8 +80,8 @@ export default function GRNPage() {
     setEditingId(null);
     setSelectedPO(po);
     const supplierId = typeof po.supplier_id === 'object' ? po.supplier_id._id : po.supplier_id;
-    
-    const items: GRNItem[] = po.items.map((item, index) => ({
+    
+    const items: GRNItem[] = po.items.map((item) => ({
       product_id: item.product_id,
       productName: item.productName,
       orderedQuantity: item.quantity,
@@ -89,7 +89,7 @@ export default function GRNPage() {
       unitPrice: item.unitPrice,
       totalPrice: item.totalPrice,
       qualityStatus: 'ACCEPTED' as QualityStatus,
-      batchNumber: generateBatchNumber(item.productName, index),
+      batchNumber: generateBatchNumber(item.productName),
       expiryDate: '',
     }));
 
@@ -534,7 +534,7 @@ export default function GRNPage() {
                       />
                       <button
                         type="button"
-                        onClick={() => updateItem(index, 'batchNumber', generateBatchNumber(item.productName, index))}
+                        onClick={() => updateItem(index, 'batchNumber', generateBatchNumber(item.productName))}
                         className="rounded-lg bg-slate-100 px-2 py-2 text-sm hover:bg-slate-200"
                         title="Regenerate batch number"
                       >

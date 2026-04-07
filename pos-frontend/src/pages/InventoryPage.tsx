@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, Table, Badge, Button, Input, Modal, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Table, Badge, Button, Input, Modal } from '../components';
 import { inventoryApi } from '../api';
 import type { Inventory, Product } from '../types';
 
@@ -193,7 +193,7 @@ export default function InventoryPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (item: Inventory) => (
+      render: () => (
         <Badge variant="success">Always Available</Badge>
       ),
     },

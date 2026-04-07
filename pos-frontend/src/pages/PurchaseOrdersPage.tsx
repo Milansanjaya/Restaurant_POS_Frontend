@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card, PageLoader } from '../components';
+import { useState, useEffect } from 'react';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card } from '../components';
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
 

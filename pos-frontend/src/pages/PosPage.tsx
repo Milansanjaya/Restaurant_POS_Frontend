@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
-import { createSale, getSaleById, paySale } from "../api/sales.api";
+import { createSale, getSaleById } from "../api/sales.api";
 import { categoriesApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
@@ -12,7 +12,7 @@ import { customersApi } from "../api/customers.api";
 import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
 import { reservationsApi } from "../api/reservations.api";
-import type { Category, RestaurantTable, Shift, Sale, Customer, Reservation } from "../types";
+import type { Category, RestaurantTable, Shift, Customer, Reservation } from "../types";
 
 type Product = {
   _id: string;
@@ -78,15 +78,13 @@ export default function PosPage() {
   // Table orders (tracking items for occupied tables before creating sale)
   type TableOrder = {
     tableId: string;
-    items: Array<{ _id: string; name: string; price: number; taxRate: number; quantity: number }>;
+    items: Array<{ _id: string; name: string; price: number; taxRate?: number; quantity: number }>;
   };
   const [tableOrders, setTableOrders] = useState<TableOrder[]>([]);
   
   // Table bill/payment modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedTableForPayment, setSelectedTableForPayment] = useState<RestaurantTable | null>(null);
-  const [tableSale, setTableSale] = useState<Sale | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [processingPayment, setProcessingPayment] = useState(false);
   
   // Shift modal
@@ -312,11 +310,10 @@ export default function PosPage() {
     // First check if there's a sale on this table (from database)
     if (table.currentSale) {
       try {
-        const sale = await getSaleById(table.currentSale);
+        const saleId = typeof table.currentSale === 'string' ? table.currentSale : table.currentSale._id;
+        const sale = await getSaleById(saleId);
         if (sale && sale.items && sale.items.length > 0) {
-          setTableSale(sale);
           setSelectedTableForPayment(table);
-          setPaymentAmount(sale.grandTotal);
           setShowPaymentModal(true);
           return;
         }

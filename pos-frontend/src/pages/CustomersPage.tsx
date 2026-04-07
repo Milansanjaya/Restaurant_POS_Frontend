@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
 import { customersApi } from '../api';
 import type { Customer, CustomerFormData } from '../types';
 

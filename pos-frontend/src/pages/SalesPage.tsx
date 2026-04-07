@@ -411,11 +411,11 @@ const SalesPage: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-gray-500">Sale Type:</span>
-                  <span className="ml-2 capitalize">{selectedSale.saleType?.toLowerCase()}</span>
+                  <span className="ml-2 capitalize">{(selectedSale as any).saleType?.toLowerCase() || 'POS'}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Payment:</span>
-                  <span className="ml-2">{selectedSale.paymentStatus}</span>
+                  <span className="text-gray-500">Status:</span>
+                  <span className="ml-2">{selectedSale.status}</span>
                 </div>
               </div>
 
@@ -488,7 +488,7 @@ const SalesPage: React.FC = () => {
                   <div className="space-y-1 text-sm">
                     {selectedSale.payments.map((payment, idx) => (
                       <div key={idx} className="flex justify-between bg-gray-50 p-2 rounded">
-                        <span className="capitalize">{payment.method.toLowerCase()}</span>
+                        <span className="capitalize">{(payment as any).method?.toLowerCase() || payment.paymentMethod || 'Cash'}</span>
                         <span>${payment.amount.toFixed(2)}</span>
                       </div>
                     ))}
@@ -504,7 +504,7 @@ const SalesPage: React.FC = () => {
                     {selectedSale.refunds.map((refund, idx) => (
                       <div key={idx} className="bg-red-50 p-2 rounded">
                         <div className="flex justify-between">
-                          <span>{new Date(refund.date).toLocaleDateString()}</span>
+                          <span>{new Date((refund as any).date || (refund as any).refundDate || Date.now()).toLocaleDateString()}</span>
                           <span>-${refund.amount.toFixed(2)}</span>
                         </div>
                         <p className="text-gray-600 text-xs">{refund.reason}</p>

@@ -1,5 +1,5 @@
 import api from './axios';
-import type { User, Role } from '../types';
+import type { User } from '../types';
 
 export interface UserFormData {
   name: string;

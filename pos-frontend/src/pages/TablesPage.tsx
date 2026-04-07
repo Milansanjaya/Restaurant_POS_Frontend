@@ -11,14 +11,6 @@ const statusOptions = [
   { value: 'CLEANING', label: 'Cleaning' },
 ];
 
-// Full status options for display only
-const allStatusOptions = [
-  { value: 'AVAILABLE', label: 'Available' },
-  { value: 'OCCUPIED', label: 'Occupied' },
-  { value: 'RESERVED', label: 'Reserved' },
-  { value: 'CLEANING', label: 'Cleaning' },
-];
-
 const statusColors: Record<TableStatus, 'success' | 'warning' | 'danger' | 'info'> = {
   AVAILABLE: 'success',
   OCCUPIED: 'danger',
@@ -111,21 +103,6 @@ export default function TablesPage() {
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to update status');
     }
-  };
-
-  const handleCloseTable = async () => {
-    if (!selectedTable) return;
-    
-    // Navigate to POS page with the table selected for payment
-    navigate('/pos', { 
-      state: { 
-        tableId: selectedTable._id, 
-        saleId: selectedTable.currentSale,
-        action: 'pay' 
-      } 
-    });
-    
-    setSelectedTable(null);
   };
 
   const openCloseModal = (table: RestaurantTable) => {

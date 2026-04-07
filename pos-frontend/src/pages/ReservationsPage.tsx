@@ -127,31 +127,6 @@ export default function ReservationsPage() {
       console.error('Failed to seat reservation:', err);
     }
   };
-
-  // Complete reservation (after payment)
-  const handleComplete = async (reservation: Reservation) => {
-    try {
-      await reservationsApi.updateStatus(reservation._id, 'COMPLETED');
-      
-      // Set table back to CLEANING
-      const tableId = typeof reservation.table === 'object' 
-        ? reservation.table._id 
-        : reservation.table;
-      
-      if (tableId) {
-        try {
-          await tablesApi.updateStatus(tableId, 'CLEANING');
-        } catch (e) {
-          console.warn('Table status update failed');
-        }
-      }
-      
-      loadData();
-    } catch (err) {
-      console.error('Failed to complete reservation:', err);
-    }
-  };
-
   const availableTables = tables.filter((t) => t.status === 'AVAILABLE');
 
   const columns = [

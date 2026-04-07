@@ -55,7 +55,7 @@ export default function KitchenPage() {
       console.log('📊 Summary:', data.summary);
       console.log('📋 Orders count:', data.orders?.length);
       setDashboard(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('❌ Failed to load kitchen dashboard:', err);
       console.error('Error details:', err.response?.data || err);
     } finally {

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, Button, Input, PageLoader } from '../components';
 import { configApi } from '../api';
-import type { SystemConfig, TaxSetting } from '../types';
+import type { TaxSetting } from '../types';
 
 export default function SettingsPage() {
-  const [config, setConfig] = useState<SystemConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const [taxes, setTaxes] = useState<TaxSetting[]>([]);
-  const [currency, setCurrency] = useState({ code: 'USD', symbol: '$', position: 'BEFORE' as const });
+  const [currency, setCurrency] = useState<{ code: string; symbol: string; position: 'BEFORE' | 'AFTER' }>({ 
+    code: 'USD', 
+    symbol: '$', 
+    position: 'BEFORE' as const 
+  });
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
   const [expiryAlertDays, setExpiryAlertDays] = useState(30);
@@ -22,9 +25,8 @@ export default function SettingsPage() {
         console.warn('Config API returned null/undefined');
         return;
       }
-      setConfig(data);
       setTaxes(data.taxes || []);
-      setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' });
+      setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' as const });
       setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
       setExpiryAlertDays(data.expiryAlertDays || 30);

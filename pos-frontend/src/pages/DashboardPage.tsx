@@ -143,11 +143,10 @@ export default function DashboardPage() {
         const monthAgo = new Date(today);
         monthAgo.setDate(monthAgo.getDate() - 30);
 
-        const [summaryData, topProductsData, lowStockData, revenueChart, paymentData] = await Promise.all([
+        const [summaryData, topProductsData, lowStockData, paymentData] = await Promise.all([
           dashboardApi.getSummary(),
           dashboardApi.getTopProducts(5),
           reportsApi.getLowStock(),
-          dashboardApi.getRevenueChart(monthAgo.toISOString().split('T')[0], todayStr).catch(() => []),
           reportsApi.getPaymentSummary().catch(() => ({})),
         ]);
         setSummary(summaryData);
@@ -285,7 +284,6 @@ export default function DashboardPage() {
         setHourlyData(hourlyDataReal);
 
         // Generate category data from top products
-        const totalProductRevenue = (topProductsData || []).reduce((sum: number, p: any) => sum + (p.revenue || 0), 0);
         const categoryDataReal = topProductsData?.length ? 
           topProductsData.map((p: any) => ({
             name: p.name || 'Unknown',

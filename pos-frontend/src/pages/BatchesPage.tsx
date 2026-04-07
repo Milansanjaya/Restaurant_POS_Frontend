@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, Card, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
 import type { CreateBatchData } from '../api/batches.api';

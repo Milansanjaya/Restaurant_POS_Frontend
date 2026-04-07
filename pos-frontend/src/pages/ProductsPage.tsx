@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, getStatusBadgeVariant, Modal, Card, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal } from '../components';
 import { productsApi, categoriesApi, unitsApi } from '../api';
 import type { Product, Category, ProductFormData, Unit } from '../types';
 import toast from 'react-hot-toast';
@@ -61,7 +61,7 @@ export default function ProductsPage() {
   const loadUnits = async () => {
     try {
       const unitsData = await unitsApi.getAll();
-      const unitsArray = unitsData?.units || unitsData?.data || unitsData || [];
+      const unitsArray = Array.isArray(unitsData) ? unitsData : unitsData?.units || [];
       setUnits(Array.isArray(unitsArray) ? unitsArray : []);
     } catch (error) {
       console.error('Failed to load units:', error);
@@ -75,7 +75,11 @@ export default function ProductsPage() {
       return;
     }
     try {
-      await unitsApi.create({ name: newUnitName, symbol: newUnitSymbol || newUnitName });
+      await unitsApi.create({ 
+        name: newUnitName, 
+        shortCode: newUnitName.substring(0, 3).toUpperCase(),
+        type: 'WEIGHT' as const
+      });
       toast.success('Unit created successfully!');
       setShowUnitModal(false);
       setNewUnitName('');
@@ -366,7 +370,7 @@ export default function ProductsPage() {
                 <option value="">Select Unit (Optional)</option>
                 {units.map((unit) => (
                   <option key={unit._id} value={unit._id}>
-                    {unit.name} ({unit.symbol})
+                    {unit.name}
                   </option>
                 ))}
               </select>

@@ -62,7 +62,7 @@ export default function ComprehensiveReportsPage() {
           break;
         case 'sales':
           const salesData = await salesApi.getAll();
-          const salesArray = salesData?.sales || salesData?.data || salesData || [];
+          const salesArray = Array.isArray(salesData) ? salesData : (salesData as any)?.sales || [];
           setSales(Array.isArray(salesArray) ? salesArray : []);
           break;
         case 'customers':
@@ -92,12 +92,12 @@ export default function ComprehensiveReportsPage() {
           break;
         case 'tables':
           const tablesData = await tablesApi.getAll();
-          const tablesArray = tablesData?.tables || tablesData?.data || tablesData || [];
+          const tablesArray = Array.isArray(tablesData) ? tablesData : [];
           setTables(Array.isArray(tablesArray) ? tablesArray : []);
           break;
         case 'reservations':
           const reservationsData = await reservationsApi.getAll();
-          const reservationsArray = reservationsData?.reservations || reservationsData?.data || reservationsData || [];
+          const reservationsArray = Array.isArray(reservationsData) ? reservationsData : [];
           setReservations(Array.isArray(reservationsArray) ? reservationsArray : []);
           break;
       }
@@ -448,7 +448,7 @@ export default function ComprehensiveReportsPage() {
               </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              VIP: {customers.filter(c => c.tier === 'VIP').length}
+              Platinum: {customers.filter(c => c.tier === 'PLATINUM').length}
             </p>
           </Card>
 
@@ -496,12 +496,13 @@ export default function ComprehensiveReportsPage() {
               <div className="flex gap-2">
                 <Button
                   onClick={() => {
-                    const dataMap = {
+                    const dataMap: Record<string, any[]> = { 
                       products, sales, customers, suppliers, 
                       'purchase-orders': purchaseOrders, 
                       grn: grns, batches, tables, reservations
                     };
-                    exportToCSV(dataMap[activeSection] as any[], activeSection);
+                    const dataToExport = dataMap[activeSection] || [];
+                    exportToCSV(dataToExport as any[], activeSection);
                   }}
                 >
                   📥 CSV
@@ -578,11 +579,11 @@ export default function ComprehensiveReportsPage() {
                           {new Date(sale.createdAt).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {typeof sale.customerId === 'object' && sale.customerId?.name ? sale.customerId.name : 'Walk-in'}
+                          {typeof sale.customer_id === 'object' && (sale.customer_id as any)?.name ? (sale.customer_id as any).name : 'Walk-in'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{sale.items?.length || 0}</td>
                         <td className="px-4 py-3 text-sm text-slate-900">Rs. {sale.subtotal?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">Rs. {sale.taxAmount?.toFixed(2) || '0.00'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">Rs. {(sale as any).tax?.toFixed(2) || sale.subtotal ? (sale.subtotal * 0.1).toFixed(2) : '0.00'}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-green-600">
                           Rs. {sale.grandTotal?.toFixed(2) || '0.00'}
                         </td>
@@ -619,7 +620,7 @@ export default function ComprehensiveReportsPage() {
                         <td className="px-4 py-3 text-sm text-slate-600">{customer.email || '-'}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{customer.phone}</td>
                         <td className="px-4 py-3">
-                          <Badge variant={customer.tier === 'VIP' ? 'warning' : 'info'}>
+                          <Badge variant={customer.tier === 'PLATINUM' ? 'warning' : 'info'}>
                             {customer.tier || 'REGULAR'}
                           </Badge>
                         </td>
@@ -659,8 +660,8 @@ export default function ComprehensiveReportsPage() {
                         <td className="px-4 py-3 text-sm text-slate-600">{supplier.phone}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{supplier.address || '-'}</td>
                         <td className="px-4 py-3">
-                          <Badge variant={supplier.isActive ? 'success' : 'danger'}>
-                            {supplier.isActive ? 'Active' : 'Inactive'}
+                          <Badge variant={supplier.status === 'ACTIVE' ? 'success' : 'danger'}>
+                            {supplier.status === 'ACTIVE' ? 'Active' : 'Inactive'}
                           </Badge>
                         </td>
                       </tr>
@@ -692,13 +693,14 @@ export default function ComprehensiveReportsPage() {
                       <tr key={po._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{po.poNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-900">
-                          {typeof po.supplier === 'object' ? po.supplier?.name : po.supplier}
+                          {typeof po.supplier_id === 'object' ? (po.supplier_id as any)?.name : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {new Date(po.orderDate).toLocaleDateString()}
+                          {(po as any).orderDate ? new Date((po as any).orderDate).toLocaleDateString() : 
+                           po.createdAt ? new Date(po.createdAt).toLocaleDateString() : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {new Date(po.expectedDeliveryDate).toLocaleDateString()}
+                          {po.deliveryDate ? new Date(po.deliveryDate).toLocaleDateString() : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-slate-900">
                           Rs. {po.totalAmount?.toFixed(2) || '0.00'}
@@ -706,7 +708,7 @@ export default function ComprehensiveReportsPage() {
                         <td className="px-4 py-3">
                           <Badge 
                             variant={
-                              po.status === 'COMPLETED' ? 'success' : 
+                              po.status === 'RECEIVED' ? 'success' : 
                               po.status === 'PENDING' ? 'warning' : 
                               'info'
                             }
@@ -743,17 +745,17 @@ export default function ComprehensiveReportsPage() {
                       <tr key={grn._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{grn.grnNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {typeof grn.purchaseOrder === 'object' ? grn.purchaseOrder?.poNumber : '-'}
+                          {typeof grn.purchaseOrder_id === 'object' ? (grn.purchaseOrder_id as any)?.poNumber : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-900">
-                          {typeof grn.supplier === 'object' ? grn.supplier?.name : grn.supplier}
+                          {typeof grn.supplier_id === 'object' ? (grn.supplier_id as any)?.name : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {new Date(grn.receivedDate).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{grn.items?.length || 0}</td>
                         <td className="px-4 py-3">
-                          <Badge variant={grn.status === 'COMPLETED' ? 'success' : 'warning'}>
+                          <Badge variant={grn.status === 'RECEIVED' ? 'success' : 'warning'}>
                             {grn.status}
                           </Badge>
                         </td>
@@ -787,10 +789,10 @@ export default function ComprehensiveReportsPage() {
                       <tr key={batch._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{batch.batchNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-900">
-                          {typeof batch.product === 'object' ? batch.product?.name : batch.product}
+                          {typeof batch.product_id === 'object' ? (batch.product_id as any)?.name : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{batch.quantity}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{batch.usedQuantity || 0}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{batch.quantity || 0}</td>
                         <td className="px-4 py-3 text-sm font-medium text-green-600">
                           {batch.remainingQuantity || batch.quantity}
                         </td>
@@ -887,7 +889,7 @@ export default function ComprehensiveReportsPage() {
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {typeof reservation.table === 'object' ? reservation.table?.tableNumber : '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{reservation.numberOfGuests}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{reservation.guestCount || 0}</td>
                         <td className="px-4 py-3">
                           <Badge 
                             variant={

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
 import { unitsApi } from '../api';
 import type { Unit, UnitFormData, UnitType } from '../types';
 
@@ -126,7 +126,11 @@ export default function UnitsPage() {
 
   const handleToggleActive = async (unit: Unit) => {
     try {
-      await unitsApi.update(unit._id, { isActive: !unit.isActive });
+      await unitsApi.update(unit._id, { 
+        name: unit.name,
+        shortCode: unit.shortCode,
+        type: unit.type
+      });
       alert(unit.isActive ? '✅ Unit deactivated' : '✅ Unit activated');
       loadUnits();
     } catch (error: any) {
