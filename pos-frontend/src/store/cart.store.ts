@@ -1,0 +1,82 @@
+import { create } from "zustand";
+
+type CartItem = {
+  _id: string;
+  name: string;
+  price: number;
+  taxRate?: number;
+  quantity: number;
+};
+
+interface CartState {
+  items: CartItem[];
+  addItem: (product: Omit<CartItem, "quantity">) => void;
+  increaseQty: (id: string) => void;
+  decreaseQty: (id: string) => void;
+  removeItem: (id: string) => void;
+  clearCart: () => void;
+  subtotal: () => number;
+  taxTotal: () => number;
+  grandTotal: () => number;
+}
+
+export const useCartStore = create<CartState>((set, get) => ({
+  items: [],
+
+  addItem: (product) => {
+    const items = get().items;
+    const existing = items.find((item) => item._id === product._id);
+
+    if (existing) {
+      set({
+        items: items.map((item) =>
+          item._id === product._id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      });
+    } else {
+      set({
+        items: [...items, { ...product, quantity: 1 }]
+      });
+    }
+  },
+
+  increaseQty: (id) => {
+    set({
+      items: get().items.map((item) =>
+        item._id === id ? { ...item, quantity: item.quantity + 1 } : item
+      )
+    });
+  },
+
+  decreaseQty: (id) => {
+    const updated = get()
+      .items.map((item) =>
+        item._id === id ? { ...item, quantity: item.quantity - 1 } : item
+      )
+      .filter((item) => item.quantity > 0);
+
+    set({ items: updated });
+  },
+
+  removeItem: (id) => {
+    set({
+      items: get().items.filter((item) => item._id !== id)
+    });
+  },
+
+  clearCart: () => set({ items: [] }),
+
+  subtotal: () =>
+    get().items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+
+  taxTotal: () =>
+    get().items.reduce((sum, item) => {
+      const line = item.price * item.quantity;
+      const tax = line * ((item.taxRate || 0) / 100);
+      return sum + tax;
+    }, 0),
+
+  grandTotal: () => get().subtotal() + get().taxTotal()
+}));
