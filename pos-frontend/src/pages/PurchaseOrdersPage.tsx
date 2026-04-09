@@ -67,7 +67,7 @@ export default function PurchaseOrdersPage() {
       supplier_id: typeof order.supplier_id === 'object' ? order.supplier_id._id : order.supplier_id,
       items: order.items,
       totalAmount: order.totalAmount,
-      deliveryDate: order.deliveryDate || '',
+      deliveryDate: order.deliveryDate ? order.deliveryDate.slice(0, 10) : '',
       notes: order.notes || '',
     });
     setModalOpen(true);
