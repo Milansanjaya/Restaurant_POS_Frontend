@@ -46,8 +46,8 @@ export const customersApi = {
     return res.data;
   },
 
-  getHistory: async (id: string) => {
-    const res = await api.get(`/customers/${id}/history`);
-    return res.data;
+  getHistory: async (id: string, params?: { page?: number; limit?: number }) => {
+    const res = await api.get<{ success: boolean; data: any }>(`/customers/${id}/history`, { params });
+    return res.data.data;
   },
 };

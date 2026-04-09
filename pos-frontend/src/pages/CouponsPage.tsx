@@ -3,6 +3,7 @@ import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table } from '../components';
 import { couponsApi } from '../api/coupons.api';
 import type { Coupon, CouponFormData, DiscountType } from '../types';
+import { formatMoney } from '../money';
 
 const initialFormData: CouponFormData = {
   code: '',
@@ -109,10 +110,10 @@ export default function CouponsPage() {
       </Badge>
     )},
     { key: 'value', header: 'Value', render: (c: Coupon) => (
-      c.discountType === 'FLAT' ? `Rs. ${c.value}` : `${c.value}%`
+      c.discountType === 'FLAT' ? formatMoney(c.value) : `${c.value}%`
     )},
     { key: 'minOrderValue', header: 'Min Order', render: (c: Coupon) => (
-      `Rs. ${c.minOrderValue}`
+      formatMoney(c.minOrderValue)
     )},
     { key: 'expiryDate', header: 'Expiry', render: (c: Coupon) => (
       <span className={isExpired(c.expiryDate) ? 'text-red-600' : ''}>

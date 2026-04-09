@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
 import { suppliersApi } from '../api';
 import type { Supplier, SupplierFormData, SupplierTransaction } from '../types';
+import { formatMoney } from '../money';
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -141,7 +142,7 @@ export default function SuppliersPage() {
       header: 'Balance',
       render: (item: Supplier) => (
         <span className={item.outstandingBalance > 0 ? 'text-red-600 font-medium' : ''}>
-          Rs. {item.outstandingBalance.toLocaleString()}
+          {formatMoney(item.outstandingBalance)}
         </span>
       ),
     },
@@ -311,7 +312,7 @@ export default function SuppliersPage() {
                   </p>
                 </div>
                 <span className={txn.transactionType === 'PAYMENT' ? 'text-green-600' : 'text-red-600'}>
-                  {txn.transactionType === 'PAYMENT' ? '-' : '+'}Rs. {txn.amount.toLocaleString()}
+                  {txn.transactionType === 'PAYMENT' ? '-' : '+'}{formatMoney(txn.amount)}
                 </span>
               </div>
             ))
@@ -333,7 +334,7 @@ export default function SuppliersPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Outstanding: Rs. {ledgerSupplier?.outstandingBalance?.toLocaleString() || 0}
+            Outstanding: {formatMoney(ledgerSupplier?.outstandingBalance || 0)}
           </p>
           <Input
             label="Amount"

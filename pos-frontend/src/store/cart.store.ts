@@ -13,6 +13,7 @@ interface CartState {
   addItem: (product: Omit<CartItem, "quantity">) => void;
   increaseQty: (id: string) => void;
   decreaseQty: (id: string) => void;
+  setQty: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
   clearCart: () => void;
   subtotal: () => number;
@@ -55,6 +56,15 @@ export const useCartStore = create<CartState>((set, get) => ({
       .items.map((item) =>
         item._id === id ? { ...item, quantity: item.quantity - 1 } : item
       )
+      .filter((item) => item.quantity > 0);
+
+    set({ items: updated });
+  },
+
+  setQty: (id, quantity) => {
+    const q = Number.isFinite(quantity) ? Math.floor(quantity) : 1;
+    const updated = get()
+      .items.map((item) => (item._id === id ? { ...item, quantity: q } : item))
       .filter((item) => item.quantity > 0);
 
     set({ items: updated });

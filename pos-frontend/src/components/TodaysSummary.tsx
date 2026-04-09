@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatMoney } from '../money';
 
 interface SummaryData {
   salesBreakdown: {
@@ -35,20 +36,20 @@ export const TodaysSummary: React.FC<TodaysSummaryProps> = ({ data }) => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">🍽️ Dine-in</span>
-            <span className="font-semibold text-slate-900">Rs. {data.salesBreakdown.dineIn.toLocaleString()}</span>
+            <span className="font-semibold text-slate-900">{formatMoney(data.salesBreakdown.dineIn)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">🥡 Takeaway</span>
-            <span className="font-semibold text-slate-900">Rs. {data.salesBreakdown.takeaway.toLocaleString()}</span>
+            <span className="font-semibold text-slate-900">{formatMoney(data.salesBreakdown.takeaway)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">🚗 Delivery</span>
-            <span className="font-semibold text-slate-900">Rs. {data.salesBreakdown.delivery.toLocaleString()}</span>
+            <span className="font-semibold text-slate-900">{formatMoney(data.salesBreakdown.delivery)}</span>
           </div>
           <div className="border-t pt-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="font-bold text-slate-900">Rs. {total.toLocaleString()}</span>
+              <span className="font-bold text-slate-900">{formatMoney(total)}</span>
             </div>
           </div>
         </div>
@@ -60,15 +61,15 @@ export const TodaysSummary: React.FC<TodaysSummaryProps> = ({ data }) => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">💵 Cash</span>
-            <span className="font-semibold text-green-600">Rs. {data.paymentMethods.cash.toLocaleString()}</span>
+            <span className="font-semibold text-green-600">{formatMoney(data.paymentMethods.cash)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">💳 Card</span>
-            <span className="font-semibold text-blue-600">Rs. {data.paymentMethods.card.toLocaleString()}</span>
+            <span className="font-semibold text-blue-600">{formatMoney(data.paymentMethods.card)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">📱 Wallet</span>
-            <span className="font-semibold text-purple-600">Rs. {data.paymentMethods.wallet.toLocaleString()}</span>
+            <span className="font-semibold text-purple-600">{formatMoney(data.paymentMethods.wallet)}</span>
           </div>
         </div>
       </div>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
-import { Button, Input, Card } from '../components';
-import { shiftsApi } from '../api/shifts.api';
+import { Button, Input, Card, Table, Badge, Modal } from '../components';
+import { shiftsApi } from '../api';
 import type { Shift } from '../types';
+import { formatMoney } from '../money';
 
 export default function ShiftsPage() {
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
@@ -12,10 +13,40 @@ export default function ShiftsPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [shiftHistory, setShiftHistory] = useState<Shift[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<'' | 'OPEN' | 'CLOSED'>('');
+
+  const [viewShiftOpen, setViewShiftOpen] = useState(false);
+  const [viewShift, setViewShift] = useState<Shift | null>(null);
+
   // Load current shift on page mount
   useEffect(() => {
     loadCurrentShift();
   }, []);
+
+  const loadShiftHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await shiftsApi.list({
+        page: historyPage,
+        limit: 20,
+        status: statusFilter || undefined,
+      });
+      setShiftHistory(res.shifts || []);
+      setHistoryTotal(res.total || 0);
+    } catch (err: any) {
+      console.error('Failed to load shift history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadShiftHistory();
+  }, [historyPage, statusFilter]);
 
   const loadCurrentShift = async () => {
     try {
@@ -46,6 +77,7 @@ export default function ShiftsPage() {
       const shift = await shiftsApi.open(amount);
       setCurrentShift(shift);
       setOpeningCash('');
+      loadShiftHistory();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to open shift');
     } finally {
@@ -66,6 +98,7 @@ export default function ShiftsPage() {
       const shift = await shiftsApi.close(amount);
       setCurrentShift(shift);
       setClosingCash('');
+      loadShiftHistory();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to close shift');
     } finally {
@@ -73,24 +106,103 @@ export default function ShiftsPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   const resetShift = () => {
     setCurrentShift(null);
     setError(null);
   };
 
+  const getCashierLabel = (cashier: Shift['cashier']) => {
+    if (!cashier) return '-';
+    if (typeof cashier === 'string') return cashier;
+    return cashier.name || cashier.email || cashier._id;
+  };
+
+  const handleViewShift = async (shiftId: string) => {
+    try {
+      const shift = await shiftsApi.getById(shiftId);
+      setViewShift(shift);
+      setViewShiftOpen(true);
+    } catch (err: any) {
+      console.error('Failed to load shift details:', err);
+      setError(err?.response?.data?.message || 'Failed to load shift details');
+    }
+  };
+
+  const historyColumns = [
+    {
+      key: 'status',
+      header: 'Status',
+      render: (shift: Shift) => (
+        <Badge variant={shift.status === 'OPEN' ? 'warning' : 'default'}>
+          {shift.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'openedAt',
+      header: 'Opened At',
+      render: (shift: Shift) => new Date(shift.openedAt).toLocaleString(),
+    },
+    {
+      key: 'closedAt',
+      header: 'Closed At',
+      render: (shift: Shift) =>
+        shift.closedAt ? new Date(shift.closedAt).toLocaleString() : '-',
+    },
+    {
+      key: 'cashier',
+      header: 'Cashier',
+      render: (shift: Shift) => getCashierLabel(shift.cashier),
+    },
+    {
+      key: 'openingCash',
+      header: 'Opening',
+      className: 'text-right',
+      render: (shift: Shift) => formatMoney(shift.openingCash),
+    },
+    {
+      key: 'closingCash',
+      header: 'Closing',
+      className: 'text-right',
+      render: (shift: Shift) =>
+        shift.closingCash === undefined ? '-' : formatMoney(shift.closingCash),
+    },
+    {
+      key: 'cashDifference',
+      header: 'Difference',
+      className: 'text-right',
+      render: (shift: Shift) => {
+        const diff = shift.cashDifference;
+        if (diff === undefined) return '-';
+        return (
+          <span className={diff >= 0 ? 'text-green-700' : 'text-red-700'}>
+            {diff >= 0 ? '+' : ''}
+            {formatMoney(diff)}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (shift: Shift) => (
+        <Button size="sm" variant="outline" onClick={() => handleViewShift(shift._id)}>
+          View
+        </Button>
+      ),
+    },
+  ];
+
+  const historyLimit = 20;
+  const totalPages = Math.max(1, Math.ceil(historyTotal / historyLimit));
+
   return (
     <Layout>
       <PageHeader title="Shift Management" />
 
       <PageContent>
-        <div className="mx-auto max-w-2xl space-y-6">
+        <div className="mx-auto max-w-6xl space-y-6">
           {error && (
             <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
               {error}
@@ -127,7 +239,7 @@ export default function ShiftsPage() {
                 <div className="flex justify-between">
                   <span className="text-slate-600">Opening Cash</span>
                   <span className="font-medium">
-                    {formatCurrency(currentShift.openingCash)}
+                    {formatMoney(currentShift.openingCash)}
                   </span>
                 </div>
               </div>
@@ -187,20 +299,20 @@ export default function ShiftsPage() {
                   <div className="flex justify-between">
                     <span className="text-slate-600">Opening Cash</span>
                     <span className="font-medium">
-                      {formatCurrency(currentShift.openingCash)}
+                      {formatMoney(currentShift.openingCash)}
                     </span>
                   </div>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Closing Cash</span>
                   <span className="font-medium">
-                    {formatCurrency(currentShift.closingCash || 0)}
+                    {formatMoney(currentShift.closingCash || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Expected Cash</span>
                   <span className="font-medium">
-                    {formatCurrency(currentShift.expectedCash || 0)}
+                    {formatMoney(currentShift.expectedCash || 0)}
                   </span>
                 </div>
                 <div className="border-t pt-3">
@@ -214,7 +326,7 @@ export default function ShiftsPage() {
                       }`}
                     >
                       {(currentShift.cashDifference || 0) >= 0 ? '+' : ''}
-                      {formatCurrency(currentShift.cashDifference || 0)}
+                      {formatMoney(currentShift.cashDifference || 0)}
                     </span>
                   </div>
                   {(currentShift.cashDifference || 0) !== 0 && (
@@ -267,6 +379,146 @@ export default function ShiftsPage() {
               </div>
             </Card>
           )}
+
+          {/* Shift History */}
+          <Card className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Shift History</h2>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setHistoryPage(1);
+                    setStatusFilter(e.target.value as any);
+                  }}
+                  className="border rounded px-3 py-2"
+                >
+                  <option value="">All Status</option>
+                  <option value="OPEN">Open</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setHistoryPage(1);
+                    setStatusFilter('');
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            <Table
+              columns={historyColumns}
+              data={shiftHistory}
+              keyExtractor={(s) => s._id}
+              loading={historyLoading}
+              emptyMessage="No shifts found"
+            />
+
+            {historyTotal > historyLimit && (
+              <div className="mt-4 flex justify-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={historyPage === 1}
+                  onClick={() => setHistoryPage(historyPage - 1)}
+                >
+                  Previous
+                </Button>
+                <span className="px-4 py-2">
+                  Page {historyPage} of {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  disabled={historyPage >= totalPages}
+                  onClick={() => setHistoryPage(historyPage + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* View Shift Modal */}
+          <Modal
+            isOpen={viewShiftOpen}
+            onClose={() => {
+              setViewShiftOpen(false);
+              setViewShift(null);
+            }}
+            title="Shift Details"
+            size="lg"
+          >
+            {!viewShift ? (
+              <div className="text-sm text-slate-600">No shift selected.</div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Badge variant={viewShift.status === 'OPEN' ? 'warning' : 'default'}>
+                    {viewShift.status}
+                  </Badge>
+                  <div className="text-sm text-slate-600">ID: {viewShift._id}</div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Cashier</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {getCashierLabel(viewShift.cashier)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Opened At</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {new Date(viewShift.openedAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Closed At</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {viewShift.closedAt ? new Date(viewShift.closedAt).toLocaleString() : '-'}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Opening Cash</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {formatMoney(viewShift.openingCash)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Closing Cash</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {viewShift.closingCash === undefined ? '-' : formatMoney(viewShift.closingCash)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <div className="text-xs uppercase text-slate-500">Expected Cash</div>
+                    <div className="mt-1 font-medium text-slate-900">
+                      {viewShift.expectedCash === undefined ? '-' : formatMoney(viewShift.expectedCash)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4 md:col-span-2">
+                    <div className="text-xs uppercase text-slate-500">Difference</div>
+                    {viewShift.cashDifference === undefined ? (
+                      <div className="mt-1 font-medium text-slate-900">-</div>
+                    ) : (
+                      <div
+                        className={`mt-1 text-lg font-semibold ${
+                          viewShift.cashDifference >= 0 ? 'text-green-700' : 'text-red-700'
+                        }`}
+                      >
+                        {viewShift.cashDifference >= 0 ? '+' : ''}
+                        {formatMoney(viewShift.cashDifference)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Modal>
 
           {/* Instructions */}
           <Card className="bg-slate-50 p-6">

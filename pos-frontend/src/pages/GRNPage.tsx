@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input } from '../components';
 import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
 import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
+import { formatMoney } from '../money';
 
 export default function GRNPage() {
   const [grns, setGrns] = useState<GRN[]>([]);
@@ -294,8 +295,8 @@ export default function GRNPage() {
                 <td>${item.qualityStatus}</td>
                 <td>${item.batchNumber || '-'}</td>
                 <td>${item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '-'}</td>
-                <td>Rs. ${item.unitPrice.toLocaleString()}</td>
-                <td>Rs. ${item.totalPrice.toLocaleString()}</td>
+                <td>${formatMoney(item.unitPrice)}</td>
+                <td>${formatMoney(item.totalPrice)}</td>
               </tr>
               ${item.rejectionReason ? `<tr><td colspan="8" style="background: #fff3cd; font-size: 0.9em;">⚠️ Rejection Reason: ${item.rejectionReason}</td></tr>` : ''}
             `).join('')}
@@ -303,7 +304,7 @@ export default function GRNPage() {
           <tfoot>
             <tr>
               <th colspan="7">TOTAL</th>
-              <th>Rs. ${selectedGRN.totalAmount.toLocaleString()}</th>
+              <th>${formatMoney(selectedGRN.totalAmount)}</th>
             </tr>
           </tfoot>
         </table>
@@ -352,7 +353,7 @@ export default function GRNPage() {
     {
       key: 'totalAmount',
       header: 'Total',
-      render: (item: GRN) => `Rs. ${item.totalAmount.toLocaleString()}`,
+      render: (item: GRN) => formatMoney(item.totalAmount),
     },
     {
       key: 'status',
@@ -444,7 +445,7 @@ export default function GRNPage() {
                     <p className="font-medium">{po.poNumber}</p>
                     <p className="text-sm text-slate-500">
                       {(po.supplier_id && typeof po.supplier_id === 'object') ? po.supplier_id.name : '-'} • 
-                      {po.items?.length || 0} items • Rs. {po.totalAmount?.toLocaleString() || 0}
+                      {po.items?.length || 0} items • {formatMoney(po.totalAmount || 0)}
                     </p>
                   </div>
                   <Button onClick={() => openCreateModal(po)}>Receive</Button>
@@ -554,7 +555,7 @@ export default function GRNPage() {
           </div>
 
           <div className="text-right font-bold text-lg">
-            Total: Rs. {formData.totalAmount.toLocaleString()}
+            Total: {formatMoney(formData.totalAmount)}
           </div>
 
           <Input
@@ -612,7 +613,7 @@ export default function GRNPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Total Amount</label>
-                <p className="text-slate-900 font-bold">Rs. {selectedGRN.totalAmount.toLocaleString()}</p>
+                <p className="text-slate-900 font-bold">{formatMoney(selectedGRN.totalAmount)}</p>
               </div>
             </div>
 
@@ -659,8 +660,8 @@ export default function GRNPage() {
                           <td className="px-3 py-2">
                             {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '-'}
                           </td>
-                          <td className="px-3 py-2 text-right">Rs. {item.unitPrice.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right">Rs. {item.totalPrice.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(item.unitPrice)}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(item.totalPrice)}</td>
                         </tr>
                         {item.rejectionReason && (
                           <tr>
@@ -675,7 +676,7 @@ export default function GRNPage() {
                   <tfoot className="bg-slate-50 font-bold">
                     <tr>
                       <td colSpan={7} className="px-3 py-2 text-right">TOTAL:</td>
-                      <td className="px-3 py-2 text-right">Rs. {selectedGRN.totalAmount.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right">{formatMoney(selectedGRN.totalAmount)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -718,7 +719,7 @@ export default function GRNPage() {
                             <td className="px-3 py-2 font-medium text-purple-700">{batch.batchNumber}</td>
                             <td className="px-3 py-2">{item?.productName || '-'}</td>
                             <td className="px-3 py-2 text-right">{batch.quantity}</td>
-                            <td className="px-3 py-2 text-right">Rs. {batch.costPerUnit.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right">{formatMoney(batch.costPerUnit)}</td>
                             <td className="px-3 py-2">
                               {batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString() : '-'}
                             </td>

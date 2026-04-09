@@ -3,6 +3,7 @@ import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badg
 import { productsApi, categoriesApi, unitsApi } from '../api';
 import type { Product, Category, ProductFormData, Unit } from '../types';
 import toast from 'react-hot-toast';
+import { formatMoney } from '../money';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -218,7 +219,7 @@ export default function ProductsPage() {
     {
       key: 'price',
       header: 'Price',
-      render: (item: Product) => `Rs. ${item.price.toLocaleString()}`,
+      render: (item: Product) => formatMoney(item.price),
     },
     {
       key: 'taxRate',

@@ -7,6 +7,7 @@ export const getSales = async (filters?: SaleFilters) => {
   if (filters?.page) params.append('page', filters.page.toString());
   if (filters?.limit) params.append('limit', filters.limit.toString());
   if (filters?.status) params.append('status', filters.status);
+  if (filters?.orderType) params.append('orderType', filters.orderType);
   if (filters?.from) params.append('from', filters.from);
   if (filters?.to) params.append('to', filters.to);
 

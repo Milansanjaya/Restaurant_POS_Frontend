@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatMoney } from '../money';
 
 interface Activity {
   id: string;
@@ -65,8 +66,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-900 truncate">{activity.message}</p>
-                {activity.amount && (
-                  <p className="text-xs text-slate-600">Rs. {activity.amount.toLocaleString()}</p>
+                {activity.amount !== undefined && (
+                  <p className="text-xs text-slate-600">{formatMoney(activity.amount)}</p>
                 )}
                 <p className="text-xs text-slate-500">
                   {formatTimeAgo(activity.timestamp)}

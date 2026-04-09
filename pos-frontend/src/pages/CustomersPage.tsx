@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
 import { customersApi } from '../api';
 import type { Customer, CustomerFormData } from '../types';
+import { formatMoney } from '../money';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -11,6 +12,11 @@ export default function CustomersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyData, setHistoryData] = useState<any>(null);
 
   const [formData, setFormData] = useState<CustomerFormData>({
     name: '',
@@ -59,6 +65,22 @@ export default function CustomersPage() {
     setModalOpen(true);
   };
 
+  const openViewModal = async (customer: Customer) => {
+    try {
+      setViewCustomer(customer);
+      setViewOpen(true);
+      setHistoryLoading(true);
+      setHistoryData(null);
+      const data = await customersApi.getHistory(customer._id, { page: 1, limit: 10 });
+      setHistoryData(data);
+    } catch (error) {
+      console.error('Failed to load customer history:', error);
+      alert('Failed to load customer history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -104,7 +126,7 @@ export default function CustomersPage() {
     {
       key: 'totalSpent',
       header: 'Total Spent',
-      render: (item: Customer) => `Rs. ${item.totalSpent.toLocaleString()}`,
+      render: (item: Customer) => formatMoney(item.totalSpent),
     },
     {
       key: 'status',
@@ -120,6 +142,9 @@ export default function CustomersPage() {
       header: 'Actions',
       render: (item: Customer) => (
         <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
+            View
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
             Edit
           </Button>
@@ -245,6 +270,71 @@ export default function CustomersPage() {
             />
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={viewOpen}
+        onClose={() => setViewOpen(false)}
+        title={viewCustomer ? `Customer ${viewCustomer.name}` : "Customer"}
+        size="xl"
+      >
+        {historyLoading && <div className="p-4 text-sm text-slate-600">Loading...</div>}
+
+        {!historyLoading && historyData && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-slate-500">Phone</div>
+                <div className="font-medium">{historyData.customer?.phone || '-'}</div>
+              </div>
+              <div>
+                <div className="text-slate-500">Tier</div>
+                <div className="font-medium">{historyData.customer?.tier || '-'}</div>
+              </div>
+              <div>
+                <div className="text-slate-500">Total Orders</div>
+                <div className="font-medium">{historyData.stats?.totalOrders ?? 0}</div>
+              </div>
+              <div>
+                <div className="text-slate-500">Total Spent</div>
+                <div className="font-medium">{formatMoney(historyData.stats?.totalSpent ?? 0)}</div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border">
+              <div className="border-b bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                Recent Sales
+              </div>
+              <div className="divide-y">
+                {(historyData.sales || []).length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-slate-600">No sales found</div>
+                ) : (
+                  (historyData.sales || []).map((s: any) => (
+                    <div key={s._id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
+                      <div className="col-span-3 font-medium">{s.invoiceNumber}</div>
+                      <div className="col-span-3 text-slate-600">{new Date(s.createdAt).toLocaleString()}</div>
+                      <div className="col-span-2 text-slate-600">{s.orderType || '-'}</div>
+                      <div className="col-span-2 text-slate-600">
+                        {s.table ? `${s.table.tableNumber}${s.table.section ? ` (${s.table.section})` : ''}` : '-'}
+                      </div>
+                      <div className="col-span-2 text-right font-semibold">{formatMoney(s.grandTotal)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {historyData.pagination && (
+              <div className="text-xs text-slate-500">
+                Showing page {historyData.pagination.page} of {historyData.pagination.pages} (total {historyData.pagination.total})
+              </div>
+            )}
+          </div>
+        )}
+
+        {!historyLoading && !historyData && (
+          <div className="p-4 text-sm text-slate-600">No data</div>
+        )}
       </Modal>
     </Layout>
   );

@@ -4,6 +4,7 @@ import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadge
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
 import type { CreateBatchData } from '../api/batches.api';
+import { formatMoney } from '../money';
 
 export default function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -140,7 +141,7 @@ export default function BatchesPage() {
     {
       key: 'costPerUnit',
       header: 'Cost/Unit',
-      render: (item: Batch) => `Rs. ${item.costPerUnit?.toLocaleString() || 0}`,
+      render: (item: Batch) => item.costPerUnit === undefined ? '-' : formatMoney(item.costPerUnit),
     },
     {
       key: 'expiryDate',

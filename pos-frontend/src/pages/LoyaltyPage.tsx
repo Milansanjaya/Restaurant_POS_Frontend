@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, Table, Badge, Button, Input, PageLoader } from '../components';
 import { loyaltyApi, customersApi } from '../api';
 import type { LoyaltyAccount, LoyaltyTransaction, Customer } from '../types';
+import { formatMoney } from '../money';
 
 export default function LoyaltyPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -70,7 +71,7 @@ export default function LoyaltyPage() {
     {
       key: 'totalSpent',
       header: 'Total Spent',
-      render: (item: Customer) => `Rs. ${item.totalSpent.toLocaleString()}`,
+      render: (item: Customer) => formatMoney(item.totalSpent),
     },
     {
       key: 'actions',

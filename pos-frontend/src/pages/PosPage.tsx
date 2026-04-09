@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/auth.store";
@@ -13,6 +13,7 @@ import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
 import { reservationsApi } from "../api/reservations.api";
 import type { Category, RestaurantTable, Shift, Customer, Reservation } from "../types";
+import { formatMoney } from "../money";
 
 type Product = {
   _id: string;
@@ -86,16 +87,38 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedTableForPayment, setSelectedTableForPayment] = useState<RestaurantTable | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
+
+  // Prevent duplicate submissions
+  const [creatingSale, setCreatingSale] = useState(false);
+  const creatingSaleRef = useRef(false);
+  const [addingToTable, setAddingToTable] = useState(false);
+  const addingToTableRef = useRef(false);
   
   // Shift modal
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [openingCash, setOpeningCash] = useState<number>(0);
   const [processingShift, setProcessingShift] = useState(false);
 
+  // Touch/quick actions
+  const [showTablesModal, setShowTablesModal] = useState(false);
+  const customerSectionRef = useRef<HTMLDivElement | null>(null);
+  const discountSectionRef = useRef<HTMLDivElement | null>(null);
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const scrollToCustomer = () => {
+    customerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => customerSearchInputRef.current?.focus(), 150);
+  };
+
+  const scrollToDiscount = () => {
+    discountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const items = useCartStore((s) => s.items);
   const addItem = useCartStore((s) => s.addItem);
   const increaseQty = useCartStore((s) => s.increaseQty);
   const decreaseQty = useCartStore((s) => s.decreaseQty);
+  const setQty = useCartStore((s) => s.setQty);
   const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clearCart);
   const subtotal = useCartStore((s) => s.subtotal);
@@ -286,7 +309,7 @@ export default function PosPage() {
       const result = await couponsApi.validate(couponCode.trim(), orderTotal);
       setCouponValidation(result);
       if (result.success) {
-        toast.success(`🎫 Coupon applied! Discount: Rs. ${result.discount?.toFixed(2)}`);
+        toast.success(`🎫 Coupon applied! Discount: ${formatMoney(result.discount)}`);
       }
     } catch (error: any) {
       setCouponValidation({
@@ -368,6 +391,8 @@ export default function PosPage() {
           quantity: item.quantity
         })),
         paymentMethod: paymentMethod,
+        orderType: 'DINE_IN',
+        tableId: selectedTableForPayment._id,
       };
 
       // Add customer if selected
@@ -537,6 +562,8 @@ export default function PosPage() {
   };
 
 const handleAddToTable = async () => {
+  if (addingToTableRef.current) return;
+
   if (items.length === 0) {
     toast.error("Cart is empty");
     return;
@@ -546,6 +573,9 @@ const handleAddToTable = async () => {
     toast.error("Please select a table");
     return;
   }
+
+  addingToTableRef.current = true;
+  setAddingToTable(true);
 
   try {
     // Check if table already has an order
@@ -586,10 +616,15 @@ const handleAddToTable = async () => {
   } catch (error: any) {
     console.error("Add to table error:", error);
     toast.error(error?.response?.data?.message || "Failed to add items to table");
+  } finally {
+    addingToTableRef.current = false;
+    setAddingToTable(false);
   }
 };
 
 const handleCreateSale = async () => {
+  if (creatingSaleRef.current) return;
+
   if (items.length === 0) {
     toast.error("Cart is empty");
     return;
@@ -600,6 +635,9 @@ const handleCreateSale = async () => {
     setShowShiftModal(true);
     return;
   }
+
+  creatingSaleRef.current = true;
+  setCreatingSale(true);
 
   try {
     const payload: any = {
@@ -636,7 +674,7 @@ const handleCreateSale = async () => {
           points: pointsToUse,
           sale_id: sale._id,
         });
-        toast.success(`🎁 Redeemed ${pointsToUse} loyalty points! (Rs. ${calculatePointsDiscount().toFixed(2)} off)`, { duration: 3000 });
+        toast.success(`🎁 Redeemed ${pointsToUse} loyalty points! (${formatMoney(calculatePointsDiscount())} off)`, { duration: 3000 });
       } catch (redeemError: any) {
         console.log("Points redemption failed:", redeemError);
         toast.error(redeemError?.response?.data?.message || "Failed to redeem points");
@@ -671,6 +709,9 @@ const handleCreateSale = async () => {
   } catch (error: any) {
     console.error("Create sale error:", error?.response?.data || error);
     toast.error(error?.response?.data?.message || "Failed to create sale");
+  } finally {
+    creatingSaleRef.current = false;
+    setCreatingSale(false);
   }
 };
 
@@ -685,7 +726,7 @@ const handleCreateSale = async () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-100 flex flex-col">
       
       {/* Shift Warning Banner */}
       {!currentShift && !loading && (
@@ -693,7 +734,7 @@ const handleCreateSale = async () => {
           <span className="font-medium">⚠️ No shift open. You need to open a shift to create sales.</span>
           <button
             onClick={() => setShowShiftModal(true)}
-            className="rounded bg-white text-yellow-600 px-4 py-1 text-sm font-medium hover:bg-yellow-50"
+            className="touch-manipulation rounded-lg bg-white text-yellow-700 px-5 py-2 text-sm font-semibold hover:bg-yellow-50 active:scale-[0.99]"
           >
             Open Shift
           </button>
@@ -703,7 +744,7 @@ const handleCreateSale = async () => {
       {/* Current Shift Info */}
       {currentShift && (
         <div className="bg-green-500 text-white px-6 py-1 text-sm">
-          ✓ Shift Open | Opening Cash: Rs. {currentShift.openingCash?.toFixed(2) || '0.00'}
+          ✓ Shift Open | Opening Cash: {formatMoney(currentShift.openingCash)}
         </div>
       )}
 
@@ -716,135 +757,57 @@ const handleCreateSale = async () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/dashboard")}
-            className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+            className="touch-manipulation rounded-xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
           >
             Dashboard
           </button>
           <button
             onClick={logout}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            className="touch-manipulation rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <main className="flex h-[calc(100vh-4rem)]">
+      {/* Touch Quick Navigation */}
+      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+          >
+            📊 Sale Summary
+          </button>
+          <button
+            onClick={() => navigate('/sales')}
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+          >
+            🧾 Sales
+          </button>
+          <button
+            onClick={() => navigate('/inventory')}
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+          >
+            📦 Stocks
+          </button>
+          <button
+            onClick={() => navigate('/returns')}
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+          >
+            ↩️ Returns
+          </button>
+          <button
+            onClick={() => navigate('/reports')}
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+          >
+            📑 Reports
+          </button>
+        </div>
+      </div>
+
+      <main className="flex flex-1 min-h-0">
         <aside className="w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto">
-          {/* Order Type Selection */}
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Order Type
-          </h2>
-          <div className="flex gap-1 mb-4">
-            {(['TAKEAWAY', 'DINE_IN', 'DELIVERY'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setOrderType(type);
-                  if (type !== 'DINE_IN') setSelectedTable('');
-                }}
-                className={`flex-1 rounded-lg px-2 py-2 text-xs font-medium transition ${
-                  orderType === type
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                {type.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-
-          {/* Table Selection (only for Dine-In) */}
-          {orderType === 'DINE_IN' && (
-            <div className="mb-4">
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Select Table
-              </h2>
-              <select
-                value={selectedTable}
-                onChange={(e) => setSelectedTable(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">-- Select Table --</option>
-                {availableTables.map((table) => (
-                  <option key={table._id} value={table._id}>
-                    Table {table.tableNumber} {table.section ? `(${table.section})` : ''} - {table.capacity} seats - {table.status}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Occupied Tables Section */}
-          {occupiedTables.length > 0 && (
-            <div className="mb-4">
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                🍽️ Active Tables ({occupiedTables.length})
-              </h2>
-              <div className="space-y-2">
-                {occupiedTables.map((table) => {
-                  const isSelected = selectedTable === table._id;
-                  return (
-                  <div
-                    key={table._id}
-                    className={`rounded-lg border p-3 transition-all ${
-                      isSelected 
-                        ? 'border-blue-500 bg-blue-50 shadow-md' 
-                        : 'border-orange-200 bg-orange-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-orange-800'}`}>
-                          Table {table.tableNumber}
-                        </span>
-                        {table.section && (
-                          <span className={`text-xs ml-1 ${isSelected ? 'text-blue-600' : 'text-orange-600'}`}>
-                            ({table.section})
-                          </span>
-                        )}
-                        {isSelected && (
-                          <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                            ✓ Selected
-                          </span>
-                        )}
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        isSelected 
-                          ? 'bg-blue-200 text-blue-700' 
-                          : 'bg-orange-200 text-orange-700'
-                      }`}>
-                        OCCUPIED
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setOrderType('DINE_IN');
-                          setSelectedTable(table._id);
-                        }}
-                        className={`flex-1 text-xs rounded px-2 py-1 ${
-                          isSelected
-                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                            : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                        }`}
-                      >
-                        {isSelected ? '✓ Adding Items' : '+ Add Items'}
-                      </button>
-                      <button
-                        onClick={() => handleOpenTableBill(table)}
-                        className="flex-1 text-xs bg-green-600 text-white rounded px-2 py-1 hover:bg-green-700"
-                      >
-                        💳 Pay Bill
-                      </button>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
           </h2>
@@ -852,19 +815,19 @@ const handleCreateSale = async () => {
           <div className="space-y-2">
             <button
               onClick={() => setSelectedCategory("")}
-              className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+              className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
                 selectedCategory === ""
                   ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
-              All Products
+              All
             </button>
             {flattenCategories(categories).map((cat) => (
               <button
                 key={cat._id}
                 onClick={() => setSelectedCategory(cat._id)}
-                className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
                   selectedCategory === cat._id
                     ? "bg-slate-900 text-white"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -883,7 +846,7 @@ const handleCreateSale = async () => {
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+              className="w-full max-w-md rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none focus:border-slate-500"
             />
           </div>
 
@@ -892,46 +855,57 @@ const handleCreateSale = async () => {
           {loading ? (
             <p className="text-slate-500">Loading products...</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {filteredProducts.map((product) => (
                 <div
                   key={product._id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    addItem({
+                      _id: product._id,
+                      name: product.name,
+                      price: product.price,
+                      taxRate: product.taxRate || 0
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      addItem({
+                        _id: product._id,
+                        name: product.name,
+                        price: product.price,
+                        taxRate: product.taxRate || 0
+                      });
+                    }
+                  }}
+                  className="touch-manipulation cursor-pointer select-none rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.99] active:bg-slate-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
                 >
-                  <div className="mb-2 flex items-start justify-between">
-                    <h3 className="text-base font-semibold text-slate-800">
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800 leading-tight">
                       {product.name}
                     </h3>
 
                     {product.lowStock ? (
-                      <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-600">
-                        Low Stock
+                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
+                        Low
                       </span>
                     ) : null}
                   </div>
 
-                  <p className="mb-4 text-sm text-slate-500">
+                  <p className="mb-2 text-xs text-slate-500 truncate">
                     {getCategoryName(product)}
                   </p>
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-slate-900">
-                      Rs. {product.price}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatMoney(product.price)}
                     </span>
 
-                    <button
-                      onClick={() =>
-                        addItem({
-                          _id: product._id,
-                          name: product.name,
-                          price: product.price,
-                          taxRate: product.taxRate || 0
-                        })
-                      }
-                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                    >
-                      Add
-                    </button>
+                    <span className="shrink-0 h-10 w-10 rounded-xl bg-slate-900 text-white flex items-center justify-center text-lg font-bold">
+                      +
+                    </span>
                   </div>
                 </div>
               ))}
@@ -960,7 +934,7 @@ const handleCreateSale = async () => {
                       </p>
                       <div className="flex items-center justify-between">
                         <span className="text-lg font-bold text-slate-400">
-                          Rs. {product.price}
+                          {formatMoney(product.price)}
                         </span>
                         <span className="text-sm text-slate-400">Unavailable</span>
                       </div>
@@ -972,8 +946,8 @@ const handleCreateSale = async () => {
           )}
         </section>
 
-        <aside className="w-96 border-l border-slate-200 bg-white p-6">
-          <div className="mb-4">
+        <aside className="w-96 h-full border-l border-slate-200 bg-white p-6 flex flex-col min-h-0">
+          <div className="mb-4 shrink-0">
             <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
             {orderType === 'DINE_IN' && selectedTable && (
               <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
@@ -1000,14 +974,14 @@ const handleCreateSale = async () => {
             )}
           </div>
 
-          <div className="flex h-full flex-col">
-            <div className="flex-1 space-y-3 overflow-auto">
-              {items.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
-                  No items in cart yet.
-                </div>
-              ) : (
-                items.map((item) => (
+          <div className="flex-1 min-h-0 overflow-auto pr-1">
+            {items.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                No items in cart yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {items.map((item) => (
                   <div
                     key={item._id}
                     className="rounded-xl border border-slate-200 p-3"
@@ -1016,13 +990,13 @@ const handleCreateSale = async () => {
                       <div>
                         <h3 className="font-medium text-slate-800">{item.name}</h3>
                         <p className="text-sm text-slate-500">
-                          Rs. {item.price} each
+                          {formatMoney(item.price)} each
                         </p>
                       </div>
 
                       <button
                         onClick={() => removeItem(item._id)}
-                        className="text-sm text-red-500 hover:text-red-600"
+                        className="touch-manipulation rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 active:scale-[0.99]"
                       >
                         Remove
                       </button>
@@ -1032,34 +1006,46 @@ const handleCreateSale = async () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => decreaseQty(item._id)}
-                          className="rounded-lg border px-3 py-1 text-sm"
+                          className="touch-manipulation h-10 w-10 rounded-xl border border-slate-300 bg-white text-lg font-bold hover:bg-slate-50 active:scale-[0.99]"
+                          aria-label="Decrease quantity"
                         >
                           -
                         </button>
-                        <span className="min-w-[24px] text-center">
-                          {item.quantity}
-                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const next = raw === '' ? 1 : parseInt(raw, 10);
+                            setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
+                          }}
+                          className="w-16 h-10 rounded-xl border border-slate-300 text-center text-base"
+                          aria-label="Quantity"
+                        />
                         <button
                           onClick={() => increaseQty(item._id)}
-                          className="rounded-lg border px-3 py-1 text-sm"
+                          className="touch-manipulation h-10 w-10 rounded-xl border border-slate-300 bg-white text-lg font-bold hover:bg-slate-50 active:scale-[0.99]"
+                          aria-label="Increase quantity"
                         >
                           +
                         </button>
                       </div>
 
                       <span className="font-medium text-slate-800">
-                        Rs. {item.price * item.quantity}
+                        {formatMoney(item.price * item.quantity)}
                       </span>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
             {/* Payment & Discount Section */}
             <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
               {/* Customer Selection */}
-              <div>
+              <div ref={customerSectionRef}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Customer (Optional)
                 </label>
@@ -1093,6 +1079,7 @@ const handleCreateSale = async () => {
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <input
+                          ref={customerSearchInputRef}
                           type="text"
                           value={customerSearch}
                           onChange={(e) => {
@@ -1101,7 +1088,7 @@ const handleCreateSale = async () => {
                           }}
                           onFocus={() => setShowCustomerSearch(true)}
                           placeholder="Search customer by name/phone..."
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
                         />
                         {showCustomerSearch && customerSearch && (
                           <div className="absolute z-20 mt-1 w-full bg-white rounded-lg border shadow-lg max-h-48 overflow-y-auto">
@@ -1130,7 +1117,7 @@ const handleCreateSale = async () => {
                       </div>
                       <button
                         onClick={() => setShowNewCustomerModal(true)}
-                        className="px-3 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600"
+                        className="touch-manipulation px-4 py-3 bg-green-500 text-white rounded-xl text-base font-semibold hover:bg-green-600 active:scale-[0.99]"
                         title="Add New Customer"
                       >
                         +
@@ -1158,7 +1145,7 @@ const handleCreateSale = async () => {
               </div>
 
               {/* Discount */}
-              <div>
+              <div ref={discountSectionRef}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   Discount
                 </label>
@@ -1197,7 +1184,7 @@ const handleCreateSale = async () => {
                       <span className="text-xs text-green-600 ml-2">
                         ({couponValidation.coupon?.discountType === 'PERCENTAGE' 
                           ? `${couponValidation.coupon?.value}% off`
-                          : `Rs. ${couponValidation.coupon?.value} off`})
+                          : `${formatMoney(couponValidation.coupon?.value)} off`})
                       </span>
                     </div>
                     <button
@@ -1247,7 +1234,7 @@ const handleCreateSale = async () => {
                         <h4 className="text-sm font-semibold text-purple-900">Loyalty Points</h4>
                         <p className="text-xs text-purple-600">
                           Available: <strong>{selectedCustomerLoyalty} points</strong> 
-                          <span className="text-purple-500 ml-1">(≈ Rs. {((selectedCustomerLoyalty / 100) * 10).toFixed(2)})</span>
+                          <span className="text-purple-500 ml-1">(≈ {formatMoney((selectedCustomerLoyalty / 100) * 10)})</span>
                         </p>
                       </div>
                     </div>
@@ -1258,7 +1245,6 @@ const handleCreateSale = async () => {
                         onChange={(e) => {
                           setUsePoints(e.target.checked);
                           if (e.target.checked) {
-                            // Auto-select maximum usable points
                             const maxPoints = getMaxUsablePoints();
                             setPointsToUse(maxPoints);
                           } else {
@@ -1279,7 +1265,7 @@ const handleCreateSale = async () => {
                             Points to use: {pointsToUse}
                           </label>
                           <span className="text-xs text-purple-600 font-medium">
-                            Discount: Rs. {calculatePointsDiscount().toFixed(2)}
+                            Discount: {formatMoney(calculatePointsDiscount())}
                           </span>
                         </div>
                         <input
@@ -1297,7 +1283,6 @@ const handleCreateSale = async () => {
                         </div>
                       </div>
 
-                      {/* Quick select buttons */}
                       <div className="flex gap-2">
                         {[25, 50, 75, 100].map(percent => {
                           const pointsValue = Math.floor(getMaxUsablePoints() * (percent / 100));
@@ -1331,60 +1316,212 @@ const handleCreateSale = async () => {
             <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>Subtotal</span>
-                <span>Rs. {subtotal().toFixed(2)}</span>
+                <span>{formatMoney(subtotal())}</span>
               </div>
 
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>Tax</span>
-                <span>Rs. {taxTotal().toFixed(2)}</span>
+                <span>{formatMoney(taxTotal())}</span>
               </div>
 
               {calculateManualDiscount() > 0 && (
                 <div className="flex items-center justify-between text-sm text-green-600">
                   <span>Manual Discount</span>
-                  <span>- Rs. {calculateManualDiscount().toFixed(2)}</span>
+                  <span>- {formatMoney(calculateManualDiscount())}</span>
                 </div>
               )}
 
               {calculateCouponDiscount() > 0 && (
                 <div className="flex items-center justify-between text-sm text-green-600">
                   <span>🎫 Coupon Discount</span>
-                  <span>- Rs. {calculateCouponDiscount().toFixed(2)}</span>
+                  <span>- {formatMoney(calculateCouponDiscount())}</span>
                 </div>
               )}
 
               {calculatePointsDiscount() > 0 && (
                 <div className="flex items-center justify-between text-sm text-purple-600">
                   <span>🎁 Loyalty Points ({pointsToUse} pts)</span>
-                  <span>- Rs. {calculatePointsDiscount().toFixed(2)}</span>
+                  <span>- {formatMoney(calculatePointsDiscount())}</span>
                 </div>
               )}
 
               <div className="flex items-center justify-between text-base font-semibold text-slate-900 pt-2 border-t">
                 <span>Total</span>
-                <span>Rs. {finalTotal().toFixed(2)}</span>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={clearCart}
-                  className="w-1/2 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Clear
-                </button>
-
-                <button
-                  onClick={orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale}
-                  disabled={!currentShift || (orderType === 'DINE_IN' && !selectedTable)}
-                  className="w-1/2 rounded-xl bg-slate-900 px-4 py-3 font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {orderType === 'DINE_IN' && selectedTable ? 'Add to Table' : 'Create Sale'}
-                </button>
+                <span>{formatMoney(finalTotal())}</span>
               </div>
             </div>
           </div>
+
+          {/* Actions moved to bottom touch bar */}
         </aside>
       </main>
+
+      {/* Bottom Touch Action Bar */}
+      <div className="shrink-0 border-t border-slate-200 bg-white">
+        <div className="flex items-stretch gap-2 px-3 py-2">
+          {/* Order Type */}
+          <div className="flex rounded-xl bg-slate-100 p-1">
+            {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => {
+                  setOrderType(type);
+                  if (type !== 'DINE_IN') setSelectedTable('');
+                }}
+                className={`touch-manipulation rounded-lg px-4 py-3 text-sm font-semibold transition active:scale-[0.99] ${
+                  orderType === type
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setShowTablesModal(true)}
+            disabled={orderType !== 'DINE_IN'}
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+          >
+            Tables
+            {orderType === 'DINE_IN' && selectedTable && (
+              <span className="ml-2 text-xs font-medium text-slate-500">
+                #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={scrollToCustomer}
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+          >
+            Customers
+          </button>
+
+          <button
+            onClick={scrollToDiscount}
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+          >
+            Discount
+          </button>
+
+          <button
+            onClick={() => {
+              clearCart();
+              toast.success('Cart cleared');
+            }}
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+          >
+            Clear all
+          </button>
+
+          <button
+            onClick={orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale}
+            disabled={
+              !currentShift ||
+              items.length === 0 ||
+              (orderType === 'DINE_IN' && !selectedTable) ||
+              (orderType === 'DINE_IN' && selectedTable ? addingToTable : creatingSale)
+            }
+            className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-8 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+          >
+            {orderType === 'DINE_IN' && selectedTable
+              ? (addingToTable ? 'Adding…' : 'Add to Table')
+              : (creatingSale ? 'Processing…' : 'Pay')}
+          </button>
+        </div>
+      </div>
+
+      {/* Tables Modal (Touch friendly) */}
+      {showTablesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-4xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">🍽️ Tables</h3>
+              <button
+                onClick={() => setShowTablesModal(false)}
+                className="touch-manipulation rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-600 mb-2">Available</h4>
+                {availableTables.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
+                    No available tables.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {availableTables.map((t) => (
+                      <button
+                        key={t._id}
+                        onClick={() => {
+                          setOrderType('DINE_IN');
+                          setSelectedTable(t._id);
+                          setShowTablesModal(false);
+                        }}
+                        className="touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                      >
+                        {t.tableNumber}
+                        <div className="mt-1 text-[11px] font-medium text-slate-500">
+                          {t.capacity} seats
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-slate-600 mb-2">Active</h4>
+                {occupiedTables.length === 0 ? (
+                  <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
+                    No active tables.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {occupiedTables.map((t) => (
+                      <div key={t._id} className="rounded-xl border border-slate-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">Table {t.tableNumber}</div>
+                            <div className="text-xs text-slate-500">{t.section ? `${t.section} • ` : ''}{t.capacity} seats</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setOrderType('DINE_IN');
+                                setSelectedTable(t._id);
+                                setShowTablesModal(false);
+                              }}
+                              className="touch-manipulation rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+                            >
+                              Add Items
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowTablesModal(false);
+                                handleOpenTableBill(t);
+                              }}
+                              className="touch-manipulation rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 active:scale-[0.99]"
+                            >
+                              Pay Bill
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Open Shift Modal */}
       {showShiftModal && (
@@ -1455,7 +1592,7 @@ const handleCreateSale = async () => {
                     <span>
                       {item.name} × {item.quantity}
                     </span>
-                    <span className="font-medium">Rs. {(item.price * item.quantity).toFixed(2)}</span>
+                    <span className="font-medium">{formatMoney(item.price * item.quantity)}</span>
                   </div>
                 ))}
               </div>
@@ -1465,21 +1602,21 @@ const handleCreateSale = async () => {
             <div className="mb-4 space-y-2 border-t border-slate-200 pt-4">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Subtotal</span>
-                <span>Rs. {subtotal().toFixed(2)}</span>
+                <span>{formatMoney(subtotal())}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Tax</span>
-                <span>Rs. {taxTotal().toFixed(2)}</span>
+                <span>{formatMoney(taxTotal())}</span>
               </div>
               {calculateDiscount() > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
                   <span>Discount</span>
-                  <span>- Rs. {calculateDiscount().toFixed(2)}</span>
+                  <span>- {formatMoney(calculateDiscount())}</span>
                 </div>
               )}
               <div className="flex justify-between font-semibold text-lg text-green-600 pt-2 border-t">
                 <span>Total Amount</span>
-                <span>Rs. {finalTotal().toFixed(2)}</span>
+                <span>{formatMoney(finalTotal())}</span>
               </div>
             </div>
 
@@ -1566,7 +1703,7 @@ const handleCreateSale = async () => {
                   disabled={processingPayment}
                   className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  {processingPayment ? 'Processing...' : `Pay Rs. ${finalTotal().toFixed(2)}`}
+                  {processingPayment ? 'Processing...' : `Pay ${formatMoney(finalTotal())}`}
                 </button>
               </div>
             </div>

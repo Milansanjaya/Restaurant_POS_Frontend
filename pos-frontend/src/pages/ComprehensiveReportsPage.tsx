@@ -23,6 +23,7 @@ import type {
   Reservation
 } from '../types';
 import toast from 'react-hot-toast';
+import { formatMoney } from '../money';
 
 type ReportSection = 
   | 'products' 
@@ -183,8 +184,8 @@ export default function ComprehensiveReportsPage() {
           const vals = [
             item.name, 
             item.sku, 
-            `Rs. ${item.price?.toFixed(2) || '0.00'}`, 
-            `Rs. ${item.cost?.toFixed(2) || '0.00'}`,
+            formatMoney(item.price), 
+            formatMoney(item.cost),
             item.category?.name || '-', 
             item.unit?.name || '-', 
             item.isActive ? 'Active' : 'Inactive'
@@ -203,8 +204,8 @@ export default function ComprehensiveReportsPage() {
           const vals = [
             item.invoiceNumber, 
             item.customer?.name || 'Walk-in', 
-            `Rs. ${item.grandTotal?.toFixed(2) || '0.00'}`,
-            `Rs. ${profit.toFixed(2)}`,
+            formatMoney(item.grandTotal),
+            formatMoney(profit),
             item.paymentMethod, 
             item.status, 
             new Date(item.createdAt).toLocaleDateString()
@@ -220,7 +221,7 @@ export default function ComprehensiveReportsPage() {
           return vals[colIndex] || '-';
         }
         if (section === 'purchase-orders') {
-          const vals = [item.poNumber, item.supplier?.name || '-', `Rs. ${item.totalAmount?.toFixed(2) || '0.00'}`, item.status, new Date(item.createdAt).toLocaleDateString()];
+          const vals = [item.poNumber, item.supplier?.name || '-', formatMoney(item.totalAmount), item.status, new Date(item.createdAt).toLocaleDateString()];
           return vals[colIndex] || '-';
         }
         if (section === 'grn') {
@@ -263,11 +264,11 @@ export default function ComprehensiveReportsPage() {
             <div class="stat-label">Total Sales</div>
           </div>
           <div class="stat-box">
-            <div class="stat-value">Rs. ${revenue.toLocaleString()}</div>
+            <div class="stat-value">${formatMoney(revenue)}</div>
             <div class="stat-label">Total Revenue</div>
           </div>
           <div class="stat-box">
-            <div class="stat-value">Rs. ${profit.toLocaleString()}</div>
+            <div class="stat-value">${formatMoney(profit)}</div>
             <div class="stat-label">Total Profit</div>
           </div>
         `;
@@ -279,7 +280,7 @@ export default function ComprehensiveReportsPage() {
             <div class="stat-label">Total Products</div>
           </div>
           <div class="stat-box">
-            <div class="stat-value">Rs. ${totalValue.toLocaleString()}</div>
+            <div class="stat-value">${formatMoney(totalValue)}</div>
             <div class="stat-label">Inventory Value</div>
           </div>
         `;
@@ -403,7 +404,7 @@ export default function ComprehensiveReportsPage() {
               </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Revenue: Rs. {totalRevenue.toLocaleString()}
+              Revenue: {formatMoney(totalRevenue)}
             </p>
           </Card>
 
@@ -411,7 +412,7 @@ export default function ComprehensiveReportsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">Total Profit</p>
-                <p className="mt-1 text-2xl font-bold text-emerald-600">Rs. {totalProfit.toLocaleString()}</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-600">{formatMoney(totalProfit)}</p>
               </div>
               <div className="rounded-full bg-emerald-100 p-3">
                 <span className="text-2xl">📈</span>
@@ -538,7 +539,7 @@ export default function ComprehensiveReportsPage() {
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {typeof product.category === 'object' ? product.category?.name : product.category}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-900">Rs. {product.price.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-900">{formatMoney(product.price)}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{product.taxRate || 0}%</td>
                         <td className="px-4 py-3">
                           <Badge variant={product.isAvailable ? 'success' : 'danger'}>
@@ -582,10 +583,12 @@ export default function ComprehensiveReportsPage() {
                           {typeof sale.customer_id === 'object' && (sale.customer_id as any)?.name ? (sale.customer_id as any).name : 'Walk-in'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{sale.items?.length || 0}</td>
-                        <td className="px-4 py-3 text-sm text-slate-900">Rs. {sale.subtotal?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">Rs. {(sale as any).tax?.toFixed(2) || sale.subtotal ? (sale.subtotal * 0.1).toFixed(2) : '0.00'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-900">{formatMoney(sale.subtotal)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {formatMoney(typeof (sale as any).tax === 'number' ? (sale as any).tax : (sale.subtotal ? sale.subtotal * 0.1 : 0))}
+                        </td>
                         <td className="px-4 py-3 text-sm font-semibold text-green-600">
-                          Rs. {sale.grandTotal?.toFixed(2) || '0.00'}
+                          {formatMoney(sale.grandTotal)}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="info">{sale.paymentMethod || 'CASH'}</Badge>
@@ -703,7 +706,7 @@ export default function ComprehensiveReportsPage() {
                           {po.deliveryDate ? new Date(po.deliveryDate).toLocaleDateString() : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                          Rs. {po.totalAmount?.toFixed(2) || '0.00'}
+                          {formatMoney(po.totalAmount)}
                         </td>
                         <td className="px-4 py-3">
                           <Badge 

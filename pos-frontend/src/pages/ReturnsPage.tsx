@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input } from '../components';
 import { returnsApi, suppliersApi } from '../api';
 import type { SupplierReturn, SupplierReturnFormData, SupplierReturnItem, Supplier } from '../types';
+import { formatMoney } from '../money';
 
 export default function ReturnsPage() {
   const [returns, setReturns] = useState<SupplierReturn[]>([]);
@@ -149,7 +150,7 @@ export default function ReturnsPage() {
     {
       key: 'totalAmount',
       header: 'Total',
-      render: (item: SupplierReturn) => `Rs. ${item.totalAmount.toLocaleString()}`,
+      render: (item: SupplierReturn) => formatMoney(item.totalAmount),
     },
     {
       key: 'status',
@@ -283,17 +284,17 @@ export default function ReturnsPage() {
                   <div>
                     <p className="font-medium">{item.productName}</p>
                     <p className="text-sm text-slate-500">
-                      {item.quantity} x Rs. {item.unitPrice} • {item.reason}
+                      {item.quantity} x {formatMoney(item.unitPrice)} • {item.reason}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-medium">Rs. {item.totalPrice.toLocaleString()}</span>
+                    <span className="font-medium">{formatMoney(item.totalPrice)}</span>
                     <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>×</Button>
                   </div>
                 </div>
               ))}
               <div className="text-right font-bold text-lg">
-                Total: Rs. {formData.totalAmount.toLocaleString()}
+                Total: {formatMoney(formData.totalAmount)}
               </div>
             </div>
           )}

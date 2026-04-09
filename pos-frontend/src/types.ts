@@ -449,6 +449,7 @@ export interface WalletPaymentData {
 // ==================== SALE ====================
 export type SaleStatus = 'OPEN' | 'PARTIALLY_PAID' | 'COMPLETED' | 'VOIDED';
 export type DiscountType = 'FLAT' | 'PERCENTAGE';
+export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 
 export interface SaleItem {
   product: string | Product;
@@ -479,6 +480,8 @@ export interface Sale {
   _id: string;
   invoiceNumber: string;
   branch_id: string;
+  orderType?: OrderType;
+  table?: string | RestaurantTable;
   items: SaleItem[];
   subtotal: number;
   taxTotal: number;
@@ -493,7 +496,7 @@ export interface Sale {
   discountType?: DiscountType;
   discountValue?: number;
   couponCode?: string;
-  customer_id?: string;
+  customer_id?: string | Customer;
   reservation?: string;
   createdBy: string;
   voidedBy?: string;
@@ -507,6 +510,7 @@ export interface SaleFormData {
   items: { product: string; quantity: number }[];
   paymentMethod?: string;
   tableId?: string;
+  orderType?: OrderType;
   reservationId?: string;
   discountType?: DiscountType;
   discountValue?: number;
@@ -519,6 +523,7 @@ export interface SaleFilters {
   page?: number;
   limit?: number;
   status?: SaleStatus;
+  orderType?: OrderType;
   from?: string;
   to?: string;
 }
@@ -684,6 +689,31 @@ export interface DailyReport {
   totalSales: number;
   totalTax: number;
   averageOrderValue: number;
+}
+
+export interface ProfitReportDay {
+  date: string;
+  totalOrders: number;
+  grossSales: number;
+  discount: number;
+  netSales: number;
+  totalCost: number;
+  profit: number;
+}
+
+export interface ProfitReport {
+  from: string;
+  to: string;
+  orderType: string | null;
+  totals: {
+    totalOrders: number;
+    grossSales: number;
+    discount: number;
+    netSales: number;
+    totalCost: number;
+    profit: number;
+  };
+  days: ProfitReportDay[];
 }
 
 export interface PaymentSummary {

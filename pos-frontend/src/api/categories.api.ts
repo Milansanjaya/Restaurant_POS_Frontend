@@ -2,8 +2,12 @@ import api from './axios';
 import type { Category, CategoryFormData } from '../types';
 
 export const categoriesApi = {
-  getAll: async () => {
-    const res = await api.get<{ success: boolean; data: Category[] }>('/categories');
+  getAll: async (opts?: { isActive?: boolean }) => {
+    const res = await api.get<{ success: boolean; data: Category[] }>('/categories', {
+      params: {
+        isActive: opts?.isActive ?? true,
+      },
+    });
     return res.data.data || [];
   },
 

@@ -13,8 +13,9 @@ export const purchaseOrdersApi = {
   },
 
   getById: async (id: string) => {
-    const res = await api.get<{ purchaseOrder: PurchaseOrder }>(`/purchase-orders/${id}`);
-    return res.data.purchaseOrder;
+    const res = await api.get<any>(`/purchase-orders/${id}`);
+    // Backend returns either { purchaseOrder } or the PO object directly (older versions)
+    return (res.data?.purchaseOrder ?? res.data) as PurchaseOrder;
   },
 
   create: async (data: PurchaseOrderFormData) => {

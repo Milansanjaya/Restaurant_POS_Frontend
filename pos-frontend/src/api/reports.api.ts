@@ -1,5 +1,5 @@
 import api from './axios';
-import type { DailyReport, PaymentSummary, Inventory } from '../types';
+import type { DailyReport, PaymentSummary, Inventory, ProfitReport } from '../types';
 
 export const reportsApi = {
   getDailySales: async (date?: string) => {
@@ -19,6 +19,11 @@ export const reportsApi = {
 
   getLowStock: async () => {
     const res = await api.get<Inventory[]>('/reports/low-stock');
+    return res.data;
+  },
+
+  getProfitReport: async (params?: { from?: string; to?: string; orderType?: string }) => {
+    const res = await api.get<ProfitReport>('/reports/profit', { params });
     return res.data;
   },
 };

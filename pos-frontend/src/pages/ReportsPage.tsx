@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader, Button } from '../components';
+import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader, Button, Table } from '../components';
 import { reportsApi } from '../api';
-import type { DailyReport, PaymentSummary, Inventory } from '../types';
+import type { DailyReport, PaymentSummary, Inventory, ProfitReport, ProfitReportDay } from '../types';
+import { formatMoney } from '../money';
 
 // Simple Pie Chart Component (CSS-based)
 const SimplePieChart = ({ data, height = 320 }: { data: { name: string; value?: number; qty?: number }[]; height?: number }) => {
@@ -62,6 +63,12 @@ export default function ReportsPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
 
+  const [profitReport, setProfitReport] = useState<ProfitReport | null>(null);
+  const [profitLoading, setProfitLoading] = useState(false);
+  const [profitFrom, setProfitFrom] = useState(new Date().toISOString().split('T')[0]);
+  const [profitTo, setProfitTo] = useState(new Date().toISOString().split('T')[0]);
+  const [profitOrderType, setProfitOrderType] = useState('');
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -85,6 +92,26 @@ export default function ReportsPage() {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  const loadProfitReport = async () => {
+    try {
+      setProfitLoading(true);
+      const res = await reportsApi.getProfitReport({
+        from: profitFrom || undefined,
+        to: profitTo || undefined,
+        orderType: profitOrderType || undefined,
+      });
+      setProfitReport(res);
+    } catch (error) {
+      console.error('Failed to load profit report:', error);
+    } finally {
+      setProfitLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfitReport();
+  }, [profitFrom, profitTo, profitOrderType]);
 
   if (loading) {
     return (
@@ -135,7 +162,7 @@ export default function ReportsPage() {
           />
           <StatCard
             title="Total Sales"
-            value={`Rs. ${(dailyReport?.totalSales || 0).toLocaleString()}`}
+            value={formatMoney(dailyReport?.totalSales)}
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -144,7 +171,7 @@ export default function ReportsPage() {
           />
           <StatCard
             title="Total Tax"
-            value={`Rs. ${(dailyReport?.totalTax || 0).toLocaleString()}`}
+            value={formatMoney(dailyReport?.totalTax)}
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
@@ -153,7 +180,7 @@ export default function ReportsPage() {
           />
           <StatCard
             title="Avg Order Value"
-            value={`Rs. ${(dailyReport?.averageOrderValue || 0).toFixed(2)}`}
+            value={formatMoney(dailyReport?.averageOrderValue)}
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -161,6 +188,109 @@ export default function ReportsPage() {
             }
           />
         </div>
+
+        {/* Profit Report (by date range) */}
+        <Card className="mb-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Profit Report</h3>
+              <p className="text-sm text-slate-600">
+                Day-by-day profit using sales price vs cost price (from-to date).
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="date"
+                value={profitFrom}
+                onChange={(e) => setProfitFrom(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="date"
+                value={profitTo}
+                onChange={(e) => setProfitTo(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <select
+                value={profitOrderType}
+                onChange={(e) => setProfitOrderType(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">All Order Types</option>
+                <option value="DINE_IN">Dine In</option>
+                <option value="TAKEAWAY">Takeaway</option>
+                <option value="DELIVERY">Delivery</option>
+              </select>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  setProfitFrom(today);
+                  setProfitTo(today);
+                  setProfitOrderType('');
+                }}
+              >
+                Today
+              </Button>
+            </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+            <StatCard
+              title="Orders"
+              value={profitReport?.totals.totalOrders || 0}
+            />
+            <StatCard
+              title="Gross Sales"
+              value={formatMoney(profitReport?.totals.grossSales)}
+            />
+            <StatCard
+              title="Discount"
+              value={formatMoney(profitReport?.totals.discount)}
+            />
+            <StatCard
+              title="Net Sales"
+              value={formatMoney(profitReport?.totals.netSales)}
+            />
+            <StatCard
+              title="Total Cost"
+              value={formatMoney(profitReport?.totals.totalCost)}
+            />
+            <StatCard
+              title="Profit"
+              value={formatMoney(profitReport?.totals.profit)}
+              className={
+                (profitReport?.totals.profit || 0) >= 0 ? 'border-green-200' : 'border-red-200'
+              }
+            />
+          </div>
+
+          <Table
+            columns={[
+              { key: 'date', header: 'Date', render: (d: ProfitReportDay) => d.date },
+              { key: 'totalOrders', header: 'Orders', render: (d: ProfitReportDay) => d.totalOrders },
+              { key: 'grossSales', header: 'Gross Sales', className: 'text-right', render: (d: ProfitReportDay) => formatMoney(d.grossSales) },
+              { key: 'discount', header: 'Discount', className: 'text-right', render: (d: ProfitReportDay) => formatMoney(d.discount) },
+              { key: 'netSales', header: 'Net Sales', className: 'text-right', render: (d: ProfitReportDay) => formatMoney(d.netSales) },
+              { key: 'totalCost', header: 'Cost', className: 'text-right', render: (d: ProfitReportDay) => formatMoney(d.totalCost) },
+              {
+                key: 'profit',
+                header: 'Profit',
+                className: 'text-right',
+                render: (d: ProfitReportDay) => (
+                  <span className={d.profit >= 0 ? 'text-green-700' : 'text-red-700'}>
+                    {formatMoney(d.profit)}
+                  </span>
+                ),
+              },
+            ]}
+            data={profitReport?.days || []}
+            keyExtractor={(d: ProfitReportDay) => d.date}
+            loading={profitLoading}
+            emptyMessage="No profit data found for selected filters"
+          />
+        </Card>
 
         {/* Charts Section */}
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -272,7 +402,7 @@ export default function ReportsPage() {
                   >
                     <span className="font-medium text-slate-900">{method}</span>
                     <span className="font-semibold text-slate-900">
-                      Rs. {(amount as number).toLocaleString()}
+                      {formatMoney(amount as number)}
                     </span>
                   </div>
                 ))}

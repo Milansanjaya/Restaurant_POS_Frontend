@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card } from '../components';
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
+import { formatMoney } from '../money';
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -12,6 +13,10 @@ export default function PurchaseOrdersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewOrder, setViewOrder] = useState<PurchaseOrder | null>(null);
 
   const [formData, setFormData] = useState<PurchaseOrderFormData>({
     supplier_id: '',
@@ -67,10 +72,26 @@ export default function PurchaseOrdersPage() {
       supplier_id: typeof order.supplier_id === 'object' ? order.supplier_id._id : order.supplier_id,
       items: order.items,
       totalAmount: order.totalAmount,
-      deliveryDate: order.deliveryDate ? order.deliveryDate.slice(0, 10) : '',
+      deliveryDate: order.deliveryDate || '',
       notes: order.notes || '',
     });
     setModalOpen(true);
+  };
+
+  const openViewModal = async (id: string) => {
+    try {
+      setViewOpen(true);
+      setViewLoading(true);
+      setViewOrder(null);
+      const po = await purchaseOrdersApi.getById(id);
+      setViewOrder(po);
+    } catch (error) {
+      console.error('Failed to load PO:', error);
+      alert('Failed to load purchase order');
+      setViewOpen(false);
+    } finally {
+      setViewLoading(false);
+    }
   };
 
   const addItem = () => {
@@ -152,7 +173,7 @@ export default function PurchaseOrdersPage() {
     {
       key: 'totalAmount',
       header: 'Total',
-      render: (item: PurchaseOrder) => `Rs. ${item.totalAmount.toLocaleString()}`,
+      render: (item: PurchaseOrder) => formatMoney(item.totalAmount),
     },
     {
       key: 'status',
@@ -171,6 +192,9 @@ export default function PurchaseOrdersPage() {
       header: 'Actions',
       render: (item: PurchaseOrder) => (
         <div className="flex gap-1">
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item._id)}>
+            View
+          </Button>
           {(item.status === 'DRAFT' || item.status === 'PENDING') && (
             <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
               Edit
@@ -226,13 +250,13 @@ export default function PurchaseOrdersPage() {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Create Purchase Order"
+        title={editingId ? "Edit Purchase Order" : "Create Purchase Order"}
         size="xl"
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} loading={saving} disabled={formData.items.length === 0}>
-              Create PO
+              {editingId ? "Update PO" : "Create PO"}
             </Button>
           </>
         }
@@ -307,17 +331,17 @@ export default function PurchaseOrdersPage() {
                   <div>
                     <p className="font-medium">{item.productName}</p>
                     <p className="text-sm text-slate-500">
-                      {item.quantity} x Rs. {item.unitPrice}
+                      {item.quantity} x {formatMoney(item.unitPrice)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-medium">Rs. {item.totalPrice.toLocaleString()}</span>
+                    <span className="font-medium">{formatMoney(item.totalPrice)}</span>
                     <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>×</Button>
                   </div>
                 </div>
               ))}
               <div className="text-right font-bold text-lg">
-                Total: Rs. {formData.totalAmount.toLocaleString()}
+                Total: {formatMoney(formData.totalAmount)}
               </div>
             </div>
           )}
@@ -328,6 +352,80 @@ export default function PurchaseOrdersPage() {
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={viewOpen}
+        onClose={() => setViewOpen(false)}
+        title={viewOrder ? `Purchase Order ${viewOrder.poNumber}` : "Purchase Order"}
+        size="lg"
+      >
+        {viewLoading && (
+          <div className="p-4 text-sm text-slate-600">Loading...</div>
+        )}
+
+        {!viewLoading && viewOrder && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-slate-500">Supplier</div>
+                <div className="font-medium">
+                  {typeof viewOrder.supplier_id === 'object' ? viewOrder.supplier_id.name : '-'}
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-500">Status</div>
+                <div>
+                  <Badge variant={getStatusBadgeVariant(viewOrder.status)}>{viewOrder.status}</Badge>
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-500">Created</div>
+                <div className="font-medium">{new Date(viewOrder.createdAt).toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-slate-500">Delivery Date</div>
+                <div className="font-medium">
+                  {viewOrder.deliveryDate ? new Date(viewOrder.deliveryDate).toLocaleDateString() : '-'}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border">
+              <div className="grid grid-cols-12 gap-2 border-b bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                <div className="col-span-6">Product</div>
+                <div className="col-span-2 text-right">Qty</div>
+                <div className="col-span-2 text-right">Unit</div>
+                <div className="col-span-2 text-right">Total</div>
+              </div>
+              <div className="divide-y">
+                {viewOrder.items?.map((it, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
+                    <div className="col-span-6">{it.productName}</div>
+                    <div className="col-span-2 text-right">{it.quantity}</div>
+                    <div className="col-span-2 text-right">{formatMoney(it.unitPrice)}</div>
+                    <div className="col-span-2 text-right">{formatMoney(it.totalPrice)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-4 px-3 py-3 text-sm">
+                <span className="text-slate-600">Grand Total</span>
+                <span className="font-semibold">{formatMoney(viewOrder.totalAmount)}</span>
+              </div>
+            </div>
+
+            {viewOrder.notes && (
+              <div className="text-sm">
+                <div className="text-slate-500">Notes</div>
+                <div className="font-medium whitespace-pre-wrap">{viewOrder.notes}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!viewLoading && !viewOrder && (
+          <div className="p-4 text-sm text-slate-600">No data</div>
+        )}
       </Modal>
     </Layout>
   );

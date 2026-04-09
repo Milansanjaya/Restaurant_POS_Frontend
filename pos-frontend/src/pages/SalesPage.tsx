@@ -4,7 +4,8 @@ import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import * as salesApi from '../api/sales.api';
-import type { Sale, SaleFilters, Product } from '../types';
+import type { Sale, SaleFilters, Product, Customer, RestaurantTable, OrderType } from '../types';
+import { formatMoney } from '../money';
 
 const SalesPage: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
@@ -115,11 +116,30 @@ const SalesPage: React.FC = () => {
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${productName}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${item.quantity}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">$${item.price.toFixed(2)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">$${item.subtotal.toFixed(2)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoney(item.price)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoney(item.subtotal)}</td>
         </tr>
       `;
     }).join('');
+
+    const orderType = (sale.orderType || (sale as any).saleType) as OrderType | undefined;
+    const orderTypeLabel = orderType ? orderType.replace('_', ' ') : 'POS';
+
+    const customer = sale.customer_id && typeof sale.customer_id === 'object'
+      ? (sale.customer_id as Customer)
+      : null;
+
+    const table = sale.table && typeof sale.table === 'object'
+      ? (sale.table as RestaurantTable)
+      : null;
+
+    const customerHtml = customer
+      ? `<p><strong>Customer:</strong> ${customer.name} (${customer.phone})</p>`
+      : '';
+
+    const tableHtml = table
+      ? `<p><strong>Table:</strong> ${table.tableNumber}${table.section ? ` (${table.section})` : ''}</p>`
+      : '';
 
     return `
       <!DOCTYPE html>
@@ -133,7 +153,7 @@ const SalesPage: React.FC = () => {
           table { width: 100%; border-collapse: collapse; margin: 20px 0; }
           th { background: #f5f5f5; padding: 10px; text-align: left; }
           .totals { margin-top: 20px; text-align: right; }
-          .total-row { display: flex; justify-content: space-between; max-width: 300px; margin-left: auto; padding: 5px 0; }
+          .total-row { display: flex; justify-content: space-between; max-width: 340px; margin-left: auto; padding: 5px 0; }
           .grand-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #000; padding-top: 10px; }
           @media print { button { display: none; } }
         </style>
@@ -143,6 +163,9 @@ const SalesPage: React.FC = () => {
           <h1>INVOICE</h1>
           <p><strong>Invoice #:</strong> ${sale.invoiceNumber}</p>
           <p><strong>Date:</strong> ${new Date(sale.createdAt).toLocaleString()}</p>
+          <p><strong>Order Type:</strong> ${orderTypeLabel}</p>
+          ${customerHtml}
+          ${tableHtml}
         </div>
         
         <table>
@@ -160,12 +183,12 @@ const SalesPage: React.FC = () => {
         </table>
 
         <div class="totals">
-          <div class="total-row"><span>Subtotal:</span> <span>$${sale.subtotal.toFixed(2)}</span></div>
-          <div class="total-row"><span>Tax:</span> <span>$${sale.taxTotal.toFixed(2)}</span></div>
-          ${sale.discount > 0 ? `<div class="total-row"><span>Discount:</span> <span>-$${sale.discount.toFixed(2)}</span></div>` : ''}
-          <div class="total-row grand-total"><span>Grand Total:</span> <span>$${sale.grandTotal.toFixed(2)}</span></div>
-          <div class="total-row"><span>Paid:</span> <span>$${sale.paidAmount.toFixed(2)}</span></div>
-          ${sale.balanceAmount > 0 ? `<div class="total-row"><span>Balance Due:</span> <span>$${sale.balanceAmount.toFixed(2)}</span></div>` : ''}
+          <div class="total-row"><span>Subtotal:</span> <span>${formatMoney(sale.subtotal)}</span></div>
+          <div class="total-row"><span>Tax:</span> <span>${formatMoney(sale.taxTotal)}</span></div>
+          ${sale.discount > 0 ? `<div class="total-row"><span>Discount:</span> <span>- ${formatMoney(sale.discount)}</span></div>` : ''}
+          <div class="total-row grand-total"><span>Grand Total:</span> <span>${formatMoney(sale.grandTotal)}</span></div>
+          <div class="total-row"><span>Paid:</span> <span>${formatMoney(sale.paidAmount)}</span></div>
+          ${sale.balanceAmount > 0 ? `<div class="total-row"><span>Balance Due:</span> <span>${formatMoney(sale.balanceAmount)}</span></div>` : ''}
         </div>
 
         <p style="text-align: center; margin-top: 40px; color: #666;">Thank you for your business!</p>
@@ -199,6 +222,14 @@ const SalesPage: React.FC = () => {
       render: (sale: Sale) => new Date(sale.createdAt).toLocaleDateString()
     },
     { 
+      key: 'orderType', 
+      header: 'Order Type',
+      render: (sale: Sale) => {
+        const ot = (sale.orderType || (sale as any).saleType) as string | undefined;
+        return ot ? ot.replace('_', ' ') : '-';
+      }
+    },
+    { 
       key: 'items', 
       header: 'Items',
       render: (sale: Sale) => sale.items.length
@@ -206,17 +237,17 @@ const SalesPage: React.FC = () => {
     { 
       key: 'grandTotal', 
       header: 'Total',
-      render: (sale: Sale) => `$${sale.grandTotal.toFixed(2)}`
+      render: (sale: Sale) => formatMoney(sale.grandTotal)
     },
     { 
       key: 'paidAmount', 
       header: 'Paid',
-      render: (sale: Sale) => `$${sale.paidAmount.toFixed(2)}`
+      render: (sale: Sale) => formatMoney(sale.paidAmount)
     },
     { 
       key: 'balanceAmount', 
       header: 'Balance',
-      render: (sale: Sale) => `$${sale.balanceAmount.toFixed(2)}`
+      render: (sale: Sale) => formatMoney(sale.balanceAmount)
     },
     { 
       key: 'status', 
@@ -289,6 +320,17 @@ const SalesPage: React.FC = () => {
             <option value="VOIDED">Voided</option>
           </select>
 
+          <select
+            value={filters.orderType || ''}
+            onChange={(e) => setFilters({ ...filters, orderType: (e.target.value || undefined) as any, page: 1 })}
+            className="border rounded px-3 py-2"
+          >
+            <option value="">All Order Types</option>
+            <option value="DINE_IN">Dine In</option>
+            <option value="TAKEAWAY">Takeaway</option>
+            <option value="DELIVERY">Delivery</option>
+          </select>
+
           <input
             type="date"
             value={filters.from || ''}
@@ -355,7 +397,7 @@ const SalesPage: React.FC = () => {
               Invoice: {selectedSale?.invoiceNumber}
             </p>
             <p className="text-sm text-gray-600">
-              Amount: ${selectedSale?.grandTotal.toFixed(2)}
+              Amount: {formatMoney(selectedSale?.grandTotal)}
             </p>
             
             <div>
@@ -410,13 +452,28 @@ const SalesPage: React.FC = () => {
                   <span className="ml-2">{selectedSale.status}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Sale Type:</span>
-                  <span className="ml-2 capitalize">{(selectedSale as any).saleType?.toLowerCase() || 'POS'}</span>
+                  <span className="text-gray-500">Order Type:</span>
+                  <span className="ml-2">{(selectedSale.orderType || (selectedSale as any).saleType || 'POS').toString().replace('_', ' ')}</span>
                 </div>
-                <div>
-                  <span className="text-gray-500">Status:</span>
-                  <span className="ml-2">{selectedSale.status}</span>
-                </div>
+
+                {selectedSale.customer_id && typeof selectedSale.customer_id === 'object' && (
+                  <div>
+                    <span className="text-gray-500">Customer:</span>
+                    <span className="ml-2">{(selectedSale.customer_id as Customer).name}</span>
+                  </div>
+                )}
+
+                {selectedSale.table && typeof selectedSale.table === 'object' && (
+                  <div>
+                    <span className="text-gray-500">Table:</span>
+                    <span className="ml-2">
+                      {(selectedSale.table as RestaurantTable).tableNumber}
+                      {(selectedSale.table as RestaurantTable).section
+                        ? ` (${(selectedSale.table as RestaurantTable).section})`
+                        : ''}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Items */}
@@ -439,8 +496,8 @@ const SalesPage: React.FC = () => {
                           <tr key={idx} className="border-t">
                             <td className="p-2">{productName}</td>
                             <td className="text-center p-2">{item.quantity}</td>
-                            <td className="text-right p-2">${item.price.toFixed(2)}</td>
-                            <td className="text-right p-2">${item.subtotal.toFixed(2)}</td>
+                            <td className="text-right p-2">{formatMoney(item.price)}</td>
+                            <td className="text-right p-2">{formatMoney(item.subtotal)}</td>
                           </tr>
                         );
                       })}
@@ -453,30 +510,30 @@ const SalesPage: React.FC = () => {
               <div className="border-t pt-4 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>${selectedSale.subtotal.toFixed(2)}</span>
+                  <span>{formatMoney(selectedSale.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Tax:</span>
-                  <span>${selectedSale.taxTotal.toFixed(2)}</span>
+                  <span>{formatMoney(selectedSale.taxTotal)}</span>
                 </div>
                 {selectedSale.discount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Discount:</span>
-                    <span>-${selectedSale.discount.toFixed(2)}</span>
+                    <span>- {formatMoney(selectedSale.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>Grand Total:</span>
-                  <span>${selectedSale.grandTotal.toFixed(2)}</span>
+                  <span>{formatMoney(selectedSale.grandTotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Paid:</span>
-                  <span>${selectedSale.paidAmount.toFixed(2)}</span>
+                  <span>{formatMoney(selectedSale.paidAmount)}</span>
                 </div>
                 {selectedSale.balanceAmount > 0 && (
                   <div className="flex justify-between text-red-600">
                     <span>Balance Due:</span>
-                    <span>${selectedSale.balanceAmount.toFixed(2)}</span>
+                    <span>{formatMoney(selectedSale.balanceAmount)}</span>
                   </div>
                 )}
               </div>
@@ -489,7 +546,7 @@ const SalesPage: React.FC = () => {
                     {selectedSale.payments.map((payment, idx) => (
                       <div key={idx} className="flex justify-between bg-gray-50 p-2 rounded">
                         <span className="capitalize">{(payment as any).method?.toLowerCase() || payment.paymentMethod || 'Cash'}</span>
-                        <span>${payment.amount.toFixed(2)}</span>
+                        <span>{formatMoney(payment.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -505,7 +562,7 @@ const SalesPage: React.FC = () => {
                       <div key={idx} className="bg-red-50 p-2 rounded">
                         <div className="flex justify-between">
                           <span>{new Date((refund as any).date || (refund as any).refundDate || Date.now()).toLocaleDateString()}</span>
-                          <span>-${refund.amount.toFixed(2)}</span>
+                          <span>- {formatMoney(refund.amount)}</span>
                         </div>
                         <p className="text-gray-600 text-xs">{refund.reason}</p>
                       </div>
@@ -535,7 +592,7 @@ const SalesPage: React.FC = () => {
                   Invoice: <strong>{selectedSale.invoiceNumber}</strong>
                 </p>
                 <p className="text-sm text-gray-600">
-                  Paid Amount: <strong>${selectedSale.paidAmount.toFixed(2)}</strong>
+                  Paid Amount: <strong>{formatMoney(selectedSale.paidAmount)}</strong>
                 </p>
               </div>
 
@@ -553,7 +610,7 @@ const SalesPage: React.FC = () => {
                   className="w-full border rounded px-3 py-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Max refundable: ${selectedSale.paidAmount.toFixed(2)}
+                  Max refundable: {formatMoney(selectedSale.paidAmount)}
                 </p>
               </div>
 
