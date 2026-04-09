@@ -3,9 +3,7 @@ import type { Category, CategoryFormData } from '../types';
 
 export const categoriesApi = {
   getAll: async () => {
-    const res = await api.get<{ success: boolean; data: Category[] }>('/categories', {
-      params: { isActive: 'true' }
-    });
+    const res = await api.get<{ success: boolean; data: Category[] }>('/categories');
     return res.data.data || [];
   },
 
