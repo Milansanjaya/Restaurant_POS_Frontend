@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import Sidebar from './Sidebar';
 
@@ -9,9 +9,21 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const token = useAuthStore((s) => s.token);
+  const location = useLocation();
+  const isEmbedded = new URLSearchParams(location.search).get('embedded') === '1';
 
   if (!token) {
     return <Navigate to="/" replace />;
+  }
+
+  if (isEmbedded) {
+    return (
+      <div className="h-screen bg-slate-50">
+        <main className="h-screen overflow-auto">
+          {children}
+        </main>
+      </div>
+    );
   }
 
   return (

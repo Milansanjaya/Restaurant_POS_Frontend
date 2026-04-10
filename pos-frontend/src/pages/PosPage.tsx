@@ -89,6 +89,7 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedTableForPayment, setSelectedTableForPayment] = useState<RestaurantTable | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [quickView, setQuickView] = useState<{ title: string; path: string } | null>(null);
 
   // Prevent duplicate submissions
   const [creatingSale, setCreatingSale] = useState(false);
@@ -114,6 +115,10 @@ export default function PosPage() {
 
   const scrollToDiscount = () => {
     discountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const openQuickView = (title: string, path: string) => {
+    setQuickView({ title, path });
   };
 
   const items = useCartStore((s) => s.items);
@@ -525,9 +530,11 @@ export default function PosPage() {
     return calculateManualDiscount() + calculateCouponDiscount() + calculatePointsDiscount();
   };
 
-  const getServiceCharge = () => (orderType === 'DINE_IN' ? serviceCharge : 0);
+  const getEffectiveOrderType = () => (selectedTableForPayment ? 'DINE_IN' : orderType);
 
-  const getPackagingCharge = () => (orderType !== 'DINE_IN' ? packagingCharge : 0);
+  const getServiceCharge = () => (getEffectiveOrderType() === 'DINE_IN' ? serviceCharge : 0);
+
+  const getPackagingCharge = () => (getEffectiveOrderType() !== 'DINE_IN' ? packagingCharge : 0);
 
   const getChargesTotal = () => getServiceCharge() + getPackagingCharge();
 
@@ -770,7 +777,7 @@ const handleCreateSale = async () => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => openQuickView("Dashboard", "/dashboard")}
             className="touch-manipulation rounded-xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
           >
             Dashboard
@@ -788,31 +795,31 @@ const handleCreateSale = async () => {
       <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => openQuickView("Sale Summary", "/dashboard")}
             className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📊 Sale Summary
           </button>
           <button
-            onClick={() => navigate('/sales')}
+            onClick={() => openQuickView("Sales", "/sales")}
             className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             🧾 Sales
           </button>
           <button
-            onClick={() => navigate('/inventory')}
+            onClick={() => openQuickView("Stocks", "/inventory")}
             className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📦 Stocks
           </button>
           <button
-            onClick={() => navigate('/returns')}
+            onClick={() => openQuickView("Returns", "/returns")}
             className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             ↩️ Returns
           </button>
           <button
-            onClick={() => navigate('/reports')}
+            onClick={() => openQuickView("Reports", "/reports")}
             className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📑 Reports
@@ -1456,6 +1463,28 @@ const handleCreateSale = async () => {
         </div>
       </div>
 
+      {/* Quick View Modal */}
+      {quickView && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">{quickView.title}</h3>
+              <button
+                onClick={() => setQuickView(null)}
+                className="touch-manipulation rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100 active:scale-[0.99]"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              title={quickView.title}
+              src={quickView.path.includes('?') ? `${quickView.path}&embedded=1` : `${quickView.path}?embedded=1`}
+              className="flex-1 w-full"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Tables Modal (Touch friendly) */}
       {showTablesModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1662,7 +1691,7 @@ const handleCreateSale = async () => {
                     <button
                       key={method}
                       onClick={() => setPaymentMethod(method)}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
                         paymentMethod === method
                           ? 'bg-slate-900 text-white'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
