@@ -5,7 +5,7 @@ import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
 import { createSale, getSaleById } from "../api/sales.api";
-import { categoriesApi, configApi } from "../api";
+import { categoriesApi, configApi, inventoryApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
 import { customersApi } from "../api/customers.api";
@@ -21,6 +21,7 @@ type Product = {
   price: number;
   category?: string | { _id: string; name: string };
   taxRate?: number;
+  lowStockThreshold?: number;
   lowStock?: boolean;
   isAvailable?: boolean;
   trackStock?: boolean;
@@ -137,7 +138,7 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes] = await Promise.all([
+        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes, inventoryRes] = await Promise.all([
           api.get("/products"),
           categoriesApi.getAll(),
           tablesApi.getAll(),
@@ -145,8 +146,28 @@ export default function PosPage() {
           customersApi.getAll({ limit: 100 }).catch(() => ({ customers: [] })),
           reservationsApi.getAll().catch(() => []),
           configApi.get().catch(() => null),
+          inventoryApi.getAll().catch(() => []),
         ]);
-        setProducts(productsRes.data.products || []);
+
+        const inventoryByProductId = new Map<string, number>();
+        (inventoryRes || []).forEach((inv) => {
+          const productId = typeof inv.product === 'object' && inv.product ? inv.product._id : String(inv.product);
+          inventoryByProductId.set(productId, inv.stockQuantity);
+        });
+
+        const mergedProducts = (productsRes.data.products || []).map((p: Product) => {
+          if (p.trackStock === true) {
+            const qty = inventoryByProductId.get(p._id);
+            if (typeof qty === 'number') {
+              const outOfStock = qty <= 0;
+              const lowStock = !outOfStock && typeof p.lowStockThreshold === 'number' ? qty <= p.lowStockThreshold : false;
+              return { ...p, stockQuantity: qty, outOfStock, lowStock };
+            }
+          }
+          return p;
+        });
+
+        setProducts(mergedProducts);
         setCategories(categoriesRes || []);
         setTables(tablesRes || []);
         setCurrentShift(shiftRes);
@@ -958,7 +979,7 @@ const handleCreateSale = async () => {
               {filteredProducts.map((product) => {
                 const isOutOfStock =
                   product.outOfStock === true ||
-                  (product.trackStock === true &&
+                  (product.trackStock !== false &&
                     typeof product.stockQuantity === 'number' &&
                     product.stockQuantity <= 0);
                 const isUnavailable = product.isAvailable === false || isOutOfStock;
@@ -968,27 +989,32 @@ const handleCreateSale = async () => {
                     role={isUnavailable ? undefined : "button"}
                     tabIndex={isUnavailable ? -1 : 0}
                     aria-disabled={isUnavailable}
-                    onClick={() => {
-                      if (isUnavailable) return;
-                      addItem({
-                        _id: product._id,
-                        name: product.name,
-                        price: product.price,
-                        taxRate: product.taxRate || 0
-                      });
-                    }}
-                    onKeyDown={(e) => {
-                      if (isUnavailable) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        addItem({
-                          _id: product._id,
-                          name: product.name,
-                          price: product.price,
-                          taxRate: product.taxRate || 0
-                        });
-                      }
-                    }}
+                    onClick={
+                      isUnavailable
+                        ? undefined
+                        : () =>
+                            addItem({
+                              _id: product._id,
+                              name: product.name,
+                              price: product.price,
+                              taxRate: product.taxRate || 0,
+                            })
+                    }
+                    onKeyDown={
+                      isUnavailable
+                        ? undefined
+                        : (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              addItem({
+                                _id: product._id,
+                                name: product.name,
+                                price: product.price,
+                                taxRate: product.taxRate || 0,
+                              });
+                            }
+                          }
+                    }
                     className={`touch-manipulation select-none rounded-2xl border p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
                       isUnavailable
                         ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60'
