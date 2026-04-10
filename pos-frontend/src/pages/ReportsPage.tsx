@@ -683,7 +683,7 @@ export default function ReportsPage() {
               </div>
             </div>
             {topProducts.length === 0 ? (
-              <div className="flex h-[350px] items-center justify-center text-slate-500">
+              <div className="flex items-center justify-center text-slate-500" style={{ height: 350 }}>
                 No product sales data available
               </div>
             ) : (
@@ -715,7 +715,7 @@ export default function ReportsPage() {
               </div>
             </div>
             {Object.keys(paymentSummary).length === 0 ? (
-              <div className="flex h-[350px] items-center justify-center text-slate-500">
+              <div className="flex items-center justify-center text-slate-500" style={{ height: 350 }}>
                 No payment data available
               </div>
             ) : (

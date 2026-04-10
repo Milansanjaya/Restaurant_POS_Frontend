@@ -1329,7 +1329,7 @@ const handleCreateSale = async () => {
 
               {/* Loyalty Points Payment */}
               {selectedCustomerId && selectedCustomerLoyalty !== null && selectedCustomerLoyalty > 0 && (
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-2xl border border-purple-200">
+                <div className="bg-linear-to-r from-purple-50 to-pink-50 p-5 rounded-2xl border border-purple-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🎁</span>
