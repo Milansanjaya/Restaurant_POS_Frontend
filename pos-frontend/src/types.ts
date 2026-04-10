@@ -486,6 +486,8 @@ export interface Sale {
   subtotal: number;
   taxTotal: number;
   discount: number;
+  serviceCharge: number;
+  packagingCharge: number;
   grandTotal: number;
   payments: Payment[];
   refunds?: Refund[];
@@ -615,6 +617,8 @@ export interface SystemConfig {
   currency: CurrencyConfig;
   expiryAlertDays: number;
   invoiceFormat: InvoiceFormat;
+  serviceCharge: number;
+  packagingCharge: number;
   logo?: string;
   pointsPerDollar: number;
   pointsExpiryDays: number;

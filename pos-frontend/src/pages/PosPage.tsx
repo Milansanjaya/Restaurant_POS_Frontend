@@ -5,7 +5,7 @@ import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
 import { createSale, getSaleById } from "../api/sales.api";
-import { categoriesApi } from "../api";
+import { categoriesApi, configApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
 import { customersApi } from "../api/customers.api";
@@ -58,6 +58,8 @@ export default function PosPage() {
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
+  const [serviceCharge, setServiceCharge] = useState(0);
+  const [packagingCharge, setPackagingCharge] = useState(0);
   
   // Coupon validation
   const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null);
@@ -133,13 +135,14 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes] = await Promise.all([
+        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes] = await Promise.all([
           api.get("/products"),
           categoriesApi.getAll(),
           tablesApi.getAll(),
           shiftsApi.getCurrent().catch(() => null),
           customersApi.getAll({ limit: 100 }).catch(() => ({ customers: [] })),
           reservationsApi.getAll().catch(() => []),
+          configApi.get().catch(() => null),
         ]);
         setProducts(productsRes.data.products || []);
         setCategories(categoriesRes || []);
@@ -160,6 +163,8 @@ export default function PosPage() {
               tier: c.tier,
             }))
         );
+        setServiceCharge(typeof configRes?.serviceCharge === 'number' ? configRes.serviceCharge : 0);
+        setPackagingCharge(typeof configRes?.packagingCharge === 'number' ? configRes.packagingCharge : 0);
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -509,7 +514,8 @@ export default function PosPage() {
   // Maximum points that can be used (based on available points and order total)
   const getMaxUsablePoints = () => {
     if (!selectedCustomerLoyalty) return 0;
-    const remainingTotal = grandTotal() - calculateManualDiscount() - calculateCouponDiscount();
+    const remainingTotal =
+      grandTotal() + getChargesTotal() - calculateManualDiscount() - calculateCouponDiscount();
     const maxPointsForTotal = Math.floor((remainingTotal / 10) * 100); // Convert amount to points
     return Math.min(selectedCustomerLoyalty, maxPointsForTotal);
   };
@@ -519,8 +525,15 @@ export default function PosPage() {
     return calculateManualDiscount() + calculateCouponDiscount() + calculatePointsDiscount();
   };
 
+  const getServiceCharge = () => (orderType === 'DINE_IN' ? serviceCharge : 0);
+
+  const getPackagingCharge = () => (orderType !== 'DINE_IN' ? packagingCharge : 0);
+
+  const getChargesTotal = () => getServiceCharge() + getPackagingCharge();
+
   const finalTotal = () => {
-    return Math.max(0, grandTotal() - calculateDiscount());
+    const baseTotal = grandTotal() + getChargesTotal();
+    return Math.max(0, baseTotal - calculateDiscount());
   };
 
   const getCategoryName = (product: Product) => {
@@ -646,6 +659,7 @@ const handleCreateSale = async () => {
         quantity: item.quantity
       })),
       paymentMethod: paymentMethod,
+      orderType,
     };
 
     // Add customer if selected
@@ -775,31 +789,31 @@ const handleCreateSale = async () => {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📊 Sale Summary
           </button>
           <button
             onClick={() => navigate('/sales')}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             🧾 Sales
           </button>
           <button
             onClick={() => navigate('/inventory')}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📦 Stocks
           </button>
           <button
             onClick={() => navigate('/returns')}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             ↩️ Returns
           </button>
           <button
             onClick={() => navigate('/reports')}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
           >
             📑 Reports
           </button>
@@ -965,7 +979,7 @@ const handleCreateSale = async () => {
                   </div>
                   <button
                     onClick={() => setSelectedTable('')}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="touch-manipulation rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
                   >
                     Clear
                   </button>
@@ -1051,7 +1065,7 @@ const handleCreateSale = async () => {
                 </label>
                 <div className="relative">
                   {selectedCustomerId ? (
-                    <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
+                    <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3 border border-blue-200">
                       <div className="flex-1">
                         <span className="font-medium text-blue-900">
                           {customers.find(c => c._id === selectedCustomerId)?.name}
@@ -1070,7 +1084,7 @@ const handleCreateSale = async () => {
                           setSelectedCustomerId('');
                           setSelectedCustomerLoyalty(null);
                         }}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
+                        className="touch-manipulation rounded-lg px-3 py-2 text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
                       >
                         ✕
                       </button>
@@ -1105,7 +1119,7 @@ const handleCreateSale = async () => {
                                     setCustomerSearch('');
                                     setShowCustomerSearch(false);
                                   }}
-                                  className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b last:border-b-0"
+                                  className="w-full text-left px-3 py-3 text-sm hover:bg-slate-50 border-b last:border-b-0"
                                 >
                                   <div className="font-medium text-slate-900">{customer.name}</div>
                                   <div className="text-xs text-slate-500">{customer.phone} • {customer.tier}</div>
@@ -1135,7 +1149,7 @@ const handleCreateSale = async () => {
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
                 >
                   <option value="CASH">Cash</option>
                   <option value="CARD">Card</option>
@@ -1153,7 +1167,7 @@ const handleCreateSale = async () => {
                   <select
                     value={discountType}
                     onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    className="w-1/2 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                    className="w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
                   >
                     <option value="">No Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
@@ -1166,7 +1180,7 @@ const handleCreateSale = async () => {
                       value={discountValue}
                       onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
                       placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      className="w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
                     />
                   )}
                 </div>
@@ -1178,7 +1192,7 @@ const handleCreateSale = async () => {
                   Coupon Code
                 </label>
                 {couponValidation?.success ? (
-                  <div className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+                  <div className="flex items-center justify-between bg-green-50 rounded-xl px-4 py-3 border border-green-200">
                     <div>
                       <span className="font-medium text-green-800">{couponCode}</span>
                       <span className="text-xs text-green-600 ml-2">
@@ -1189,7 +1203,7 @@ const handleCreateSale = async () => {
                     </div>
                     <button
                       onClick={handleClearCoupon}
-                      className="text-green-600 hover:text-green-800 text-sm"
+                      className="touch-manipulation rounded-lg px-3 py-2 text-green-700 hover:bg-green-100 active:scale-[0.99]"
                     >
                       ✕
                     </button>
@@ -1204,7 +1218,7 @@ const handleCreateSale = async () => {
                         setCouponValidation(null);
                       }}
                       placeholder="Enter coupon code"
-                      className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+                      className={`flex-1 rounded-xl border px-4 py-3 text-base ${
                         couponValidation?.success === false 
                           ? 'border-red-300 bg-red-50' 
                           : 'border-slate-300'
@@ -1213,7 +1227,7 @@ const handleCreateSale = async () => {
                     <button
                       onClick={handleValidateCoupon}
                       disabled={!couponCode.trim() || validatingCoupon}
-                      className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="touch-manipulation px-4 py-3 bg-blue-500 text-white rounded-xl text-base font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {validatingCoupon ? '...' : 'Apply'}
                     </button>
@@ -1251,7 +1265,7 @@ const handleCreateSale = async () => {
                             setPointsToUse(0);
                           }
                         }}
-                        className="w-4 h-4 text-purple-600 rounded"
+                        className="w-5 h-5 text-purple-600 rounded"
                       />
                       <span className="text-sm font-medium text-purple-900">Use Points</span>
                     </label>
@@ -1275,7 +1289,7 @@ const handleCreateSale = async () => {
                           step="10"
                           value={pointsToUse}
                           onChange={(e) => setPointsToUse(Number(e.target.value))}
-                          className="w-full h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                          className="w-full h-3 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                         />
                         <div className="flex justify-between text-xs text-purple-600 mt-1">
                           <span>0</span>
@@ -1291,7 +1305,7 @@ const handleCreateSale = async () => {
                             <button
                               key={percent}
                               onClick={() => setPointsToUse(pointsValue)}
-                              className={`flex-1 px-2 py-1 text-xs rounded ${
+                              className={`flex-1 px-3 py-2 text-sm rounded-lg font-semibold ${
                                 pointsToUse === pointsValue
                                   ? 'bg-purple-600 text-white'
                                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
@@ -1319,10 +1333,19 @@ const handleCreateSale = async () => {
                 <span>{formatMoney(subtotal())}</span>
               </div>
 
-              <div className="flex items-center justify-between text-sm text-slate-600">
-                <span>Tax</span>
-                <span>{formatMoney(taxTotal())}</span>
-              </div>
+              {getServiceCharge() > 0 && (
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>Service Charge</span>
+                  <span>{formatMoney(getServiceCharge())}</span>
+                </div>
+              )}
+
+              {getPackagingCharge() > 0 && (
+                <div className="flex items-center justify-between text-sm text-slate-600">
+                  <span>Packaging Charge</span>
+                  <span>{formatMoney(getPackagingCharge())}</span>
+                </div>
+              )}
 
               {calculateManualDiscount() > 0 && (
                 <div className="flex items-center justify-between text-sm text-green-600">
@@ -1357,7 +1380,7 @@ const handleCreateSale = async () => {
       </main>
 
       {/* Bottom Touch Action Bar */}
-      <div className="shrink-0 border-t border-slate-200 bg-white">
+      <div className="shrink-0 border-t border-slate-200 bg-white sticky bottom-0 z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
         <div className="flex items-stretch gap-2 px-3 py-2">
           {/* Order Type */}
           <div className="flex rounded-xl bg-slate-100 p-1">
@@ -1368,7 +1391,7 @@ const handleCreateSale = async () => {
                   setOrderType(type);
                   if (type !== 'DINE_IN') setSelectedTable('');
                 }}
-                className={`touch-manipulation rounded-lg px-4 py-3 text-sm font-semibold transition active:scale-[0.99] ${
+                className={`touch-manipulation rounded-lg px-5 py-3 text-base font-semibold transition active:scale-[0.99] ${
                   orderType === type
                     ? 'bg-slate-900 text-white'
                     : 'text-slate-700 hover:bg-slate-200'
@@ -1382,11 +1405,11 @@ const handleCreateSale = async () => {
           <button
             onClick={() => setShowTablesModal(true)}
             disabled={orderType !== 'DINE_IN'}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
             Tables
             {orderType === 'DINE_IN' && selectedTable && (
-              <span className="ml-2 text-xs font-medium text-slate-500">
+              <span className="ml-2 text-sm font-medium text-slate-500">
                 #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
               </span>
             )}
@@ -1394,14 +1417,14 @@ const handleCreateSale = async () => {
 
           <button
             onClick={scrollToCustomer}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
           >
             Customers
           </button>
 
           <button
             onClick={scrollToDiscount}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
           >
             Discount
           </button>
@@ -1411,7 +1434,7 @@ const handleCreateSale = async () => {
               clearCart();
               toast.success('Cart cleared');
             }}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
           >
             Clear all
           </button>
@@ -1424,7 +1447,7 @@ const handleCreateSale = async () => {
               (orderType === 'DINE_IN' && !selectedTable) ||
               (orderType === 'DINE_IN' && selectedTable ? addingToTable : creatingSale)
             }
-            className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-8 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+            className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
             {orderType === 'DINE_IN' && selectedTable
               ? (addingToTable ? 'Adding…' : 'Add to Table')
@@ -1604,10 +1627,18 @@ const handleCreateSale = async () => {
                 <span className="text-slate-600">Subtotal</span>
                 <span>{formatMoney(subtotal())}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Tax</span>
-                <span>{formatMoney(taxTotal())}</span>
-              </div>
+              {getServiceCharge() > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Service Charge</span>
+                  <span>{formatMoney(getServiceCharge())}</span>
+                </div>
+              )}
+              {getPackagingCharge() > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Packaging Charge</span>
+                  <span>{formatMoney(getPackagingCharge())}</span>
+                </div>
+              )}
               {calculateDiscount() > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
                   <span>Discount</span>

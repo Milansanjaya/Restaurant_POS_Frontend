@@ -28,6 +28,7 @@ export default function KitchenPage() {
   const [filter, setFilter] = useState<KitchenOrderStatus | 'ALL'>('ALL');
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState<string[]>([]);
 
   // Debug: Log user info on mount
   useEffect(() => {
@@ -70,21 +71,45 @@ export default function KitchenPage() {
     return () => clearInterval(interval);
   }, [loadDashboard]);
 
-  const handleStatusUpdate = async (order: KitchenOrder, newStatus: KitchenOrderStatus) => {
-    try {
-      await kitchenApi.updateStatus(order._id, newStatus);
-      loadDashboard();
-    } catch (err) {
-      console.error('Failed to update order status:', err);
-    }
-  };
-
   const getNextStatus = (currentStatus: KitchenOrderStatus): KitchenOrderStatus | null => {
     const currentIndex = statusFlow.indexOf(currentStatus);
     if (currentIndex < statusFlow.length - 1) {
       return statusFlow[currentIndex + 1];
     }
     return null;
+  };
+
+  const buildKitchenSummary = (orders: KitchenOrder[]): KitchenDashboard['summary'] => {
+    const pendingCount = orders.filter((order) => order.status === 'PENDING').length;
+    const preparingCount = orders.filter((order) => order.status === 'PREPARING').length;
+    const readyCount = orders.filter((order) => order.status === 'READY').length;
+    const totalActive = orders.filter((order) => order.status !== 'SERVED').length;
+    return { pendingCount, preparingCount, readyCount, totalActive };
+  };
+
+  const handleStatusUpdate = async (order: KitchenOrder, newStatus: KitchenOrderStatus) => {
+    try {
+      if (updatingOrderIds.includes(order._id)) {
+        return;
+      }
+      setUpdatingOrderIds((prev) => [...prev, order._id]);
+      const updatedOrder = await kitchenApi.updateStatus(order._id, newStatus);
+      setDashboard((prev) => {
+        if (!prev) return prev;
+        const orders = prev.orders.map((item) =>
+          item._id === order._id
+            ? { ...item, ...updatedOrder, status: newStatus }
+            : item
+        );
+        const summary = buildKitchenSummary(orders);
+        return { ...prev, orders, summary };
+      });
+      loadDashboard();
+    } catch (err) {
+      console.error('Failed to update order status:', err);
+    } finally {
+      setUpdatingOrderIds((prev) => prev.filter((id) => id !== order._id));
+    }
   };
 
   const filteredOrders = dashboard?.orders.filter((order) =>
@@ -192,6 +217,7 @@ export default function KitchenPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredOrders.map((order) => {
                 const nextStatus = getNextStatus(order.status);
+                const isUpdating = updatingOrderIds.includes(order._id);
                 return (
                   <Card
                     key={order._id}
@@ -257,9 +283,12 @@ export default function KitchenPage() {
                       <Button
                         className="w-full"
                         variant={order.status === 'PENDING' ? 'primary' : 'secondary'}
+                        disabled={isUpdating}
                         onClick={() => handleStatusUpdate(order, nextStatus)}
                       >
-                        {order.status === 'PENDING'
+                        {isUpdating
+                          ? 'Updating...'
+                          : order.status === 'PENDING'
                           ? 'Start Preparing'
                           : order.status === 'PREPARING'
                           ? 'Mark Ready'

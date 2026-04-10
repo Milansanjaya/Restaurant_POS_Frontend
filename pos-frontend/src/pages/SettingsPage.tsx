@@ -16,6 +16,8 @@ export default function SettingsPage() {
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
   const [expiryAlertDays, setExpiryAlertDays] = useState(30);
+  const [serviceCharge, setServiceCharge] = useState(0);
+  const [packagingCharge, setPackagingCharge] = useState(0);
 
   const loadConfig = async () => {
     try {
@@ -30,6 +32,8 @@ export default function SettingsPage() {
       setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
       setExpiryAlertDays(data.expiryAlertDays || 30);
+      setServiceCharge(typeof data.serviceCharge === 'number' ? data.serviceCharge : 0);
+      setPackagingCharge(typeof data.packagingCharge === 'number' ? data.packagingCharge : 0);
     } catch (error) {
       console.error('Failed to load config:', error);
       alert('⚠️ Failed to load settings. Please try again.');
@@ -54,6 +58,8 @@ export default function SettingsPage() {
           footer: invoiceFooter,
         },
         expiryAlertDays,
+        serviceCharge,
+        packagingCharge,
       });
       alert('Settings saved successfully');
     } catch (error: any) {
@@ -149,6 +155,27 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
+          </Card>
+
+          {/* Service & Packaging Charges */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Service & Packaging Charges</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Service Charge (Dine-in)"
+                type="number"
+                value={serviceCharge}
+                onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
+                helperText="Applied to dine-in orders only"
+              />
+              <Input
+                label="Packaging Charge (Takeaway/Delivery)"
+                type="number"
+                value={packagingCharge}
+                onChange={(e) => setPackagingCharge(parseFloat(e.target.value) || 0)}
+                helperText="Applied to takeaway and delivery orders"
+              />
+            </div>
           </Card>
 
           {/* Currency Settings */}
