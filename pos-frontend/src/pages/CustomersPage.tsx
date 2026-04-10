@@ -13,6 +13,24 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const normalizePhoneInput = (raw: string) => {
+    const trimmed = String(raw ?? '').trim();
+    const hasPlus = trimmed.startsWith('+');
+    const digits = trimmed.replace(/\D/g, '');
+    return (hasPlus ? '+' : '') + digits;
+  };
+
+  const phoneDigits = (raw: string) => String(raw ?? '').replace(/\D/g, '');
+
+  const isValidYmd = (value: string) => {
+    if (!value) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [y, m, d] = value.split('-').map((n) => Number(n));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  };
+
   const [viewOpen, setViewOpen] = useState(false);
   const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -83,11 +101,44 @@ export default function CustomersPage() {
 
   const handleSave = async () => {
     try {
+      const name = (formData.name || '').trim();
+      const normalizedPhone = normalizePhoneInput(formData.phone || '');
+
+      if (!name || !normalizedPhone) {
+        alert('Name and phone are required');
+        return;
+      }
+
+      const digits = phoneDigits(normalizedPhone);
+      if (digits.length < 10 || digits.length > 15) {
+        alert('Phone number must be 10 to 15 digits');
+        return;
+      }
+
+      if (!isValidYmd(formData.dob || '')) {
+        alert('Date of Birth must be in YYYY-MM-DD format');
+        return;
+      }
+
+      if (!isValidYmd(formData.anniversary || '')) {
+        alert('Anniversary must be in YYYY-MM-DD format');
+        return;
+      }
+
       setSaving(true);
+      const payload: CustomerFormData = {
+        ...formData,
+        name,
+        phone: normalizedPhone,
+      };
+
+      if (!payload.dob) delete payload.dob;
+      if (!payload.anniversary) delete payload.anniversary;
+
       if (editingCustomer) {
-        await customersApi.update(editingCustomer._id, formData);
+        await customersApi.update(editingCustomer._id, payload);
       } else {
-        await customersApi.create(formData);
+        await customersApi.create(payload);
       }
       setModalOpen(false);
       loadCustomers();
@@ -215,7 +266,9 @@ export default function CustomersPage() {
           <Input
             label="Phone"
             value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, phone: normalizePhoneInput(e.target.value) })}
+            inputMode="tel"
+            helperText="Digits only (10–15). Use + for country code if needed."
             required
           />
           <Input
@@ -232,15 +285,19 @@ export default function CustomersPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Date of Birth"
-              type="date"
+              type="text"
               value={formData.dob || ''}
               onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+              placeholder="YYYY-MM-DD"
+              helperText="Type as YYYY-MM-DD"
             />
             <Input
               label="Anniversary"
-              type="date"
+              type="text"
               value={formData.anniversary || ''}
               onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
+              placeholder="YYYY-MM-DD"
+              helperText="Type as YYYY-MM-DD"
             />
           </div>
           <div>

@@ -1414,53 +1414,53 @@ const handleCreateSale = async () => {
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Totals */}
-            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+          {/* Totals (kept visible while cart content scrolls) */}
+          <div className="shrink-0 mt-4 space-y-2 border-t border-slate-200 pt-4">
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <span>Subtotal</span>
+              <span>{formatMoney(subtotal())}</span>
+            </div>
+
+            {getServiceCharge() > 0 && (
               <div className="flex items-center justify-between text-sm text-slate-600">
-                <span>Subtotal</span>
-                <span>{formatMoney(subtotal())}</span>
+                <span>Service Charge</span>
+                <span>{formatMoney(getServiceCharge())}</span>
               </div>
+            )}
 
-              {getServiceCharge() > 0 && (
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>Service Charge</span>
-                  <span>{formatMoney(getServiceCharge())}</span>
-                </div>
-              )}
-
-              {getPackagingCharge() > 0 && (
-                <div className="flex items-center justify-between text-sm text-slate-600">
-                  <span>Packaging Charge</span>
-                  <span>{formatMoney(getPackagingCharge())}</span>
-                </div>
-              )}
-
-              {calculateManualDiscount() > 0 && (
-                <div className="flex items-center justify-between text-sm text-green-600">
-                  <span>Manual Discount</span>
-                  <span>- {formatMoney(calculateManualDiscount())}</span>
-                </div>
-              )}
-
-              {calculateCouponDiscount() > 0 && (
-                <div className="flex items-center justify-between text-sm text-green-600">
-                  <span>🎫 Coupon Discount</span>
-                  <span>- {formatMoney(calculateCouponDiscount())}</span>
-                </div>
-              )}
-
-              {calculatePointsDiscount() > 0 && (
-                <div className="flex items-center justify-between text-sm text-purple-600">
-                  <span>🎁 Loyalty Points ({pointsToUse} pts)</span>
-                  <span>- {formatMoney(calculatePointsDiscount())}</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-base font-semibold text-slate-900 pt-2 border-t">
-                <span>Total</span>
-                <span>{formatMoney(finalTotal())}</span>
+            {getPackagingCharge() > 0 && (
+              <div className="flex items-center justify-between text-sm text-slate-600">
+                <span>Packaging Charge</span>
+                <span>{formatMoney(getPackagingCharge())}</span>
               </div>
+            )}
+
+            {calculateManualDiscount() > 0 && (
+              <div className="flex items-center justify-between text-sm text-green-600">
+                <span>Manual Discount</span>
+                <span>- {formatMoney(calculateManualDiscount())}</span>
+              </div>
+            )}
+
+            {calculateCouponDiscount() > 0 && (
+              <div className="flex items-center justify-between text-sm text-green-600">
+                <span>🎫 Coupon Discount</span>
+                <span>- {formatMoney(calculateCouponDiscount())}</span>
+              </div>
+            )}
+
+            {calculatePointsDiscount() > 0 && (
+              <div className="flex items-center justify-between text-sm text-purple-600">
+                <span>🎁 Loyalty Points ({pointsToUse} pts)</span>
+                <span>- {formatMoney(calculatePointsDiscount())}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-base font-semibold text-slate-900 pt-2 border-t">
+              <span>Total</span>
+              <span>{formatMoney(finalTotal())}</span>
             </div>
           </div>
 

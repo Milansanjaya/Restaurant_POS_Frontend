@@ -36,6 +36,20 @@ export default function CategoriesPage() {
     loadCategories();
   }, []);
 
+  const normalizeCategoryName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+  const flattenCategories = (cats: Category[]): Category[] => {
+    const result: Category[] = [];
+    const walk = (arr: Category[]) => {
+      for (const c of arr) {
+        result.push(c);
+        if (c.children?.length) walk(c.children);
+      }
+    };
+    if (Array.isArray(cats)) walk(cats);
+    return result;
+  };
+
   const openCreateModal = (parentId?: string) => {
     setEditingCategory(null);
     setFormData({ name: '', description: '', parentId: parentId || '', icon: '', displayOrder: 0 });
@@ -56,6 +70,25 @@ export default function CategoriesPage() {
 
   const handleSave = async () => {
     try {
+      const normalizedName = normalizeCategoryName(formData.name || '');
+      if (!normalizedName) {
+        toast.error('Category name is required');
+        return;
+      }
+
+      const parentKey = (formData.parentId || '').trim();
+      const all = flattenCategories(categories);
+      const duplicate = all.find((c) => {
+        if (editingCategory && c._id === editingCategory._id) return false;
+        const sameParent = (c.parentId || '').trim() === parentKey;
+        return sameParent && normalizeCategoryName(c.name) === normalizedName;
+      });
+
+      if (duplicate) {
+        toast.error('A category with this name already exists');
+        return;
+      }
+
       setSaving(true);
       const data = { ...formData };
       if (!data.parentId) delete data.parentId;

@@ -113,6 +113,225 @@ export default function ReportsPage() {
     loadProfitReport();
   }, [profitFrom, profitTo, profitOrderType]);
 
+  const escapeCsv = (val: unknown) => {
+    const s = String(val ?? '');
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const downloadCsv = (filename: string, rows: string[][]) => {
+    const csv = rows.map((r) => r.map(escapeCsv).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const escapeHtml = (text: unknown) =>
+    String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const openPrintWindow = (title: string, htmlBody: string) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Pop-up blocked. Please allow pop-ups to export PDF.');
+      return;
+    }
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          h1 { text-align: center; margin: 0; font-size: 20px; }
+          .subtitle { text-align: center; margin-top: 6px; color: #64748b; font-size: 12px; }
+          .section { margin-top: 16px; }
+          .section h2 { margin: 0 0 8px 0; font-size: 14px; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 12px; }
+          th { background: #f1f5f9; color: #334155; }
+          td.num, th.num { text-align: right; }
+          .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+          .box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #f8fafc; font-size: 12px; }
+          .box strong { color: #0f172a; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        ${htmlBody}
+        <script>
+          window.addEventListener('load', () => { window.print(); });
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
+  const exportDailyCsv = () => {
+    if (!dailyReport) {
+      alert('No daily report data to export');
+      return;
+    }
+
+    const rows: string[][] = [
+      ['Section', 'Name', 'Value'],
+      ['Daily Summary', 'Date', dailyReport.date || selectedDate],
+      ['Daily Summary', 'Total Orders', String(dailyReport.totalOrders ?? 0)],
+      ['Daily Summary', 'Total Sales', String(dailyReport.totalSales ?? 0)],
+      ['Daily Summary', 'Total Tax', String(dailyReport.totalTax ?? 0)],
+      ['Daily Summary', 'Avg Order Value', String(dailyReport.averageOrderValue ?? 0)],
+    ];
+
+    topProducts.slice(0, 50).forEach((p) => {
+      rows.push(['Top Products', p.name, String(p.qty ?? 0)]);
+    });
+
+    Object.entries(paymentSummary || {}).forEach(([method, amount]) => {
+      rows.push(['Payment Methods', method, String(amount ?? 0)]);
+    });
+
+    lowStock.slice(0, 100).forEach((inv) => {
+      const product = typeof inv.product === 'object' ? inv.product : null;
+      rows.push(['Low Stock', product?.name || 'Unknown', String(inv.stockQuantity ?? 0)]);
+    });
+
+    downloadCsv(`daily_report_${selectedDate}.csv`, rows);
+  };
+
+  const exportDailyPdf = () => {
+    if (!dailyReport) {
+      alert('No daily report data to export');
+      return;
+    }
+
+    const htmlBody = `
+      <h1>Daily Report</h1>
+      <div class="subtitle">Date: ${escapeHtml(selectedDate)}</div>
+      <div class="grid">
+        <div class="box"><strong>Total Orders:</strong> ${escapeHtml(dailyReport.totalOrders ?? 0)}</div>
+        <div class="box"><strong>Total Sales:</strong> ${escapeHtml(formatMoney(dailyReport.totalSales))}</div>
+        <div class="box"><strong>Total Tax:</strong> ${escapeHtml(formatMoney(dailyReport.totalTax))}</div>
+        <div class="box"><strong>Avg Order Value:</strong> ${escapeHtml(formatMoney(dailyReport.averageOrderValue))}</div>
+      </div>
+
+      <div class="section">
+        <h2>Top Selling Products</h2>
+        <table>
+          <thead><tr><th>Product</th><th class="num">Qty</th></tr></thead>
+          <tbody>
+            ${(topProducts || []).slice(0, 25).map((p) => `
+              <tr><td>${escapeHtml(p.name)}</td><td class="num">${escapeHtml(p.qty ?? 0)}</td></tr>
+            `).join('')}
+            ${(topProducts || []).length === 0 ? '<tr><td colspan="2">No data</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>Payment Methods</h2>
+        <table>
+          <thead><tr><th>Method</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            ${Object.entries(paymentSummary || {}).map(([method, amount]) => `
+              <tr><td>${escapeHtml(method)}</td><td class="num">${escapeHtml(formatMoney(amount))}</td></tr>
+            `).join('')}
+            ${Object.keys(paymentSummary || {}).length === 0 ? '<tr><td colspan="2">No data</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>Low Stock</h2>
+        <table>
+          <thead><tr><th>Item</th><th class="num">Qty Left</th></tr></thead>
+          <tbody>
+            ${(lowStock || []).slice(0, 25).map((inv) => {
+              const product = typeof inv.product === 'object' ? inv.product : null;
+              return `\n<tr><td>${escapeHtml(product?.name || 'Unknown')}</td><td class="num">${escapeHtml(inv.stockQuantity ?? 0)}</td></tr>`;
+            }).join('')}
+            ${(lowStock || []).length === 0 ? '<tr><td colspan="2">No data</td></tr>' : ''}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    openPrintWindow(`Daily Report - ${selectedDate}`, htmlBody);
+  };
+
+  const exportTopProductsCsv = () => {
+    if (!topProducts || topProducts.length === 0) {
+      alert('No top products data to export');
+      return;
+    }
+    downloadCsv(`top_products_${selectedDate}.csv`, [
+      ['Product', 'Qty'],
+      ...topProducts.map((p) => [p.name, String(p.qty ?? 0)]),
+    ]);
+  };
+
+  const exportTopProductsPdf = () => {
+    if (!topProducts || topProducts.length === 0) {
+      alert('No top products data to export');
+      return;
+    }
+
+    const htmlBody = `
+      <h1>Top Selling Products</h1>
+      <div class="subtitle">As of ${escapeHtml(selectedDate)}</div>
+      <table>
+        <thead><tr><th>Product</th><th class="num">Qty</th></tr></thead>
+        <tbody>
+          ${topProducts.map((p) => `
+            <tr><td>${escapeHtml(p.name)}</td><td class="num">${escapeHtml(p.qty ?? 0)}</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    openPrintWindow(`Top Products - ${selectedDate}`, htmlBody);
+  };
+
+  const exportPaymentMethodsCsv = () => {
+    if (!paymentSummary || Object.keys(paymentSummary).length === 0) {
+      alert('No payment data to export');
+      return;
+    }
+    downloadCsv(`payment_methods_${selectedDate}.csv`, [
+      ['Method', 'Amount'],
+      ...Object.entries(paymentSummary).map(([method, amount]) => [method, String(amount ?? 0)]),
+    ]);
+  };
+
+  const exportPaymentMethodsPdf = () => {
+    if (!paymentSummary || Object.keys(paymentSummary).length === 0) {
+      alert('No payment data to export');
+      return;
+    }
+
+    const htmlBody = `
+      <h1>Payment Methods</h1>
+      <div class="subtitle">As of ${escapeHtml(selectedDate)}</div>
+      <table>
+        <thead><tr><th>Method</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+          ${Object.entries(paymentSummary).map(([method, amount]) => `
+            <tr><td>${escapeHtml(method)}</td><td class="num">${escapeHtml(formatMoney(amount))}</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    openPrintWindow(`Payment Methods - ${selectedDate}`, htmlBody);
+  };
+
   const exportProfitCsv = () => {
     const days = profitReport?.days || [];
     if (days.length === 0) {
@@ -267,12 +486,12 @@ export default function ReportsPage() {
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             <Button 
-              onClick={() => alert('Install jspdf to enable PDF export')}
+              onClick={exportDailyPdf}
             >
               📥 Export PDF
             </Button>
             <Button 
-              onClick={() => alert('Export feature requires jspdf package')}
+              onClick={exportDailyCsv}
               variant="outline"
             >
               📊 Export CSV
@@ -448,14 +667,14 @@ export default function ReportsPage() {
               </h3>
               <div className="flex gap-2">
                 <button
-                  onClick={() => alert('Install jspdf for PDF export')}
+                  onClick={exportTopProductsPdf}
                   className="text-sm text-blue-600 hover:text-blue-800"
                   title="Export to PDF"
                 >
                   📄 PDF
                 </button>
                 <button
-                  onClick={() => alert('Install jspdf for CSV export')}
+                  onClick={exportTopProductsCsv}
                   className="text-sm text-green-600 hover:text-green-800"
                   title="Export to CSV"
                 >
@@ -480,14 +699,14 @@ export default function ReportsPage() {
               </h3>
               <div className="flex gap-2">
                 <button
-                  onClick={() => alert('Install jspdf for PDF export')}
+                  onClick={exportPaymentMethodsPdf}
                   className="text-sm text-blue-600 hover:text-blue-800"
                   title="Export to PDF"
                 >
                   📄 PDF
                 </button>
                 <button
-                  onClick={() => alert('Install jspdf for CSV export')}
+                  onClick={exportPaymentMethodsCsv}
                   className="text-sm text-green-600 hover:text-green-800"
                   title="Export to CSV"
                 >
