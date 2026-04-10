@@ -184,7 +184,8 @@ const SalesPage: React.FC = () => {
 
         <div class="totals">
           <div class="total-row"><span>Subtotal:</span> <span>${formatMoney(sale.subtotal)}</span></div>
-          <div class="total-row"><span>Tax:</span> <span>${formatMoney(sale.taxTotal)}</span></div>
+          <div class="total-row"><span>Service Charge:</span> <span>${formatMoney((sale as any).serviceCharge || 0)}</span></div>
+          <div class="total-row"><span>Packaging Charge:</span> <span>${formatMoney((sale as any).packagingCharge || 0)}</span></div>
           ${sale.discount > 0 ? `<div class="total-row"><span>Discount:</span> <span>- ${formatMoney(sale.discount)}</span></div>` : ''}
           <div class="total-row grand-total"><span>Grand Total:</span> <span>${formatMoney(sale.grandTotal)}</span></div>
           <div class="total-row"><span>Paid:</span> <span>${formatMoney(sale.paidAmount)}</span></div>
@@ -513,8 +514,12 @@ const SalesPage: React.FC = () => {
                   <span>{formatMoney(selectedSale.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tax:</span>
-                  <span>{formatMoney(selectedSale.taxTotal)}</span>
+                  <span>Service Charge:</span>
+                  <span>{formatMoney(selectedSale.serviceCharge || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Packaging Charge:</span>
+                  <span>{formatMoney(selectedSale.packagingCharge || 0)}</span>
                 </div>
                 {selectedSale.discount > 0 && (
                   <div className="flex justify-between text-green-600">

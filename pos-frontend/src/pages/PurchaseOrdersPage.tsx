@@ -94,6 +94,134 @@ export default function PurchaseOrdersPage() {
     }
   };
 
+  const printPurchaseOrder = (po: PurchaseOrder) => {
+    const supplierName = (po.supplier_id && typeof po.supplier_id === 'object') ? po.supplier_id.name : '-';
+    const createdAt = po.createdAt ? new Date(po.createdAt).toLocaleString() : '-';
+    const deliveryDate = po.deliveryDate ? new Date(po.deliveryDate).toLocaleDateString() : '-';
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Purchase Order - ${po.poNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          .header { text-align: center; margin-bottom: 24px; }
+          .header h1 { margin: 0; font-size: 20px; }
+          .header h2 { margin: 6px 0 0; font-size: 16px; font-weight: 600; color: #334155; }
+          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+          .meta .row { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; }
+          .label { font-size: 12px; color: #64748b; }
+          .value { margin-top: 4px; font-size: 14px; font-weight: 600; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 13px; }
+          th { background: #f8fafc; font-weight: 700; color: #334155; }
+          td.num, th.num { text-align: right; }
+          .totals { margin-top: 12px; display: flex; justify-content: flex-end; gap: 12px; font-size: 14px; }
+          .notes { margin-top: 16px; font-size: 13px; }
+          .notes .value { font-weight: 400; white-space: pre-wrap; }
+          .footer { margin-top: 28px; border-top: 2px solid #0f172a; padding-top: 16px; display: flex; justify-content: space-between; gap: 24px; }
+          .sign { width: 45%; }
+          .line { margin-top: 36px; border-top: 1px solid #0f172a; }
+          .sign-label { margin-top: 6px; font-size: 12px; color: #475569; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>PURCHASE ORDER</h1>
+          <h2>${po.poNumber}</h2>
+        </div>
+
+        <div class="meta">
+          <div class="row">
+            <div class="label">Supplier</div>
+            <div class="value">${supplierName}</div>
+          </div>
+          <div class="row">
+            <div class="label">Status</div>
+            <div class="value">${po.status}</div>
+          </div>
+          <div class="row">
+            <div class="label">Created</div>
+            <div class="value">${createdAt}</div>
+          </div>
+          <div class="row">
+            <div class="label">Expected Delivery</div>
+            <div class="value">${deliveryDate}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th class="num">Qty</th>
+              <th class="num">Unit Price</th>
+              <th class="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(po.items || []).map(it => `
+              <tr>
+                <td>${it.productName}</td>
+                <td class="num">${it.quantity}</td>
+                <td class="num">${formatMoney(it.unitPrice)}</td>
+                <td class="num">${formatMoney(it.totalPrice)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="label" style="align-self:center">Grand Total</div>
+          <div class="value">${formatMoney(po.totalAmount)}</div>
+        </div>
+
+        ${po.notes ? `
+          <div class="notes">
+            <div class="label">Notes</div>
+            <div class="value">${String(po.notes).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+          </div>
+        ` : ''}
+
+        <div class="footer">
+          <div class="sign">
+            <div class="line"></div>
+            <div class="sign-label">Prepared By</div>
+          </div>
+          <div class="sign">
+            <div class="line"></div>
+            <div class="sign-label">Approved By</div>
+          </div>
+        </div>
+
+        <script>
+          window.addEventListener('load', () => { window.print(); });
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Pop-up blocked. Please allow pop-ups to print.');
+      return;
+    }
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
+  const handlePrintPO = async (id: string) => {
+    try {
+      const po = await purchaseOrdersApi.getById(id);
+      printPurchaseOrder(po);
+    } catch (error) {
+      console.error('Failed to load PO for print:', error);
+      alert('Failed to print purchase order');
+    }
+  };
+
   const addItem = () => {
     if (!newItem.product_id || newItem.quantity <= 0) return;
     const product = products.find((p) => p._id === newItem.product_id);
@@ -194,6 +322,9 @@ export default function PurchaseOrdersPage() {
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" onClick={() => openViewModal(item._id)}>
             View
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handlePrintPO(item._id)}>
+            🖨️ Print
           </Button>
           {(item.status === 'DRAFT' || item.status === 'PENDING') && (
             <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
@@ -359,6 +490,16 @@ export default function PurchaseOrdersPage() {
         onClose={() => setViewOpen(false)}
         title={viewOrder ? `Purchase Order ${viewOrder.poNumber}` : "Purchase Order"}
         size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setViewOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => viewOrder && printPurchaseOrder(viewOrder)} disabled={!viewOrder || viewLoading}>
+              🖨️ Print
+            </Button>
+          </>
+        }
       >
         {viewLoading && (
           <div className="p-4 text-sm text-slate-600">Loading...</div>

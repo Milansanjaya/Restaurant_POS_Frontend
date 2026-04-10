@@ -23,6 +23,9 @@ type Product = {
   taxRate?: number;
   lowStock?: boolean;
   isAvailable?: boolean;
+  trackStock?: boolean;
+  stockQuantity?: number;
+  outOfStock?: boolean;
 };
 
 type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'WALLET' | 'SPLIT';
@@ -72,6 +75,7 @@ export default function PosPage() {
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [selectedCustomerLoyalty, setSelectedCustomerLoyalty] = useState<number | null>(null);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [showCustomerDetailsModal, setShowCustomerDetailsModal] = useState(false);
   const [newCustomerData, setNewCustomerData] = useState({ name: "", phone: "", email: "" });
   
   // Loyalty Points Payment
@@ -104,17 +108,10 @@ export default function PosPage() {
 
   // Touch/quick actions
   const [showTablesModal, setShowTablesModal] = useState(false);
-  const customerSectionRef = useRef<HTMLDivElement | null>(null);
-  const discountSectionRef = useRef<HTMLDivElement | null>(null);
-  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const cartSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const scrollToCustomer = () => {
-    customerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTimeout(() => customerSearchInputRef.current?.focus(), 150);
-  };
-
-  const scrollToDiscount = () => {
-    discountSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const scrollToCart = () => {
+    cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const openQuickView = (title: string, path: string) => {
@@ -300,6 +297,9 @@ export default function PosPage() {
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.phone.includes(customerSearch)
   );
+  const selectedCustomer = selectedCustomerId
+    ? customers.find(c => c._id === selectedCustomerId)
+    : undefined;
 
   // Validate coupon code
   const handleValidateCoupon = async () => {
@@ -346,8 +346,27 @@ export default function PosPage() {
         const saleId = typeof table.currentSale === 'string' ? table.currentSale : table.currentSale._id;
         const sale = await getSaleById(saleId);
         if (sale && sale.items && sale.items.length > 0) {
+          clearCart();
+          sale.items.forEach((item) => {
+            const product =
+              typeof item.product === 'object' && item.product ? item.product : null;
+            const productId = product ? product._id : String(item.product);
+            const productName = product?.name || 'Item';
+            for (let i = 0; i < item.quantity; i++) {
+              addItem({
+                _id: productId,
+                name: productName,
+                price: item.price,
+                taxRate: item.taxRate || 0
+              });
+            }
+          });
+
+          setOrderType('DINE_IN');
+          setSelectedTable(table._id);
           setSelectedTableForPayment(table);
-          setShowPaymentModal(true);
+          setShowPaymentModal(false);
+          scrollToCart();
           return;
         }
       } catch (error) {
@@ -376,8 +395,11 @@ export default function PosPage() {
       }
     });
 
+    setOrderType('DINE_IN');
+    setSelectedTable(table._id);
     setSelectedTableForPayment(table);
-    setShowPaymentModal(true);
+    setShowPaymentModal(false);
+    scrollToCart();
   };
 
   // Handle payment for table
@@ -542,6 +564,10 @@ export default function PosPage() {
     const baseTotal = grandTotal() + getChargesTotal();
     return Math.max(0, baseTotal - calculateDiscount());
   };
+  const isPayingTable = Boolean(selectedTableForPayment);
+  const isProcessing = isPayingTable
+    ? processingPayment
+    : (orderType === 'DINE_IN' && selectedTable ? addingToTable : creatingSale);
 
   const getCategoryName = (product: Product) => {
     if (!product.category) return "General";
@@ -559,15 +585,7 @@ export default function PosPage() {
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !selectedCategory || getCategoryId(product) === selectedCategory;
-    const isAvailable = product.isAvailable !== false; // Default to available if undefined
-    return matchesSearch && matchesCategory && isAvailable;
-  });
-
-  // Products marked as unavailable (for display)
-  const unavailableProducts = products.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !selectedCategory || getCategoryId(product) === selectedCategory;
-    return matchesSearch && matchesCategory && product.isAvailable === false;
+    return matchesSearch && matchesCategory;
   });
 
   const flattenCategories = (cats: Category[]): Category[] => {
@@ -751,7 +769,7 @@ const handleCreateSale = async () => {
       
       {/* Shift Warning Banner */}
       {!currentShift && !loading && (
-        <div className="bg-yellow-500 text-white px-6 py-2 flex items-center justify-between">
+        <div className="bg-yellow-500 text-white px-4 py-2 sm:px-6 flex items-center justify-between">
           <span className="font-medium">⚠️ No shift open. You need to open a shift to create sales.</span>
           <button
             onClick={() => setShowShiftModal(true)}
@@ -764,12 +782,12 @@ const handleCreateSale = async () => {
 
       {/* Current Shift Info */}
       {currentShift && (
-        <div className="bg-green-500 text-white px-6 py-1 text-sm">
+        <div className="bg-green-500 text-white px-4 py-1 sm:px-6 text-sm">
           ✓ Shift Open | Opening Cash: {formatMoney(currentShift.openingCash)}
         </div>
       )}
 
-      <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
+      <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">POS Dashboard</h1>
           <p className="text-sm text-slate-500">Restaurant Point of Sale</p>
@@ -777,14 +795,19 @@ const handleCreateSale = async () => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => openQuickView("Dashboard", "/dashboard")}
-            className="touch-manipulation rounded-xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              navigate("/dashboard");
+            }}
+            className="touch-manipulation rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99] sm:px-5 sm:py-3"
           >
             Dashboard
           </button>
           <button
             onClick={logout}
-            className="touch-manipulation rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            className="touch-manipulation rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99] sm:px-5 sm:py-3"
           >
             Logout
           </button>
@@ -792,43 +815,68 @@ const handleCreateSale = async () => {
       </header>
 
       {/* Touch Quick Navigation */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-3">
-        <div className="flex flex-wrap gap-3">
+      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+        <div className="flex gap-3 overflow-x-auto pb-1">
           <button
-            onClick={() => openQuickView("Sale Summary", "/dashboard")}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickView("Sale Summary", "/dashboard");
+            }}
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
           >
             📊 Sale Summary
           </button>
           <button
-            onClick={() => openQuickView("Sales", "/sales")}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickView("Sales", "/sales");
+            }}
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
           >
             🧾 Sales
           </button>
           <button
-            onClick={() => openQuickView("Stocks", "/inventory")}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickView("Stocks", "/inventory");
+            }}
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
           >
             📦 Stocks
           </button>
           <button
-            onClick={() => openQuickView("Returns", "/returns")}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickView("Returns", "/returns");
+            }}
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
           >
             ↩️ Returns
           </button>
           <button
-            onClick={() => openQuickView("Reports", "/reports")}
-            className="touch-manipulation rounded-2xl bg-slate-900 px-5 py-4 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickView("Reports", "/reports");
+            }}
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
           >
             📑 Reports
           </button>
         </div>
       </div>
 
-      <main className="flex flex-1 min-h-0">
-        <aside className="w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto">
+      <main className="flex flex-1 min-h-0 flex-col lg:flex-row">
+        <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
           </h2>
@@ -861,13 +909,43 @@ const handleCreateSale = async () => {
           </div>
         </aside>
 
-        <section className="flex-1 overflow-auto p-6">
+        <section className="flex-1 p-4 sm:p-6 overflow-visible lg:overflow-auto">
+          {/* Mobile/Tablet Category scroller */}
+          <div className="mb-4 lg:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <button
+                onClick={() => setSelectedCategory("")}
+                className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition active:scale-[0.99] ${
+                  selectedCategory === ""
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                All
+              </button>
+              {flattenCategories(categories).map((cat) => (
+                <button
+                  key={cat._id}
+                  onClick={() => setSelectedCategory(cat._id)}
+                  className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition active:scale-[0.99] ${
+                    selectedCategory === cat._id
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                  }`}
+                >
+                  {cat.icon && <span className="mr-2">{cat.icon}</span>}
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="mb-6">
             <input
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full max-w-md rounded-2xl border border-slate-300 bg-white px-4 py-4 text-base outline-none focus:border-slate-500"
+              className="w-full max-w-none sm:max-w-md rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-slate-500 sm:py-4"
             />
           </div>
 
@@ -877,97 +955,90 @@ const handleCreateSale = async () => {
             <p className="text-slate-500">Loading products...</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product._id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() =>
-                    addItem({
-                      _id: product._id,
-                      name: product.name,
-                      price: product.price,
-                      taxRate: product.taxRate || 0
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
+              {filteredProducts.map((product) => {
+                const isOutOfStock =
+                  product.outOfStock === true ||
+                  (product.trackStock === true &&
+                    typeof product.stockQuantity === 'number' &&
+                    product.stockQuantity <= 0);
+                const isUnavailable = product.isAvailable === false || isOutOfStock;
+                return (
+                  <div
+                    key={product._id}
+                    role={isUnavailable ? undefined : "button"}
+                    tabIndex={isUnavailable ? -1 : 0}
+                    aria-disabled={isUnavailable}
+                    onClick={() => {
+                      if (isUnavailable) return;
                       addItem({
                         _id: product._id,
                         name: product.name,
                         price: product.price,
                         taxRate: product.taxRate || 0
                       });
-                    }
-                  }}
-                  className="touch-manipulation cursor-pointer select-none rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition active:scale-[0.99] active:bg-slate-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
-                >
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-800 leading-tight">
-                      {product.name}
-                    </h3>
+                    }}
+                    onKeyDown={(e) => {
+                      if (isUnavailable) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        addItem({
+                          _id: product._id,
+                          name: product.name,
+                          price: product.price,
+                          taxRate: product.taxRate || 0
+                        });
+                      }
+                    }}
+                    className={`touch-manipulation select-none rounded-2xl border p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
+                      isUnavailable
+                        ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60'
+                        : 'cursor-pointer border-slate-200 bg-white hover:shadow-md active:scale-[0.99] active:bg-slate-50'
+                    }`}
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-slate-800 leading-tight">
+                        {product.name}
+                      </h3>
 
-                    {product.lowStock ? (
-                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
-                        Low
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <p className="mb-2 text-xs text-slate-500 truncate">
-                    {getCategoryName(product)}
-                  </p>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-bold text-slate-900">
-                      {formatMoney(product.price)}
-                    </span>
-
-                    <span className="shrink-0 h-10 w-10 rounded-xl bg-slate-900 text-white flex items-center justify-center text-lg font-bold">
-                      +
-                    </span>
-                  </div>
-                </div>
-              ))}
-
-              {/* Unavailable Products Section */}
-              {unavailableProducts.length > 0 && (
-                <>
-                  <div className="col-span-full mt-6 mb-2">
-                    <h3 className="text-sm font-medium text-slate-500">Currently Unavailable</h3>
-                  </div>
-                  {unavailableProducts.map((product) => (
-                    <div
-                      key={product._id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 opacity-60"
-                    >
-                      <div className="mb-2 flex items-start justify-between">
-                        <h3 className="text-base font-semibold text-slate-500">
-                          {product.name}
-                        </h3>
-                        <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-600">
+                      {isUnavailable ? (
+                        <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
                           Out of Stock
                         </span>
-                      </div>
-                      <p className="mb-4 text-sm text-slate-400">
-                        {getCategoryName(product)}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-bold text-slate-400">
-                          {formatMoney(product.price)}
+                      ) : product.lowStock ? (
+                        <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
+                          Low
                         </span>
-                        <span className="text-sm text-slate-400">Unavailable</span>
-                      </div>
+                      ) : null}
                     </div>
-                  ))}
-                </>
-              )}
+
+                    <p className="mb-2 text-xs text-slate-500 truncate">
+                      {getCategoryName(product)}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-bold ${isUnavailable ? 'text-slate-400' : 'text-slate-900'}`}>
+                        {formatMoney(product.price)}
+                      </span>
+
+                      <span
+                        className={`shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-lg font-bold ${
+                          isUnavailable ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'
+                        }`}
+                      >
+                        {isUnavailable ? '—' : '+'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
 
-        <aside className="w-96 h-full border-l border-slate-200 bg-white p-6 flex flex-col min-h-0">
+        <aside
+          ref={cartSectionRef}
+          className="w-full border-t border-slate-200 bg-white p-4 flex flex-col lg:w-96 lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 sm:p-6 min-h-0"
+        >
           <div className="mb-4 shrink-0">
             <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
             {orderType === 'DINE_IN' && selectedTable && (
@@ -985,7 +1056,11 @@ const handleCreateSale = async () => {
                     </span>
                   </div>
                   <button
-                    onClick={() => setSelectedTable('')}
+                    onClick={() => {
+                      setSelectedTable('');
+                      setSelectedTableForPayment(null);
+                      setShowPaymentModal(false);
+                    }}
                     className="touch-manipulation rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
                   >
                     Clear
@@ -995,7 +1070,7 @@ const handleCreateSale = async () => {
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto pr-1">
+          <div className="flex-1 min-h-0 overflow-visible lg:overflow-auto pr-1">
             {items.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
                 No items in cart yet.
@@ -1066,41 +1141,48 @@ const handleCreateSale = async () => {
             {/* Payment & Discount Section */}
             <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
               {/* Customer Selection */}
-              <div ref={customerSectionRef}>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
                   Customer (Optional)
                 </label>
                 <div className="relative">
                   {selectedCustomerId ? (
-                    <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3 border border-blue-200">
+                    <div className="flex items-center justify-between bg-blue-50 rounded-2xl px-5 py-4 border border-blue-200">
                       <div className="flex-1">
-                        <span className="font-medium text-blue-900">
-                          {customers.find(c => c._id === selectedCustomerId)?.name}
+                        <span className="text-base font-semibold text-blue-900">
+                          {selectedCustomer?.name}
                         </span>
-                        <span className="text-xs text-blue-600 ml-2">
-                          ({customers.find(c => c._id === selectedCustomerId)?.phone})
+                        <span className="text-sm text-blue-600 ml-2">
+                          ({selectedCustomer?.phone})
                         </span>
                         {selectedCustomerLoyalty !== null && (
-                          <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                          <span className="ml-2 text-sm bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
                             🎁 {selectedCustomerLoyalty} pts
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedCustomerId('');
-                          setSelectedCustomerLoyalty(null);
-                        }}
-                        className="touch-manipulation rounded-lg px-3 py-2 text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
-                      >
-                        ✕
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setShowCustomerDetailsModal(true)}
+                          className="touch-manipulation rounded-xl px-4 py-3 text-base font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
+                        >
+                          Details
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedCustomerId('');
+                            setSelectedCustomerLoyalty(null);
+                          }}
+                          className="touch-manipulation rounded-xl px-4 py-3 text-base text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <input
-                          ref={customerSearchInputRef}
                           type="text"
                           value={customerSearch}
                           onChange={(e) => {
@@ -1109,12 +1191,12 @@ const handleCreateSale = async () => {
                           }}
                           onFocus={() => setShowCustomerSearch(true)}
                           placeholder="Search customer by name/phone..."
-                          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
+                          className="touch-manipulation w-full rounded-2xl border border-slate-300 px-5 py-4 text-lg"
                         />
                         {showCustomerSearch && customerSearch && (
-                          <div className="absolute z-20 mt-1 w-full bg-white rounded-lg border shadow-lg max-h-48 overflow-y-auto">
+                          <div className="absolute z-20 mt-2 w-full bg-white rounded-xl border shadow-lg max-h-64 overflow-y-auto">
                             {filteredCustomers.length === 0 ? (
-                              <div className="p-3 text-sm text-slate-500 text-center">
+                              <div className="p-4 text-base text-slate-500 text-center">
                                 No customers found
                               </div>
                             ) : (
@@ -1126,10 +1208,10 @@ const handleCreateSale = async () => {
                                     setCustomerSearch('');
                                     setShowCustomerSearch(false);
                                   }}
-                                  className="w-full text-left px-3 py-3 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                                  className="touch-manipulation w-full text-left px-4 py-4 text-base hover:bg-slate-50 border-b last:border-b-0"
                                 >
-                                  <div className="font-medium text-slate-900">{customer.name}</div>
-                                  <div className="text-xs text-slate-500">{customer.phone} • {customer.tier}</div>
+                                  <div className="font-semibold text-slate-900">{customer.name}</div>
+                                  <div className="text-sm text-slate-500">{customer.phone} • {customer.tier}</div>
                                 </button>
                               ))
                             )}
@@ -1138,7 +1220,7 @@ const handleCreateSale = async () => {
                       </div>
                       <button
                         onClick={() => setShowNewCustomerModal(true)}
-                        className="touch-manipulation px-4 py-3 bg-green-500 text-white rounded-xl text-base font-semibold hover:bg-green-600 active:scale-[0.99]"
+                        className="touch-manipulation w-14 h-14 flex items-center justify-center bg-green-500 text-white rounded-2xl text-2xl font-semibold hover:bg-green-600 active:scale-[0.99]"
                         title="Add New Customer"
                       >
                         +
@@ -1166,15 +1248,15 @@ const handleCreateSale = async () => {
               </div>
 
               {/* Discount */}
-              <div ref={discountSectionRef}>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
                   Discount
                 </label>
                 <div className="flex gap-2">
                   <select
                     value={discountType}
                     onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    className="w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
+                    className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-5 py-4 text-base"
                   >
                     <option value="">No Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
@@ -1187,7 +1269,7 @@ const handleCreateSale = async () => {
                       value={discountValue}
                       onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
                       placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                      className="w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
+                      className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-5 py-4 text-base"
                     />
                   )}
                 </div>
@@ -1195,14 +1277,14 @@ const handleCreateSale = async () => {
 
               {/* Coupon Code */}
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
+                <label className="block text-sm font-semibold text-slate-600 mb-1">
                   Coupon Code
                 </label>
                 {couponValidation?.success ? (
-                  <div className="flex items-center justify-between bg-green-50 rounded-xl px-4 py-3 border border-green-200">
+                  <div className="flex items-center justify-between bg-green-50 rounded-2xl px-5 py-4 border border-green-200">
                     <div>
-                      <span className="font-medium text-green-800">{couponCode}</span>
-                      <span className="text-xs text-green-600 ml-2">
+                      <span className="text-base font-semibold text-green-800">{couponCode}</span>
+                      <span className="text-sm text-green-600 ml-2">
                         ({couponValidation.coupon?.discountType === 'PERCENTAGE' 
                           ? `${couponValidation.coupon?.value}% off`
                           : `${formatMoney(couponValidation.coupon?.value)} off`})
@@ -1210,7 +1292,7 @@ const handleCreateSale = async () => {
                     </div>
                     <button
                       onClick={handleClearCoupon}
-                      className="touch-manipulation rounded-lg px-3 py-2 text-green-700 hover:bg-green-100 active:scale-[0.99]"
+                      className="touch-manipulation rounded-xl px-4 py-3 text-base text-green-700 hover:bg-green-100 active:scale-[0.99]"
                     >
                       ✕
                     </button>
@@ -1225,7 +1307,7 @@ const handleCreateSale = async () => {
                         setCouponValidation(null);
                       }}
                       placeholder="Enter coupon code"
-                      className={`flex-1 rounded-xl border px-4 py-3 text-base ${
+                      className={`touch-manipulation flex-1 rounded-2xl border px-5 py-4 text-base ${
                         couponValidation?.success === false 
                           ? 'border-red-300 bg-red-50' 
                           : 'border-slate-300'
@@ -1234,32 +1316,32 @@ const handleCreateSale = async () => {
                     <button
                       onClick={handleValidateCoupon}
                       disabled={!couponCode.trim() || validatingCoupon}
-                      className="touch-manipulation px-4 py-3 bg-blue-500 text-white rounded-xl text-base font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="touch-manipulation px-5 py-4 bg-blue-500 text-white rounded-2xl text-base font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {validatingCoupon ? '...' : 'Apply'}
                     </button>
                   </div>
                 )}
                 {couponValidation?.success === false && (
-                  <p className="text-xs text-red-500 mt-1">{couponValidation.message}</p>
+                  <p className="text-sm text-red-500 mt-1">{couponValidation.message}</p>
                 )}
               </div>
 
               {/* Loyalty Points Payment */}
               {selectedCustomerId && selectedCustomerLoyalty !== null && selectedCustomerLoyalty > 0 && (
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-5 rounded-2xl border border-purple-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🎁</span>
                       <div>
-                        <h4 className="text-sm font-semibold text-purple-900">Loyalty Points</h4>
-                        <p className="text-xs text-purple-600">
+                        <h4 className="text-base font-semibold text-purple-900">Loyalty Points</h4>
+                        <p className="text-sm text-purple-600">
                           Available: <strong>{selectedCustomerLoyalty} points</strong> 
                           <span className="text-purple-500 ml-1">(≈ {formatMoney((selectedCustomerLoyalty / 100) * 10)})</span>
                         </p>
                       </div>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={usePoints}
@@ -1272,9 +1354,9 @@ const handleCreateSale = async () => {
                             setPointsToUse(0);
                           }
                         }}
-                        className="w-5 h-5 text-purple-600 rounded"
+                        className="w-6 h-6 text-purple-600 rounded"
                       />
-                      <span className="text-sm font-medium text-purple-900">Use Points</span>
+                      <span className="text-base font-semibold text-purple-900">Use Points</span>
                     </label>
                   </div>
 
@@ -1282,10 +1364,10 @@ const handleCreateSale = async () => {
                     <div className="space-y-3">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-medium text-purple-700">
+                          <label className="text-sm font-semibold text-purple-700">
                             Points to use: {pointsToUse}
                           </label>
-                          <span className="text-xs text-purple-600 font-medium">
+                          <span className="text-sm text-purple-600 font-semibold">
                             Discount: {formatMoney(calculatePointsDiscount())}
                           </span>
                         </div>
@@ -1296,9 +1378,9 @@ const handleCreateSale = async () => {
                           step="10"
                           value={pointsToUse}
                           onChange={(e) => setPointsToUse(Number(e.target.value))}
-                          className="w-full h-3 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                          className="w-full h-4 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                         />
-                        <div className="flex justify-between text-xs text-purple-600 mt-1">
+                        <div className="flex justify-between text-sm text-purple-600 mt-1">
                           <span>0</span>
                           <span className="font-medium">Max: {getMaxUsablePoints()}</span>
                         </div>
@@ -1312,7 +1394,7 @@ const handleCreateSale = async () => {
                             <button
                               key={percent}
                               onClick={() => setPointsToUse(pointsValue)}
-                              className={`flex-1 px-3 py-2 text-sm rounded-lg font-semibold ${
+                              className={`flex-1 px-4 py-3 text-base rounded-xl font-semibold ${
                                 pointsToUse === pointsValue
                                   ? 'bg-purple-600 text-white'
                                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
@@ -1324,7 +1406,7 @@ const handleCreateSale = async () => {
                         })}
                       </div>
 
-                      <p className="text-xs text-purple-600 text-center">
+                      <p className="text-sm text-purple-600 text-center">
                         💡 Conversion: 100 points = Rs. 10
                       </p>
                     </div>
@@ -1423,22 +1505,10 @@ const handleCreateSale = async () => {
           </button>
 
           <button
-            onClick={scrollToCustomer}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
-          >
-            Customers
-          </button>
-
-          <button
-            onClick={scrollToDiscount}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
-          >
-            Discount
-          </button>
-
-          <button
             onClick={() => {
               clearCart();
+              setSelectedTableForPayment(null);
+              setShowPaymentModal(false);
               toast.success('Cart cleared');
             }}
             className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
@@ -1447,18 +1517,24 @@ const handleCreateSale = async () => {
           </button>
 
           <button
-            onClick={orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale}
+            onClick={
+              isPayingTable
+                ? handleTablePayment
+                : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
+            }
             disabled={
               !currentShift ||
               items.length === 0 ||
-              (orderType === 'DINE_IN' && !selectedTable) ||
-              (orderType === 'DINE_IN' && selectedTable ? addingToTable : creatingSale)
+              (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
+              isProcessing
             }
             className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
-            {orderType === 'DINE_IN' && selectedTable
-              ? (addingToTable ? 'Adding…' : 'Add to Table')
-              : (creatingSale ? 'Processing…' : 'Pay')}
+            {isPayingTable
+              ? (processingPayment ? 'Processing…' : 'Pay Bill')
+              : (orderType === 'DINE_IN' && selectedTable
+                ? (addingToTable ? 'Adding…' : 'Add to Table')
+                : (creatingSale ? 'Processing…' : 'Pay'))}
           </button>
         </div>
       </div>
@@ -1707,14 +1783,14 @@ const handleCreateSale = async () => {
 
               {/* Discount Section */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-base font-semibold text-slate-700 mb-1">
                   Discount (Optional)
                 </label>
                 <div className="flex gap-2">
                   <select
                     value={discountType}
                     onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    className="w-1/2 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                    className="touch-manipulation w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
                   >
                     <option value="">No Discount</option>
                     <option value="PERCENTAGE">Percentage (%)</option>
@@ -1727,7 +1803,7 @@ const handleCreateSale = async () => {
                       value={discountValue}
                       onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
                       placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                      className="w-1/2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      className="touch-manipulation w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
                     />
                   )}
                 </div>
@@ -1735,7 +1811,7 @@ const handleCreateSale = async () => {
 
               {/* Coupon Code */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-base font-semibold text-slate-700 mb-1">
                   Coupon Code (Optional)
                 </label>
                 <input
@@ -1743,7 +1819,7 @@ const handleCreateSale = async () => {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                   placeholder="Enter coupon code"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="touch-manipulation w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
                 />
               </div>
 
@@ -1776,13 +1852,13 @@ const handleCreateSale = async () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">➕ Add New Customer</h3>
+              <h3 className="text-xl font-semibold">➕ Add New Customer</h3>
               <button
                 onClick={() => {
                   setShowNewCustomerModal(false);
                   setNewCustomerData({ name: "", phone: "", email: "" });
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="touch-manipulation text-2xl text-slate-400 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -1790,40 +1866,40 @@ const handleCreateSale = async () => {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-base font-semibold text-slate-700 mb-1">
                   Customer Name *
                 </label>
                 <input
                   type="text"
                   value={newCustomerData.name}
                   onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  className="w-full rounded-xl border border-slate-300 px-5 py-4 text-base"
                   placeholder="Enter customer name"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-base font-semibold text-slate-700 mb-1">
                   Phone Number *
                 </label>
                 <input
                   type="tel"
                   value={newCustomerData.phone}
                   onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  className="w-full rounded-xl border border-slate-300 px-5 py-4 text-base"
                   placeholder="Enter phone number"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-base font-semibold text-slate-700 mb-1">
                   Email (Optional)
                 </label>
                 <input
                   type="email"
                   value={newCustomerData.email}
                   onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                  className="w-full rounded-xl border border-slate-300 px-5 py-4 text-base"
                   placeholder="Enter email address"
                 />
               </div>
@@ -1835,15 +1911,62 @@ const handleCreateSale = async () => {
                   setShowNewCustomerModal(false);
                   setNewCustomerData({ name: "", phone: "", email: "" });
                 }}
-                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
+                className="flex-1 rounded-xl border border-slate-300 px-5 py-4 text-base font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateCustomer}
-                className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-700"
+                className="flex-1 rounded-xl bg-green-600 px-5 py-4 text-base font-semibold text-white hover:bg-green-700"
               >
                 Create Customer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Details Modal */}
+      {showCustomerDetailsModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">👤 Customer Details</h3>
+              <button
+                onClick={() => setShowCustomerDetailsModal(false)}
+                className="touch-manipulation text-2xl text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200 px-5 py-4">
+                <div className="text-sm text-slate-500">Name</div>
+                <div className="text-lg font-semibold text-slate-900">{selectedCustomer.name}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 px-5 py-4">
+                <div className="text-sm text-slate-500">Phone</div>
+                <div className="text-lg font-semibold text-slate-900">{selectedCustomer.phone}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 px-5 py-4">
+                <div className="text-sm text-slate-500">Tier</div>
+                <div className="text-lg font-semibold text-slate-900">{selectedCustomer.tier || 'Regular'}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 px-5 py-4">
+                <div className="text-sm text-slate-500">Loyalty Points</div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {selectedCustomerLoyalty ?? 0} pts
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => setShowCustomerDetailsModal(false)}
+                className="w-full rounded-xl border border-slate-300 px-5 py-4 text-base font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
               </button>
             </div>
           </div>

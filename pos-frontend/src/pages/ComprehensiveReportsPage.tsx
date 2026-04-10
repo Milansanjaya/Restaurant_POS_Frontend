@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Card, Button, Badge, PageLoader } from '../components';
+import { useEffect, useMemo, useState } from 'react';
+import { Layout, PageHeader, PageContent, Card, Button, Badge, PageLoader, Table } from '../components';
 import { 
   productsApi, 
   salesApi, 
@@ -9,7 +9,8 @@ import {
   grnApi, 
   batchesApi,
   tablesApi,
-  reservationsApi
+  reservationsApi,
+  reportsApi
 } from '../api';
 import type { 
   Product, 
@@ -20,7 +21,9 @@ import type {
   GRN, 
   Batch,
   RestaurantTable,
-  Reservation
+  Reservation,
+  ProfitReport,
+  ProfitReportDay
 } from '../types';
 import toast from 'react-hot-toast';
 import { formatMoney } from '../money';
@@ -28,6 +31,7 @@ import { formatMoney } from '../money';
 type ReportSection = 
   | 'products' 
   | 'sales' 
+  | 'profit'
   | 'customers' 
   | 'suppliers' 
   | 'purchase-orders' 
@@ -41,6 +45,10 @@ export default function ComprehensiveReportsPage() {
   const [activeSection, setActiveSection] = useState<ReportSection>('sales');
   const [loading, setLoading] = useState(false);
 
+  // Global date range filter (applies to sections with dates)
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+
   // Data states
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -51,6 +59,97 @@ export default function ComprehensiveReportsPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [profitReport, setProfitReport] = useState<ProfitReport | null>(null);
+
+  const parseDateValue = (value: string | Date | null | undefined): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const date = trimmed.length === 10 ? new Date(`${trimmed}T00:00:00`) : new Date(trimmed);
+    return isNaN(date.getTime()) ? null : date;
+  };
+
+  const filterByDateRange = <T,>(data: T[], getDate: (item: T) => string | Date | null | undefined) => {
+    const from = filterFrom ? new Date(`${filterFrom}T00:00:00`) : null;
+    const to = filterTo ? new Date(`${filterTo}T23:59:59`) : null;
+    if (!from && !to) return data;
+
+    const fromMs = from ? from.getTime() : Number.NEGATIVE_INFINITY;
+    const toMs = to ? to.getTime() : Number.POSITIVE_INFINITY;
+
+    return data.filter((item) => {
+      const date = parseDateValue(getDate(item));
+      if (!date) return true; // if no date field, don't exclude
+      const ms = date.getTime();
+      return ms >= fromMs && ms <= toMs;
+    });
+  };
+
+  const filteredSales = useMemo(
+    () => filterByDateRange(sales, (s) => (s as any).createdAt),
+    [sales, filterFrom, filterTo]
+  );
+  const filteredProducts = useMemo(
+    () => filterByDateRange(products, (p) => (p as any).createdAt),
+    [products, filterFrom, filterTo]
+  );
+  const filteredCustomers = useMemo(
+    () => filterByDateRange(customers, (c) => (c as any).createdAt),
+    [customers, filterFrom, filterTo]
+  );
+  const filteredSuppliers = useMemo(
+    () => filterByDateRange(suppliers, (s) => (s as any).createdAt),
+    [suppliers, filterFrom, filterTo]
+  );
+  const filteredPurchaseOrders = useMemo(
+    () => filterByDateRange(purchaseOrders, (po) => (po as any).orderDate ?? (po as any).createdAt),
+    [purchaseOrders, filterFrom, filterTo]
+  );
+  const filteredGrns = useMemo(
+    () => filterByDateRange(grns, (g) => (g as any).receivedDate ?? (g as any).createdAt),
+    [grns, filterFrom, filterTo]
+  );
+  const filteredBatches = useMemo(
+    () => filterByDateRange(batches, (b) => (b as any).createdAt ?? (b as any).expiryDate),
+    [batches, filterFrom, filterTo]
+  );
+  const filteredTables = useMemo(
+    () => filterByDateRange(tables, (t) => (t as any).createdAt),
+    [tables, filterFrom, filterTo]
+  );
+  const filteredReservations = useMemo(
+    () => filterByDateRange(reservations, (r) => (r as any).reservationDateTime),
+    [reservations, filterFrom, filterTo]
+  );
+
+  const filteredProfitDays = useMemo(() => {
+    const days = profitReport?.days || [];
+    return filterByDateRange(days, (d) => d.date);
+  }, [profitReport, filterFrom, filterTo]);
+
+  const profitTotals = useMemo(() => {
+    return filteredProfitDays.reduce(
+      (acc, d) => {
+        acc.totalOrders += d.totalOrders || 0;
+        acc.grossSales += d.grossSales || 0;
+        acc.discount += d.discount || 0;
+        acc.netSales += d.netSales || 0;
+        acc.totalCost += d.totalCost || 0;
+        acc.profit += d.profit || 0;
+        return acc;
+      },
+      {
+        totalOrders: 0,
+        grossSales: 0,
+        discount: 0,
+        netSales: 0,
+        totalCost: 0,
+        profit: 0,
+      }
+    );
+  }, [filteredProfitDays]);
 
   const loadSectionData = async (section: ReportSection) => {
     setLoading(true);
@@ -65,6 +164,13 @@ export default function ComprehensiveReportsPage() {
           const salesData = await salesApi.getAll();
           const salesArray = Array.isArray(salesData) ? salesData : (salesData as any)?.sales || [];
           setSales(Array.isArray(salesArray) ? salesArray : []);
+          break;
+        case 'profit':
+          const profitData = await reportsApi.getProfitReport({
+            from: filterFrom || undefined,
+            to: filterTo || undefined,
+          });
+          setProfitReport(profitData || null);
           break;
         case 'customers':
           const customersData = await customersApi.getAll();
@@ -108,6 +214,7 @@ export default function ComprehensiveReportsPage() {
       switch (section) {
         case 'products': setProducts([]); break;
         case 'sales': setSales([]); break;
+        case 'profit': setProfitReport(null); break;
         case 'customers': setCustomers([]); break;
         case 'suppliers': setSuppliers([]); break;
         case 'purchase-orders': setPurchaseOrders([]); break;
@@ -124,6 +231,13 @@ export default function ComprehensiveReportsPage() {
   useEffect(() => {
     loadSectionData(activeSection);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection === 'profit') {
+      loadSectionData('profit');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterFrom, filterTo]);
 
   const exportToCSV = (data: any[], filename: string) => {
     if (data.length === 0) {
@@ -156,15 +270,16 @@ export default function ComprehensiveReportsPage() {
     // Get current section data
     const getSectionData = () => {
       switch (activeSection) {
-        case 'products': return { title: 'Products Report', data: products, columns: ['Name', 'SKU', 'Price', 'Cost', 'Category', 'Unit', 'Status'] };
-        case 'sales': return { title: 'Sales Report', data: sales, columns: ['Invoice', 'Customer', 'Total', 'Profit', 'Payment', 'Status', 'Date'] };
-        case 'customers': return { title: 'Customers Report', data: customers, columns: ['Name', 'Phone', 'Email', 'Address', 'Loyalty Points'] };
-        case 'suppliers': return { title: 'Suppliers Report', data: suppliers, columns: ['Name', 'Contact', 'Email', 'Phone', 'Address'] };
-        case 'purchase-orders': return { title: 'Purchase Orders Report', data: purchaseOrders, columns: ['PO Number', 'Supplier', 'Total', 'Status', 'Date'] };
-        case 'grn': return { title: 'GRN Report', data: grns, columns: ['GRN Number', 'PO Reference', 'Supplier', 'Status', 'Date'] };
-        case 'batches': return { title: 'Batches Report', data: batches, columns: ['Batch Number', 'Product', 'Quantity', 'Expiry Date', 'Status'] };
-        case 'tables': return { title: 'Tables Report', data: tables, columns: ['Table Number', 'Capacity', 'Location', 'Status'] };
-        case 'reservations': return { title: 'Reservations Report', data: reservations, columns: ['Customer', 'Table', 'Guests', 'Date/Time', 'Status'] };
+        case 'products': return { title: 'Products Report', data: filteredProducts, columns: ['Name', 'SKU', 'Price', 'Cost', 'Category', 'Unit', 'Status'] };
+        case 'sales': return { title: 'Sales Report', data: filteredSales, columns: ['Invoice', 'Customer', 'Total', 'Profit', 'Payment', 'Status', 'Date'] };
+        case 'profit': return { title: 'Profit Report', data: filteredProfitDays, columns: ['Date', 'Orders', 'Gross Sales', 'Discount', 'Net Sales', 'Cost', 'Profit'] };
+        case 'customers': return { title: 'Customers Report', data: filteredCustomers, columns: ['Name', 'Phone', 'Email', 'Address', 'Loyalty Points'] };
+        case 'suppliers': return { title: 'Suppliers Report', data: filteredSuppliers, columns: ['Name', 'Contact', 'Email', 'Phone', 'Address'] };
+        case 'purchase-orders': return { title: 'Purchase Orders Report', data: filteredPurchaseOrders, columns: ['PO Number', 'Supplier', 'Total', 'Status', 'Date'] };
+        case 'grn': return { title: 'GRN Report', data: filteredGrns, columns: ['GRN Number', 'PO Reference', 'Supplier', 'Status', 'Date'] };
+        case 'batches': return { title: 'Batches Report', data: filteredBatches, columns: ['Batch Number', 'Product', 'Quantity', 'Expiry Date', 'Status'] };
+        case 'tables': return { title: 'Tables Report', data: filteredTables, columns: ['Table Number', 'Capacity', 'Location', 'Status'] };
+        case 'reservations': return { title: 'Reservations Report', data: filteredReservations, columns: ['Customer', 'Table', 'Guests', 'Date/Time', 'Status'] };
         default: return { title: 'Report', data: [], columns: [] };
       }
     };
@@ -209,6 +324,18 @@ export default function ComprehensiveReportsPage() {
             item.paymentMethod, 
             item.status, 
             new Date(item.createdAt).toLocaleDateString()
+          ];
+          return vals[colIndex] || '-';
+        }
+        if (section === 'profit') {
+          const vals = [
+            item.date,
+            String(item.totalOrders ?? 0),
+            formatMoney(item.grossSales),
+            formatMoney(item.discount),
+            formatMoney(item.netSales),
+            formatMoney(item.totalCost),
+            formatMoney(item.profit),
           ];
           return vals[colIndex] || '-';
         }
@@ -270,6 +397,25 @@ export default function ComprehensiveReportsPage() {
           <div class="stat-box">
             <div class="stat-value">${formatMoney(profit)}</div>
             <div class="stat-label">Total Profit</div>
+          </div>
+        `;
+      } else if (activeSection === 'profit') {
+        return `
+          <div class="stat-box">
+            <div class="stat-value">${profitTotals.totalOrders}</div>
+            <div class="stat-label">Orders</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${formatMoney(profitTotals.netSales)}</div>
+            <div class="stat-label">Net Sales</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${formatMoney(profitTotals.totalCost)}</div>
+            <div class="stat-label">Total Cost</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value">${formatMoney(profitTotals.profit)}</div>
+            <div class="stat-label">Profit</div>
           </div>
         `;
       } else if (activeSection === 'products') {
@@ -357,21 +503,22 @@ export default function ComprehensiveReportsPage() {
   };
 
   const sections = [
-    { id: 'sales' as ReportSection, label: '💰 Sales', count: sales.length },
-    { id: 'products' as ReportSection, label: '📦 Products', count: products.length },
-    { id: 'customers' as ReportSection, label: '👥 Customers', count: customers.length },
-    { id: 'suppliers' as ReportSection, label: '🏭 Suppliers', count: suppliers.length },
-    { id: 'purchase-orders' as ReportSection, label: '📋 Purchase Orders', count: purchaseOrders.length },
-    { id: 'grn' as ReportSection, label: '📥 GRN', count: grns.length },
-    { id: 'batches' as ReportSection, label: '🏷️ Batches', count: batches.length },
-    { id: 'tables' as ReportSection, label: '🪑 Tables', count: tables.length },
-    { id: 'reservations' as ReportSection, label: '📅 Reservations', count: reservations.length },
+    { id: 'sales' as ReportSection, label: '💰 Sales', count: filteredSales.length },
+    { id: 'profit' as ReportSection, label: '📈 Profit', count: filteredProfitDays.length },
+    { id: 'products' as ReportSection, label: '📦 Products', count: filteredProducts.length },
+    { id: 'customers' as ReportSection, label: '👥 Customers', count: filteredCustomers.length },
+    { id: 'suppliers' as ReportSection, label: '🏭 Suppliers', count: filteredSuppliers.length },
+    { id: 'purchase-orders' as ReportSection, label: '📋 Purchase Orders', count: filteredPurchaseOrders.length },
+    { id: 'grn' as ReportSection, label: '📥 GRN', count: filteredGrns.length },
+    { id: 'batches' as ReportSection, label: '🏷️ Batches', count: filteredBatches.length },
+    { id: 'tables' as ReportSection, label: '🪑 Tables', count: filteredTables.length },
+    { id: 'reservations' as ReportSection, label: '📅 Reservations', count: filteredReservations.length },
   ];
 
   // Calculate summary statistics
-  const totalRevenue = sales.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
+  const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
   // Calculate profit: Revenue - Cost (from product items sold)
-  const totalCost = sales.reduce((sum, s) => {
+  const totalCost = filteredSales.reduce((sum, s) => {
     return sum + (s.items || []).reduce((itemSum, item) => {
       const product = typeof item.product === 'object' ? item.product : null;
       const cost = product?.cost || 0;
@@ -379,15 +526,32 @@ export default function ComprehensiveReportsPage() {
     }, 0);
   }, 0);
   const totalProfit = totalRevenue - totalCost;
-  const totalProducts = products.length;
-  const totalCustomers = customers.length;
-  const totalOrders = purchaseOrders.length;
+  const totalProducts = filteredProducts.length;
+  const totalCustomers = filteredCustomers.length;
+  const totalOrders = filteredPurchaseOrders.length;
 
   return (
     <Layout>
       <PageHeader 
         title="📊 Comprehensive Reports" 
         subtitle="View and export all system data"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <span className="text-sm text-slate-500">to</span>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        }
       />
       
       <PageContent>
@@ -397,7 +561,7 @@ export default function ComprehensiveReportsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">Total Sales</p>
-                <p className="mt-1 text-2xl font-bold text-blue-600">{sales.length}</p>
+                <p className="mt-1 text-2xl font-bold text-blue-600">{filteredSales.length}</p>
               </div>
               <div className="rounded-full bg-blue-100 p-3">
                 <span className="text-2xl">💰</span>
@@ -434,7 +598,7 @@ export default function ComprehensiveReportsPage() {
               </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Available: {products.filter(p => p.isAvailable).length}
+              Available: {filteredProducts.filter(p => p.isAvailable).length}
             </p>
           </Card>
 
@@ -449,7 +613,7 @@ export default function ComprehensiveReportsPage() {
               </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Platinum: {customers.filter(c => c.tier === 'PLATINUM').length}
+              Platinum: {filteredCustomers.filter(c => c.tier === 'PLATINUM').length}
             </p>
           </Card>
 
@@ -464,7 +628,7 @@ export default function ComprehensiveReportsPage() {
               </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Pending: {purchaseOrders.filter(po => po.status === 'PENDING').length}
+              Pending: {filteredPurchaseOrders.filter(po => po.status === 'PENDING').length}
             </p>
           </Card>
         </div>
@@ -498,9 +662,16 @@ export default function ComprehensiveReportsPage() {
                 <Button
                   onClick={() => {
                     const dataMap: Record<string, any[]> = { 
-                      products, sales, customers, suppliers, 
-                      'purchase-orders': purchaseOrders, 
-                      grn: grns, batches, tables, reservations
+                      products: filteredProducts,
+                      sales: filteredSales,
+                      profit: filteredProfitDays,
+                      customers: filteredCustomers,
+                      suppliers: filteredSuppliers,
+                      'purchase-orders': filteredPurchaseOrders,
+                      grn: filteredGrns,
+                      batches: filteredBatches,
+                      tables: filteredTables,
+                      reservations: filteredReservations,
                     };
                     const dataToExport = dataMap[activeSection] || [];
                     exportToCSV(dataToExport as any[], activeSection);
@@ -532,7 +703,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {products.map((product) => (
+                    {filteredProducts.map((product) => (
                       <tr key={product._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{product.name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{product.sku || '-'}</td>
@@ -550,7 +721,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {products.length === 0 && (
+                {filteredProducts.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No products found</div>
                 )}
               </div>
@@ -573,7 +744,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {sales.map((sale) => (
+                    {filteredSales.map((sale) => (
                       <tr key={sale._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{sale.invoiceNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">
@@ -597,9 +768,94 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {sales.length === 0 && (
+                {filteredSales.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No sales found</div>
                 )}
+              </div>
+            )}
+
+            {/* Profit Report */}
+            {activeSection === 'profit' && (
+              <div>
+                <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Orders</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-900">
+                      {profitTotals.totalOrders}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Net Sales</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-900">
+                      {formatMoney(profitTotals.netSales)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Total Cost</p>
+                    <p className="mt-1 text-xl font-semibold text-slate-900">
+                      {formatMoney(profitTotals.totalCost)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Profit</p>
+                    <p
+                      className={`mt-1 text-xl font-semibold ${
+                        profitTotals.profit >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}
+                    >
+                      {formatMoney(profitTotals.profit)}
+                    </p>
+                  </div>
+                </div>
+
+                <Table
+                  columns={[
+                    { key: 'date', header: 'Date', render: (d: ProfitReportDay) => d.date },
+                    {
+                      key: 'totalOrders',
+                      header: 'Orders',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => d.totalOrders,
+                    },
+                    {
+                      key: 'grossSales',
+                      header: 'Gross Sales',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => formatMoney(d.grossSales),
+                    },
+                    {
+                      key: 'discount',
+                      header: 'Discount',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => formatMoney(d.discount),
+                    },
+                    {
+                      key: 'netSales',
+                      header: 'Net Sales',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => formatMoney(d.netSales),
+                    },
+                    {
+                      key: 'totalCost',
+                      header: 'Cost',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => formatMoney(d.totalCost),
+                    },
+                    {
+                      key: 'profit',
+                      header: 'Profit',
+                      className: 'text-right',
+                      render: (d: ProfitReportDay) => (
+                        <span className={d.profit >= 0 ? 'text-emerald-700' : 'text-red-700'}>
+                          {formatMoney(d.profit)}
+                        </span>
+                      ),
+                    },
+                  ]}
+                  data={filteredProfitDays}
+                  keyExtractor={(d: ProfitReportDay) => d.date}
+                  emptyMessage="No profit data found"
+                />
               </div>
             )}
 
@@ -617,7 +873,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {customers.map((customer) => (
+                    {filteredCustomers.map((customer) => (
                       <tr key={customer._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{customer.name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{customer.email || '-'}</td>
@@ -634,7 +890,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {customers.length === 0 && (
+                {filteredCustomers.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No customers found</div>
                 )}
               </div>
@@ -655,7 +911,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {suppliers.map((supplier) => (
+                    {filteredSuppliers.map((supplier) => (
                       <tr key={supplier._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{supplier.name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{supplier.contactPerson || '-'}</td>
@@ -671,7 +927,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {suppliers.length === 0 && (
+                {filteredSuppliers.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No suppliers found</div>
                 )}
               </div>
@@ -692,7 +948,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {purchaseOrders.map((po) => (
+                    {filteredPurchaseOrders.map((po) => (
                       <tr key={po._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{po.poNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-900">
@@ -723,7 +979,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {purchaseOrders.length === 0 && (
+                {filteredPurchaseOrders.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No purchase orders found</div>
                 )}
               </div>
@@ -744,7 +1000,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {grns.map((grn) => (
+                    {filteredGrns.map((grn) => (
                       <tr key={grn._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{grn.grnNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">
@@ -766,7 +1022,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {grns.length === 0 && (
+                {filteredGrns.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No GRN records found</div>
                 )}
               </div>
@@ -788,7 +1044,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {batches.map((batch) => (
+                    {filteredBatches.map((batch) => (
                       <tr key={batch._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-600">{batch.batchNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-900">
@@ -817,7 +1073,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {batches.length === 0 && (
+                {filteredBatches.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No batches found</div>
                 )}
               </div>
@@ -837,7 +1093,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {tables.map((table) => (
+                    {filteredTables.map((table) => (
                       <tr key={table._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{table.tableNumber}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{table.section || 'Main'}</td>
@@ -861,7 +1117,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {tables.length === 0 && (
+                {filteredTables.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No tables found</div>
                 )}
               </div>
@@ -882,7 +1138,7 @@ export default function ComprehensiveReportsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {reservations.map((reservation) => (
+                    {filteredReservations.map((reservation) => (
                       <tr key={reservation._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{reservation.customerName}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{reservation.customerPhone}</td>
@@ -909,7 +1165,7 @@ export default function ComprehensiveReportsPage() {
                     ))}
                   </tbody>
                 </table>
-                {reservations.length === 0 && (
+                {filteredReservations.length === 0 && (
                   <div className="py-12 text-center text-slate-500">No reservations found</div>
                 )}
               </div>

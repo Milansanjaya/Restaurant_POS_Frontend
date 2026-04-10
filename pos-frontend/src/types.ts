@@ -100,11 +100,14 @@ export interface Product {
   taxRate: number;
   trackStock: boolean;
   lowStockThreshold: number;
+  stockQuantity?: number;
   preparationTime?: number;
   unit?: string | Unit; // Add unit field
   branch_id: string;
   isActive: boolean;
   isAvailable: boolean;
+  lowStock?: boolean;
+  outOfStock?: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, StatCard, Card, Badge, PageLoader, Button } from '../components';
+import { Layout, PageHeader, PageContent, StatCard, Card, Badge, PageLoader } from '../components';
 import { dashboardApi, reportsApi } from '../api';
 import { getSales } from '../api/sales.api';
 import type { DashboardSummary, TopProduct, Inventory } from '../types';
@@ -377,11 +377,6 @@ export default function DashboardPage() {
       <PageHeader 
         title="Dashboard" 
         subtitle="Overview of your business"
-        actions={
-          <Button onClick={() => alert('Install jspdf to enable PDF export')}>
-            📥 Export PDF
-          </Button>
-        }
       />
       <PageContent>
         {/* Quick Actions */}

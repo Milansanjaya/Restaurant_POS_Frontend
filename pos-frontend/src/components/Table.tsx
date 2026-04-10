@@ -73,7 +73,7 @@ export default function Table<T extends Record<string, any>>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 ${col.className || ''}`}
+                  className={`whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 sm:px-4 ${col.className || ''}`}
                 >
                   {col.header}
                 </th>
@@ -94,7 +94,7 @@ export default function Table<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={`whitespace-nowrap px-4 py-3 text-sm text-slate-700 ${col.className || ''}`}
+                    className={`whitespace-normal px-3 py-3 text-sm text-slate-700 sm:whitespace-nowrap sm:px-4 ${col.className || ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>
@@ -122,8 +122,8 @@ export function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}

@@ -81,7 +81,8 @@ export default function GRNPage() {
     setEditingId(null);
     setSelectedPO(po);
     const supplierId = typeof po.supplier_id === 'object' ? po.supplier_id._id : po.supplier_id;
-    
+    
+
     const items: GRNItem[] = po.items.map((item) => ({
       product_id: item.product_id,
       productName: item.productName,
@@ -236,103 +237,131 @@ export default function GRNPage() {
     }
   };
 
-  const handlePrintGRN = () => {
-    if (!selectedGRN) return;
-    
+  const printGRN = (grn: GRN) => {
+    const escapeHtml = (text: unknown) => String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const supplierName = (grn.supplier_id && typeof grn.supplier_id === 'object') ? grn.supplier_id.name : '-';
+    const poNumber = (grn.purchaseOrder_id && typeof grn.purchaseOrder_id === 'object') ? grn.purchaseOrder_id.poNumber : '-';
+
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>GRN - ${selectedGRN.grnNumber}</title>
+        <title>GRN - ${escapeHtml(grn.grnNumber)}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          .header { text-align: center; margin-bottom: 30px; }
-          .details { margin-bottom: 20px; }
-          .details div { margin: 5px 0; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f4f4f4; }
-          .footer { margin-top: 30px; padding-top: 20px; border-top: 2px solid #333; }
-          .signature { margin-top: 50px; }
-          @media print {
-            button { display: none; }
-          }
+          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          .header { text-align: center; margin-bottom: 24px; }
+          .header h1 { margin: 0; font-size: 20px; }
+          .header h2 { margin: 6px 0 0; font-size: 16px; font-weight: 600; color: #334155; }
+          .details { margin-bottom: 16px; font-size: 13px; }
+          .details div { margin: 6px 0; }
+          table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 13px; }
+          th { background: #f8fafc; font-weight: 700; color: #334155; }
+          td.num, th.num { text-align: right; }
+          .footer { margin-top: 28px; border-top: 2px solid #0f172a; padding-top: 16px; display: flex; justify-content: space-between; gap: 24px; }
+          .sign { width: 45%; }
+          .line { margin-top: 36px; border-top: 1px solid #0f172a; }
+          .sign-label { margin-top: 6px; font-size: 12px; color: #475569; }
+          .warn { background: #fff3cd; padding: 6px 10px; border: 1px solid #ffeeba; }
+          @media print { body { padding: 0; } }
         </style>
       </head>
       <body>
         <div class="header">
           <h1>GOODS RECEIVED NOTE</h1>
-          <h2>${selectedGRN.grnNumber}</h2>
+          <h2>${escapeHtml(grn.grnNumber)}</h2>
         </div>
-        
+
         <div class="details">
-          <div><strong>Supplier:</strong> ${typeof selectedGRN.supplier_id === 'object' ? selectedGRN.supplier_id.name : '-'}</div>
-          <div><strong>PO Number:</strong> ${typeof selectedGRN.purchaseOrder_id === 'object' ? selectedGRN.purchaseOrder_id.poNumber : '-'}</div>
-          <div><strong>Received Date:</strong> ${new Date(selectedGRN.receivedDate).toLocaleDateString()}</div>
-          <div><strong>Status:</strong> ${selectedGRN.status}</div>
-          ${selectedGRN.notes ? `<div><strong>Notes:</strong> ${selectedGRN.notes}</div>` : ''}
+          <div><strong>Supplier:</strong> ${escapeHtml(supplierName)}</div>
+          <div><strong>PO Number:</strong> ${escapeHtml(poNumber)}</div>
+          <div><strong>Received Date:</strong> ${new Date(grn.receivedDate).toLocaleDateString()}</div>
+          <div><strong>Status:</strong> ${escapeHtml(grn.status)}</div>
+          ${grn.notes ? `<div><strong>Notes:</strong> ${escapeHtml(grn.notes)}</div>` : ''}
         </div>
-        
+
         <table>
           <thead>
             <tr>
               <th>Product</th>
-              <th>Ordered</th>
-              <th>Received</th>
+              <th class="num">Ordered</th>
+              <th class="num">Received</th>
               <th>Quality</th>
               <th>Batch#</th>
               <th>Expiry</th>
-              <th>Unit Price</th>
-              <th>Total</th>
+              <th class="num">Unit Price</th>
+              <th class="num">Total</th>
             </tr>
           </thead>
           <tbody>
-            ${selectedGRN.items.map(item => `
-              <tr>
-                <td>${item.productName}</td>
-                <td>${item.orderedQuantity || item.purchasedQuantity || '-'}</td>
-                <td>${item.receivedQuantity}</td>
-                <td>${item.qualityStatus}</td>
-                <td>${item.batchNumber || '-'}</td>
-                <td>${item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '-'}</td>
-                <td>${formatMoney(item.unitPrice)}</td>
-                <td>${formatMoney(item.totalPrice)}</td>
-              </tr>
-              ${item.rejectionReason ? `<tr><td colspan="8" style="background: #fff3cd; font-size: 0.9em;">⚠️ Rejection Reason: ${item.rejectionReason}</td></tr>` : ''}
-            `).join('')}
+            ${(grn.items || []).map(item => {
+              const ordered = (item as any).orderedQuantity ?? (item as any).purchasedQuantity ?? '-';
+              const rejectionRow = item.rejectionReason
+                ? `<tr><td colspan="8" class="warn">⚠️ Rejection Reason: ${escapeHtml(item.rejectionReason)}</td></tr>`
+                : '';
+
+              return `
+                <tr>
+                  <td>${escapeHtml(item.productName)}</td>
+                  <td class="num">${escapeHtml(ordered)}</td>
+                  <td class="num">${escapeHtml(item.receivedQuantity)}</td>
+                  <td>${escapeHtml(item.qualityStatus)}</td>
+                  <td>${escapeHtml(item.batchNumber || '-')}</td>
+                  <td>${item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '-'}</td>
+                  <td class="num">${formatMoney(item.unitPrice)}</td>
+                  <td class="num">${formatMoney(item.totalPrice)}</td>
+                </tr>
+                ${rejectionRow}
+              `;
+            }).join('')}
           </tbody>
           <tfoot>
             <tr>
-              <th colspan="7">TOTAL</th>
-              <th>${formatMoney(selectedGRN.totalAmount)}</th>
+              <th colspan="7" class="num">TOTAL</th>
+              <th class="num">${formatMoney(grn.totalAmount)}</th>
             </tr>
           </tfoot>
         </table>
-        
+
         <div class="footer">
-          <div class="signature">
-            <div style="display: inline-block; width: 45%;">
-              <div>_________________________</div>
-              <div>Received By</div>
-              <div>Date: ___________________</div>
-            </div>
-            <div style="display: inline-block; width: 45%; float: right;">
-              <div>_________________________</div>
-              <div>Approved By</div>
-              <div>Date: ___________________</div>
-            </div>
+          <div class="sign">
+            <div class="line"></div>
+            <div class="sign-label">Received By</div>
+          </div>
+          <div class="sign">
+            <div class="line"></div>
+            <div class="sign-label">Approved By</div>
           </div>
         </div>
-        
-        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #333; color: white; border: none; cursor: pointer;">Print</button>
+
+        <script>
+          window.addEventListener('load', () => { window.print(); });
+        </script>
       </body>
       </html>
     `;
-    
+
     const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
+    if (!printWindow) {
+      toast.error('Pop-up blocked. Please allow pop-ups to print.');
+      return;
+    }
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
+  const handlePrintGRN = async (grn: GRN) => {
+    try {
+      const fullGrn = await grnApi.getById(grn._id);
+      printGRN(fullGrn || grn);
+    } catch (error) {
+      console.error('Failed to load GRN for print:', error);
+      // Fall back to current data
+      printGRN(grn);
     }
   };
 
@@ -374,6 +403,9 @@ export default function GRNPage() {
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" onClick={() => handleViewDetails(item)}>
             View
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handlePrintGRN(item)}>
+            🖨️ Print
           </Button>
           {item.status === 'DRAFT' && (
             <>
@@ -575,7 +607,7 @@ export default function GRNPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Close</Button>
-            <Button onClick={handlePrintGRN}>🖨️ Print</Button>
+            <Button onClick={() => selectedGRN && handlePrintGRN(selectedGRN)} disabled={!selectedGRN}>🖨️ Print</Button>
           </>
         }
       >

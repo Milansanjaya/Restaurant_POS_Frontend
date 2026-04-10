@@ -113,6 +113,138 @@ export default function ReportsPage() {
     loadProfitReport();
   }, [profitFrom, profitTo, profitOrderType]);
 
+  const exportProfitCsv = () => {
+    const days = profitReport?.days || [];
+    if (days.length === 0) {
+      alert('No profit data to export');
+      return;
+    }
+
+    const headers = ['Date', 'Orders', 'Gross Sales', 'Discount', 'Net Sales', 'Total Cost', 'Profit'];
+    const escapeCsv = (val: unknown) => {
+      const s = String(val ?? '');
+      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const rows = days.map((d) => [
+      d.date,
+      d.totalOrders,
+      d.grossSales,
+      d.discount,
+      d.netSales,
+      d.totalCost,
+      d.profit,
+    ].map(escapeCsv).join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `profit_report_${profitFrom || 'from'}_${profitTo || 'to'}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportProfitPdf = () => {
+    const days = profitReport?.days || [];
+    if (days.length === 0) {
+      alert('No profit data to export');
+      return;
+    }
+
+    const escapeHtml = (text: unknown) => String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const title = 'Profit Report (Daily)';
+    const orderTypeLabel = profitOrderType ? profitOrderType : 'All';
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          h1 { text-align: center; margin: 0; font-size: 20px; }
+          .subtitle { text-align: center; margin-top: 6px; color: #64748b; font-size: 12px; }
+          .meta { margin-top: 16px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; font-size: 12px; color: #334155; }
+          .box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; background: #f8fafc; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 12px; }
+          th { background: #f1f5f9; color: #334155; }
+          td.num, th.num { text-align: right; }
+          tfoot th { background: #f8fafc; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <div class="subtitle">From ${escapeHtml(profitFrom)} to ${escapeHtml(profitTo)} • Order Type: ${escapeHtml(orderTypeLabel)}</div>
+        <div class="meta">
+          <div class="box"><strong>Orders:</strong> ${escapeHtml(profitReport?.totals.totalOrders || 0)}</div>
+          <div class="box"><strong>Gross Sales:</strong> ${escapeHtml(formatMoney(profitReport?.totals.grossSales))}</div>
+          <div class="box"><strong>Total Cost:</strong> ${escapeHtml(formatMoney(profitReport?.totals.totalCost))}</div>
+          <div class="box"><strong>Profit:</strong> ${escapeHtml(formatMoney(profitReport?.totals.profit))}</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="num">Orders</th>
+              <th class="num">Gross Sales</th>
+              <th class="num">Discount</th>
+              <th class="num">Net Sales</th>
+              <th class="num">Cost</th>
+              <th class="num">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${days.map(d => `
+              <tr>
+                <td>${escapeHtml(d.date)}</td>
+                <td class="num">${escapeHtml(d.totalOrders)}</td>
+                <td class="num">${escapeHtml(formatMoney(d.grossSales))}</td>
+                <td class="num">${escapeHtml(formatMoney(d.discount))}</td>
+                <td class="num">${escapeHtml(formatMoney(d.netSales))}</td>
+                <td class="num">${escapeHtml(formatMoney(d.totalCost))}</td>
+                <td class="num">${escapeHtml(formatMoney(d.profit))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Total</th>
+              <th class="num">${escapeHtml(profitReport?.totals.totalOrders || 0)}</th>
+              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.grossSales))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.discount))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.netSales))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.totalCost))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.profit))}</th>
+            </tr>
+          </tfoot>
+        </table>
+
+        <script>
+          window.addEventListener('load', () => { window.print(); });
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Pop-up blocked. Please allow pop-ups to export PDF.');
+      return;
+    }
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -232,6 +364,20 @@ export default function ReportsPage() {
                 }}
               >
                 Today
+              </Button>
+              <Button
+                variant="outline"
+                onClick={exportProfitCsv}
+                disabled={profitLoading || (profitReport?.days?.length || 0) === 0}
+              >
+                📥 Profit CSV
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={exportProfitPdf}
+                disabled={profitLoading || (profitReport?.days?.length || 0) === 0}
+              >
+                📄 Profit PDF
               </Button>
             </div>
           </div>

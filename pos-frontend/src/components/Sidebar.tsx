@@ -244,7 +244,11 @@ const navItems: NavItem[] = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  onNavigate,
+}: {
+  onNavigate?: () => void;
+}) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -271,6 +275,7 @@ export default function Sidebar() {
             <li key={item.path}>
               <NavLink
                 to={item.path}
+                onClick={() => onNavigate?.()}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
