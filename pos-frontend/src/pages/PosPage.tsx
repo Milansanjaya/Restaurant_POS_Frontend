@@ -63,7 +63,10 @@ export default function PosPage() {
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
   const [serviceCharge, setServiceCharge] = useState(0);
+  const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
   const [packagingCharge, setPackagingCharge] = useState(0);
+  const [packagingChargeType, setPackagingChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Coupon validation
   const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null);
@@ -128,7 +131,6 @@ export default function PosPage() {
   const clearCart = useCartStore((s) => s.clearCart);
   const subtotal = useCartStore((s) => s.subtotal);
   const taxTotal = useCartStore((s) => s.taxTotal);
-  const grandTotal = useCartStore((s) => s.grandTotal);
 
   useEffect(() => {
     if (!token) {
@@ -187,7 +189,9 @@ export default function PosPage() {
             }))
         );
         setServiceCharge(typeof configRes?.serviceCharge === 'number' ? configRes.serviceCharge : 0);
+        setServiceChargeType((configRes?.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
         setPackagingCharge(typeof configRes?.packagingCharge === 'number' ? configRes.packagingCharge : 0);
+        setPackagingChargeType((configRes?.packagingChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -464,6 +468,14 @@ export default function PosPage() {
         payload.couponCode = couponCode.trim();
       }
 
+      // Add serviceCharge and packagingCharge computed values
+      if (getServiceCharge() > 0) {
+        payload.serviceCharge = getServiceCharge();
+      }
+      if (getPackagingCharge() > 0) {
+        payload.packagingCharge = getPackagingCharge();
+      }
+
       const sale = await createSale(payload);
 
       // Earn loyalty points for customer if selected
@@ -535,14 +547,14 @@ export default function PosPage() {
     t.status === 'OCCUPIED' || tableOrders.some(order => order.tableId === t._id)
   );
 
-  // Calculate manual discount amount
+  // Calculate manual discount amount (discount base = subtotal + tax, before charges)
   const calculateManualDiscount = () => {
-    const total = subtotal() + taxTotal();
+    const base = subtotal() + taxTotal();
     if (!discountType || discountValue <= 0) return 0;
     if (discountType === 'PERCENTAGE') {
-      return Math.min(total, (total * discountValue) / 100);
+      return Math.round(Math.min(base, (base * discountValue) / 100) * 100) / 100;
     }
-    return Math.min(total, discountValue);
+    return Math.min(base, discountValue);
   };
 
   // Calculate coupon discount amount
@@ -563,8 +575,8 @@ export default function PosPage() {
   const getMaxUsablePoints = () => {
     if (!selectedCustomerLoyalty) return 0;
     const remainingTotal =
-      grandTotal() + getChargesTotal() - calculateManualDiscount() - calculateCouponDiscount();
-    const maxPointsForTotal = Math.floor((remainingTotal / 10) * 100); // Convert amount to points
+      subtotal() + taxTotal() + getChargesTotal() - calculateManualDiscount() - calculateCouponDiscount();
+    const maxPointsForTotal = Math.floor((Math.max(0, remainingTotal) / 10) * 100); // Convert amount to points
     return Math.min(selectedCustomerLoyalty, maxPointsForTotal);
   };
 
@@ -575,15 +587,28 @@ export default function PosPage() {
 
   const getEffectiveOrderType = () => (selectedTableForPayment ? 'DINE_IN' : orderType);
 
-  const getServiceCharge = () => (getEffectiveOrderType() === 'DINE_IN' ? serviceCharge : 0);
+  const getServiceCharge = () => {
+    if (getEffectiveOrderType() !== 'DINE_IN') return 0;
+    if (serviceChargeType === 'PERCENTAGE') {
+      return Math.round((subtotal() * serviceCharge / 100) * 100) / 100;
+    }
+    return serviceCharge;
+  };
 
-  const getPackagingCharge = () => (getEffectiveOrderType() !== 'DINE_IN' ? packagingCharge : 0);
+  const getPackagingCharge = () => {
+    if (getEffectiveOrderType() === 'DINE_IN') return 0;
+    if (packagingChargeType === 'PERCENTAGE') {
+      return Math.round((subtotal() * packagingCharge / 100) * 100) / 100;
+    }
+    return packagingCharge;
+  };
 
   const getChargesTotal = () => getServiceCharge() + getPackagingCharge();
 
   const finalTotal = () => {
-    const baseTotal = grandTotal() + getChargesTotal();
-    return Math.max(0, baseTotal - calculateDiscount());
+    // Correct formula: subtotal + tax + charges - discount (minimum 0)
+    const base = subtotal() + taxTotal() + getChargesTotal();
+    return Math.max(0, base - calculateDiscount());
   };
   const isPayingTable = Boolean(selectedTableForPayment);
   const isProcessing = isPayingTable
@@ -724,6 +749,14 @@ const handleCreateSale = async () => {
       payload.couponCode = couponCode.trim();
     }
 
+    // Pass computed service/packaging charge values
+    if (getServiceCharge() > 0) {
+      payload.serviceCharge = getServiceCharge();
+    }
+    if (getPackagingCharge() > 0) {
+      payload.packagingCharge = getPackagingCharge();
+    }
+
     const sale = await createSale(payload);
 
     // Redeem loyalty points if used
@@ -815,6 +848,20 @@ const handleCreateSale = async () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+              } else {
+                document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+              }
+            }}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            className="touch-manipulation rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
+          >
+            {isFullscreen ? '⊡' : '⛶'}
+          </button>
           <button
             type="button"
             onClick={(e) => {
@@ -1046,13 +1093,11 @@ const handleCreateSale = async () => {
                         {formatMoney(product.price)}
                       </span>
 
-                      <span
-                        className={`shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-lg font-bold ${
-                          isUnavailable ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'
-                        }`}
-                      >
-                        {isUnavailable ? '—' : '+'}
-                      </span>
+                      {isUnavailable && (
+                        <span className="shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-lg font-bold bg-slate-200 text-slate-400">
+                          —
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

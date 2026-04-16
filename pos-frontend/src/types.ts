@@ -621,7 +621,9 @@ export interface SystemConfig {
   expiryAlertDays: number;
   invoiceFormat: InvoiceFormat;
   serviceCharge: number;
+  serviceChargeType: 'FIXED' | 'PERCENTAGE';
   packagingCharge: number;
+  packagingChargeType: 'FIXED' | 'PERCENTAGE';
   logo?: string;
   pointsPerDollar: number;
   pointsExpiryDays: number;

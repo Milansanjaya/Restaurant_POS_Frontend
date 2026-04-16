@@ -17,7 +17,9 @@ export default function SettingsPage() {
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
   const [expiryAlertDays, setExpiryAlertDays] = useState(30);
   const [serviceCharge, setServiceCharge] = useState(0);
+  const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
   const [packagingCharge, setPackagingCharge] = useState(0);
+  const [packagingChargeType, setPackagingChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
 
   const loadConfig = async () => {
     try {
@@ -33,7 +35,9 @@ export default function SettingsPage() {
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
       setExpiryAlertDays(data.expiryAlertDays || 30);
       setServiceCharge(typeof data.serviceCharge === 'number' ? data.serviceCharge : 0);
+      setServiceChargeType((data.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
       setPackagingCharge(typeof data.packagingCharge === 'number' ? data.packagingCharge : 0);
+      setPackagingChargeType((data.packagingChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
     } catch (error) {
       console.error('Failed to load config:', error);
       alert('⚠️ Failed to load settings. Please try again.');
@@ -59,7 +63,9 @@ export default function SettingsPage() {
         },
         expiryAlertDays,
         serviceCharge,
+        serviceChargeType,
         packagingCharge,
+        packagingChargeType,
       });
       alert('Settings saved successfully');
     } catch (error: any) {
@@ -160,21 +166,53 @@ export default function SettingsPage() {
           {/* Service & Packaging Charges */}
           <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Service & Packaging Charges</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Service Charge (Dine-in)"
-                type="number"
-                value={serviceCharge}
-                onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
-                helperText="Applied to dine-in orders only"
-              />
-              <Input
-                label="Packaging Charge (Takeaway/Delivery)"
-                type="number"
-                value={packagingCharge}
-                onChange={(e) => setPackagingCharge(parseFloat(e.target.value) || 0)}
-                helperText="Applied to takeaway and delivery orders"
-              />
+            <div className="grid grid-cols-2 gap-6">
+              {/* Service Charge */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Service Charge (Dine-in)
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={serviceChargeType}
+                    onChange={(e) => setServiceChargeType(e.target.value as 'FIXED' | 'PERCENTAGE')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="PERCENTAGE">% Percentage</option>
+                    <option value="FIXED">Rs. Fixed</option>
+                  </select>
+                  <Input
+                    type="number"
+                    value={serviceCharge}
+                    onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
+                    helperText={serviceChargeType === 'PERCENTAGE' ? 'e.g. 5 = 5% of subtotal' : 'Fixed Rs. amount'}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+              {/* Packaging Charge */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Packaging Charge (Takeaway/Delivery)
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={packagingChargeType}
+                    onChange={(e) => setPackagingChargeType(e.target.value as 'FIXED' | 'PERCENTAGE')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="PERCENTAGE">% Percentage</option>
+                    <option value="FIXED">Rs. Fixed</option>
+                  </select>
+                  <Input
+                    type="number"
+                    value={packagingCharge}
+                    onChange={(e) => setPackagingCharge(parseFloat(e.target.value) || 0)}
+                    helperText={packagingChargeType === 'PERCENTAGE' ? 'e.g. 3 = 3% of subtotal' : 'Fixed Rs. amount'}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
             </div>
           </Card>
 

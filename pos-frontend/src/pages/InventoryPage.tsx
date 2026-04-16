@@ -12,7 +12,7 @@ export default function InventoryPage() {
   const [selectedItem, setSelectedItem] = useState<Inventory | null>(null);
   const [adjustmentQty, setAdjustmentQty] = useState(0);
   const [adjustmentType, setAdjustmentType] = useState<'PURCHASE' | 'ADJUSTMENT' | 'RETURN'>('ADJUSTMENT');
-  const [cleaning, setCleaning] = useState(false);
+  const [activeTab, setActiveTab] = useState<'tracked' | 'restaurant'>('tracked');
 
   const loadInventory = async () => {
     try {
@@ -81,25 +81,6 @@ export default function InventoryPage() {
     }
   };
 
-  const handleCleanup = async () => {
-    if (!confirm('Deactivate inventory items for deleted/inactive products? This will hide them from the inventory list.')) return;
-    
-    try {
-      setCleaning(true);
-      const result = await inventoryApi.cleanup();
-      const count = result.deactivated || result.deleted || 0;
-      if (count > 0) {
-        toast.success(`✅ Cleanup complete! ${count} items deactivated`);
-      } else {
-        toast.success('✅ No orphaned items found');
-      }
-      loadInventory();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || '❌ Failed to cleanup inventory');
-    } finally {
-      setCleaning(false);
-    }
-  };
 
   const getProduct = (item: Inventory | null): Product | null => {
     if (!item) return null;
@@ -206,9 +187,6 @@ export default function InventoryPage() {
         subtitle="Monitor and adjust stock levels"
         actions={
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={handleCleanup} disabled={cleaning}>
-              {cleaning ? '⏳ Cleaning...' : '🧹 Cleanup'}
-            </Button>
             <Button variant="outline" onClick={loadInventory}>
               🔄 Refresh
             </Button>
@@ -217,9 +195,8 @@ export default function InventoryPage() {
       />
       <PageContent>
         {/* Summary Stats - Only for tracked products */}
-        {trackedInventory.length > 0 && (
+        {activeTab === 'tracked' && trackedInventory.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-slate-700 mb-3">📦 Stock Tracked Items</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white rounded-lg border border-slate-200 p-4">
                 <div className="text-sm text-slate-600">Total Items</div>
@@ -256,41 +233,65 @@ export default function InventoryPage() {
           />
         </div>
 
-        {/* Tracked Inventory */}
-        {trackedInventory.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-slate-900 mb-3">
-              📊 Stock Tracked Products ({trackedInventory.length})
-            </h3>
-            <Table
-              columns={columns}
-              data={trackedInventory}
-              keyExtractor={(item) => item._id}
-              loading={loading}
-              emptyMessage="No tracked inventory items found"
-            />
-          </div>
-        )}
+        {/* Tab Navigation */}
+        <div className="mb-6 flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('tracked')}
+            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
+              activeTab === 'tracked'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            📦 Stock Tracked ({trackedInventory.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('restaurant')}
+            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
+              activeTab === 'restaurant'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            🍽️ Restaurant Items ({untrackedInventory.length})
+          </button>
+        </div>
 
-        {/* Untracked Inventory (Always Available) */}
-        {untrackedInventory.length > 0 && (
+        {/* Tab 1: Tracked Inventory */}
+        {activeTab === 'tracked' && (
           <div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-3">
-              🍽️ Restaurant Items (Always Available) ({untrackedInventory.length})
-            </h3>
-            <Table
-              columns={untrackedColumns}
-              data={untrackedInventory}
-              keyExtractor={(item) => item._id}
-              loading={loading}
-              emptyMessage="No untracked items found"
-            />
+            {trackedInventory.length === 0 && !loading ? (
+              <div className="text-center py-12 text-slate-500">
+                No stock tracked items found
+              </div>
+            ) : (
+              <Table
+                columns={columns}
+                data={trackedInventory}
+                keyExtractor={(item) => item._id}
+                loading={loading}
+                emptyMessage="No tracked inventory items found"
+              />
+            )}
           </div>
         )}
 
-        {trackedInventory.length === 0 && untrackedInventory.length === 0 && !loading && (
-          <div className="text-center py-12 text-slate-500">
-            No inventory items found
+        {/* Tab 2: Restaurant Items (Untracked) */}
+        {activeTab === 'restaurant' && (
+          <div>
+            {untrackedInventory.length === 0 && !loading ? (
+              <div className="text-center py-12 text-slate-500">
+                No restaurant items found
+              </div>
+            ) : (
+              <Table
+                columns={untrackedColumns}
+                data={untrackedInventory}
+                keyExtractor={(item) => item._id}
+                loading={loading}
+                emptyMessage="No untracked items found"
+              />
+            )}
           </div>
         )}
       </PageContent>
