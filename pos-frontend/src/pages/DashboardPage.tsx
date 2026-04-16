@@ -4,8 +4,7 @@ import { dashboardApi, reportsApi } from '../api';
 import { getSales } from '../api/sales.api';
 import type { DashboardSummary, TopProduct, Inventory } from '../types';
 import { QuickActions } from '../components/QuickActions';
-import { RecentActivity } from '../components/RecentActivity';
-import { TodaysSummary } from '../components/TodaysSummary';
+
 import { formatMoney } from '../money';
 
 // Simple Bar Chart Component (no external dependencies)
@@ -123,12 +122,9 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [lowStock, setLowStock] = useState<Inventory[]>([]);
-  const [topProductsChart, setTopProductsChart] = useState<any[]>([]);
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
-  const [categoryData, setCategoryData] = useState<any[]>([]);
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const [todaySummary, setTodaySummary] = useState<any>(null);
+  const [categoryData, setCategoryData] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   const [salesPeriod, setSalesPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [todayProfit, setTodayProfit] = useState<number>(0);
@@ -144,11 +140,10 @@ export default function DashboardPage() {
         const monthAgo = new Date(today);
         monthAgo.setDate(monthAgo.getDate() - 30);
 
-        const [summaryData, topProductsData, lowStockData, paymentData] = await Promise.all([
+        const [summaryData, topProductsData, lowStockData] = await Promise.all([
           dashboardApi.getSummary(),
           dashboardApi.getTopProducts(5),
           reportsApi.getLowStock(),
-          reportsApi.getPaymentSummary().catch(() => ({})),
         ]);
         setSummary(summaryData);
         setTopProducts(topProductsData || []);
@@ -242,10 +237,6 @@ export default function DashboardPage() {
         console.log('Revenue Data (last 7 days):', revenueDataArray.slice(-7));
         setRevenueData(revenueDataArray);
         
-        // Set top products chart data
-        if (Array.isArray(topProductsData)) {
-          setTopProductsChart(topProductsData);
-        }
 
         // Build REAL hourly data for today from actual sales
         const hourlyRevenue: Record<number, { revenue: number; orders: number }> = {};
@@ -293,68 +284,7 @@ export default function DashboardPage() {
           [{ name: 'No Data', value: 0 }];
         setCategoryData(categoryDataReal);
 
-        // Generate recent activities from real data
-        const activities: any[] = [];
-        
-        // Add low stock alerts
-        (lowStockData || []).slice(0, 3).forEach((item: any, index: number) => {
-          const productName = item.product?.name || 'Unknown Item';
-          activities.push({
-            id: `stock-${index}`,
-            type: 'stock' as const,
-            message: `Low Stock: ${productName} (${item.stockQuantity} left)`,
-            timestamp: new Date(Date.now() - (index + 1) * 300000).toISOString(),
-            icon: '⚠️',
-            iconColor: 'orange'
-          });
-        });
 
-        // Add recent orders
-        if (summaryData?.todayOrders > 0) {
-          activities.unshift({
-            id: 'orders-today',
-            type: 'sale' as const,
-            message: `${summaryData.todayOrders} orders completed today`,
-            timestamp: new Date().toISOString(),
-            amount: summaryData.todayRevenue,
-            icon: '🛒',
-            iconColor: 'blue'
-          });
-        }
-
-        if (summaryData?.pendingKitchenOrders > 0) {
-          activities.push({
-            id: 'kitchen-pending',
-            type: 'order' as const,
-            message: `${summaryData.pendingKitchenOrders} orders in kitchen`,
-            timestamp: new Date(Date.now() - 60000).toISOString(),
-            icon: '👨‍🍳',
-            iconColor: 'purple'
-          });
-        }
-
-        setRecentActivities(activities.slice(0, 5));
-
-        // Today's summary from real payment data
-        const todaySummaryReal = {
-          salesBreakdown: {
-            dineIn: Math.round((summaryData?.todayRevenue || 0) * 0.6),
-            takeaway: Math.round((summaryData?.todayRevenue || 0) * 0.25),
-            delivery: Math.round((summaryData?.todayRevenue || 0) * 0.15)
-          },
-          paymentMethods: {
-            cash: (paymentData as any)?.CASH || (paymentData as any)?.cash || 0,
-            card: (paymentData as any)?.CARD || (paymentData as any)?.card || 0,
-            wallet: (paymentData as any)?.WALLET || (paymentData as any)?.wallet || (paymentData as any)?.DIGITAL || 0
-          },
-          orderStats: {
-            completed: summaryData?.todayOrders || 0,
-            pending: summaryData?.pendingKitchenOrders || 0,
-            cancelled: 0
-          }
-        };
-        setTodaySummary(todaySummaryReal);
-        
       } catch (error) {
         console.error('Failed to load dashboard:', error);
       } finally {
@@ -486,45 +416,12 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Revenue & Products Charts */}
-        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Revenue Trend Chart */}
-          <Card>
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              Revenue Trend (Last 7 Days)
-            </h3>
-            {revenueData.length === 0 ? (
-              <div className="flex h-[300px] items-center justify-center text-slate-500">
-                No revenue data available
-              </div>
-            ) : (
-              <SimpleBarChart data={revenueData.slice(-7)} height={300} />
-            )}
-          </Card>
+        {/* Revenue & Products Charts — duplicate section removed */}
 
-          {/* Top Products Pie Chart */}
+        {/* Main Content: Top Products + Low Stock (full width, 2 col) */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Top Products */}
           <Card>
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              Top Products Distribution
-            </h3>
-            {topProductsChart.length === 0 ? (
-              <div className="flex h-[350px] items-center justify-center text-slate-500">
-                No product data available
-              </div>
-            ) : (
-              <SimplePieChart data={topProductsChart} height={350} />
-            )}
-          </Card>
-        </div>
-
-        {/* Main Content Grid with Sidebar */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left Column - 2/3 width */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Top Products & Low Stock */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Top Products */}
-              <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Top Products</h3>
             {topProducts.length === 0 ? (
               <p className="text-slate-500">No sales data yet</p>
@@ -559,10 +456,10 @@ export default function DashboardPage() {
           <Card>
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Low Stock Alerts</h3>
             {lowStock.length === 0 ? (
-              <p className="text-slate-500">All items are well stocked</p>
+              <p className="text-slate-500">All items are well stocked ✅</p>
             ) : (
               <div className="space-y-3">
-                {lowStock.slice(0, 5).map((item) => {
+                {lowStock.slice(0, 8).map((item) => {
                   const product = typeof item.product === 'object' ? item.product : null;
                   return (
                     <div
@@ -590,17 +487,6 @@ export default function DashboardPage() {
             )}
           </Card>
         </div>
-      </div>
-
-      {/* Right Sidebar - 1/3 width */}
-      <div className="space-y-6">
-        {/* Recent Activity */}
-        <RecentActivity activities={recentActivities} limit={5} />
-
-        {/* Today's Summary */}
-        {todaySummary && <TodaysSummary data={todaySummary} />}
-      </div>
-    </div>
       </PageContent>
     </Layout>
   );

@@ -12,7 +12,8 @@ import { customersApi } from "../api/customers.api";
 import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
 import { reservationsApi } from "../api/reservations.api";
-import type { Category, RestaurantTable, Shift, Customer, Reservation } from "../types";
+import { kitchenApi } from "../api/kitchen.api";
+import type { Category, RestaurantTable, Shift, Customer, Reservation, KitchenOrder } from "../types";
 import { formatMoney } from "../money";
 
 type Product = {
@@ -110,9 +111,22 @@ export default function PosPage() {
   const [openingCash, setOpeningCash] = useState<number>(0);
   const [processingShift, setProcessingShift] = useState(false);
 
+  // Logout confirmation
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   // Touch/quick actions
   const [showTablesModal, setShowTablesModal] = useState(false);
+  const [tablesTab, setTablesTab] = useState<'available' | 'active' | 'cleaning'>('available');
+  // View order on an active table
+  const [viewOrderTable, setViewOrderTable] = useState<{ table: RestaurantTable; items: any[]; total: number } | null>(null);
+  const [loadingViewOrder, setLoadingViewOrder] = useState(false);
+  // Kitchen orders viewer (read-only for cashier)
+  const [showKitchenViewer, setShowKitchenViewer] = useState(false);
+  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
+  const [loadingKitchen, setLoadingKitchen] = useState(false);
   const cartSectionRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const customerSearchRef = useRef<HTMLInputElement | null>(null);
 
   const scrollToCart = () => {
     cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -258,6 +272,51 @@ export default function PosPage() {
     };
     revalidateCoupon();
   }, [items]); // Re-validate when items change
+
+  // Keyboard shortcuts for POS efficiency
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          break;
+        case 'F2':
+          e.preventDefault();
+          if (items.length > 0 && currentShift) {
+            if (isPayingTable) handleTablePayment();
+            else if (orderType === 'DINE_IN' && selectedTable) handleAddToTable();
+            else handleCreateSale();
+          }
+          break;
+        case 'F3':
+          e.preventDefault();
+          if (!isTyping) {
+            setDiscountType(prev => prev ? '' : 'PERCENTAGE');
+          }
+          break;
+        case 'F4':
+          e.preventDefault();
+          if (!isTyping && items.length > 0) {
+            clearCart();
+            setSelectedTableForPayment(null);
+            setShowPaymentModal(false);
+            toast.success('Cart cleared');
+          }
+          break;
+        case 'F5':
+          e.preventDefault();
+          customerSearchRef.current?.focus();
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [items, currentShift, selectedTableForPayment, orderType, selectedTable]);
 
   const handleOpenShift = async () => {
     if (openingCash < 0) {
@@ -491,8 +550,8 @@ export default function PosPage() {
         }
       }
 
-      // Update table status to AVAILABLE
-      await tablesApi.updateStatus(selectedTableForPayment._id, 'AVAILABLE');
+      // Table paid — set to CLEANING so cashier can physically clear it before marking available
+      await tablesApi.updateStatus(selectedTableForPayment._id, 'CLEANING');
 
       // Check if this table has an active reservation and complete it
       try {
@@ -546,6 +605,9 @@ export default function PosPage() {
   const occupiedTables = tables.filter(t => 
     t.status === 'OCCUPIED' || tableOrders.some(order => order.tableId === t._id)
   );
+
+  // Tables paid and waiting for physical cleaning before being re-opened
+  const cleaningTables = tables.filter(t => t.status === 'CLEANING');
 
   // Calculate manual discount amount (discount base = subtotal + tax, before charges)
   const calculateManualDiscount = () => {
@@ -819,7 +881,7 @@ const handleCreateSale = async () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col">
+    <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
       
       {/* Shift Warning Banner */}
       {!currentShift && !loading && (
@@ -835,19 +897,26 @@ const handleCreateSale = async () => {
       )}
 
       {/* Current Shift Info */}
+      {/* Top Banner (Shift) */}
       {currentShift && (
-        <div className="bg-green-500 text-white px-4 py-1 sm:px-6 text-sm">
-          ✓ Shift Open | Opening Cash: {formatMoney(currentShift.openingCash)}
+        <div className="bg-emerald-600 text-white px-4 py-1.5 sm:px-6 text-[12px] font-bold tracking-wide flex items-center gap-2 premium-shadow z-50">
+          <span className="flex h-2 w-2 rounded-full bg-white animate-pulse"></span>
+          ACTIVE SHIFT: OPENED WITH {formatMoney(currentShift.openingCash)}
         </div>
       )}
 
-      <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+      {/* Main Header */}
+      <header className="flex h-20 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-40 sticky top-0">
         <div>
-          <h1 className="text-lg font-semibold text-slate-800">POS Dashboard</h1>
-          <p className="text-sm text-slate-500">Restaurant Point of Sale</p>
+          <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
+            POS <span className="text-indigo-600">Terminal</span>
+          </h1>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Restaurant Management System
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => {
@@ -858,10 +927,19 @@ const handleCreateSale = async () => {
               }
             }}
             title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            className="touch-manipulation rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
+            className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
           >
-            {isFullscreen ? '⊡' : '⛶'}
+            {isFullscreen ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m-6 6h6m3-12v3m0 0h-3m3 0l-4 4m-8 0l4-4m-4 0h3m-3 0V3m0 18v-3m0 0h3m-3 0l4-4m8 0l-4 4m4 0h-3m3 0v3" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            )}
           </button>
+          
           <button
             type="button"
             onClick={(e) => {
@@ -869,22 +947,29 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               navigate("/dashboard");
             }}
-            className="touch-manipulation rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 active:scale-[0.99] sm:px-5 sm:py-3"
+            className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-100 transition-all hover-lift active:scale-95 shadow-sm border border-indigo-100"
           >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
             Dashboard
           </button>
+
           <button
-            onClick={logout}
-            className="touch-manipulation rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99] sm:px-5 sm:py-3"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="touch-manipulation flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95 shadow-md shadow-slate-200"
           >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
             Logout
           </button>
         </div>
       </header>
 
-      {/* Touch Quick Navigation */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-        <div className="flex gap-3 overflow-x-auto pb-1">
+      {/* Quick Navigation Bar */}
+      <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-4 sm:px-8">
+        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
           <button
             type="button"
             onClick={(e) => {
@@ -892,9 +977,9 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               openQuickView("Sale Summary", "/dashboard");
             }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
-            📊 Sale Summary
+            📊 Summary
           </button>
           <button
             type="button"
@@ -903,9 +988,9 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               openQuickView("Sales", "/sales");
             }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
-            🧾 Sales
+            🧻 Sales
           </button>
           <button
             type="button"
@@ -914,7 +999,7 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               openQuickView("Stocks", "/inventory");
             }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
             📦 Stocks
           </button>
@@ -925,7 +1010,7 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               openQuickView("Returns", "/returns");
             }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
             ↩️ Returns
           </button>
@@ -936,14 +1021,56 @@ const handleCreateSale = async () => {
               e.stopPropagation();
               openQuickView("Reports", "/reports");
             }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.99] sm:px-6 sm:py-2.5"
+            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
             📑 Reports
           </button>
-        </div>
-      </div>
 
-      <main className="flex flex-1 min-h-0 flex-col lg:flex-row">
+          {/* Divider */}
+          <div className="shrink-0 w-px bg-slate-200 my-2 mx-1"></div>
+
+          {/* Live Actions Group */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setTablesTab('available');
+                setShowTablesModal(true);
+              }}
+              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-amber-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all hover-lift active:scale-95 button-glow-amber"
+            >
+              🍽️ Tables
+              {(occupiedTables.length + cleaningTables.length) > 0 && (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-amber-600 premium-shadow">
+                  {occupiedTables.length + cleaningTables.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowKitchenViewer(true);
+                setLoadingKitchen(true);
+                try {
+                  const orders = await kitchenApi.getQueue();
+                  setKitchenOrders(orders);
+                } catch { setKitchenOrders([]); }
+                finally { setLoadingKitchen(false); }
+              }}
+              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all hover-lift active:scale-95 button-glow-primary"
+            >
+              👨‍🍳 Kitchen
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
         <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
@@ -1010,7 +1137,8 @@ const handleCreateSale = async () => {
 
           <div className="mb-6">
             <input
-              placeholder="Search products..."
+              ref={searchInputRef}
+              placeholder="Search products... (F1)"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full max-w-none sm:max-w-md rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-slate-500 sm:py-4"
@@ -1108,10 +1236,16 @@ const handleCreateSale = async () => {
 
         <aside
           ref={cartSectionRef}
-          className="w-full border-t border-slate-200 bg-white p-4 flex flex-col lg:w-96 lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 sm:p-6 min-h-0"
+          className="w-full border-t border-slate-200 bg-white flex flex-col lg:w-[440px] lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 min-h-0 overflow-hidden"
         >
-          <div className="mb-4 shrink-0">
-            <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
+          {/* Cart Header — fixed */}
+          <div className="px-4 pt-4 pb-2 sm:px-5 shrink-0">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
+              {items.length > 0 && (
+                <span className="text-xs font-medium bg-slate-900 text-white px-2 py-0.5 rounded-full">{items.reduce((s, i) => s + i.quantity, 0)}</span>
+              )}
+            </div>
             {orderType === 'DINE_IN' && selectedTable && (
               <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                 <div className="flex items-center justify-between">
@@ -1132,7 +1266,7 @@ const handleCreateSale = async () => {
                       setSelectedTableForPayment(null);
                       setShowPaymentModal(false);
                     }}
-                    className="touch-manipulation rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
+                    className="touch-manipulation rounded-lg px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
                   >
                     Clear
                   </button>
@@ -1141,69 +1275,84 @@ const handleCreateSale = async () => {
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-visible lg:overflow-auto pr-1">
+          {/* Scrollable Cart Items + Payment Fields */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 pb-2">
             {items.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
                 No items in cart yet.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-1">
+                {/* Cart header row */}
+                <div className="flex items-center gap-2 px-1 pb-1 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                  <span className="flex-1">Item</span>
+                  <span className="w-16 text-right">Price</span>
+                  <span className="w-28 text-center">Qty</span>
+                  <span className="w-16 text-right">Total</span>
+                  <span className="w-8"></span>
+                </div>
                 {items.map((item) => (
                   <div
                     key={item._id}
-                    className="rounded-xl border border-slate-200 p-3"
+                    className="flex items-center gap-2 py-2 border-b border-slate-50 group"
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-medium text-slate-800">{item.name}</h3>
-                        <p className="text-sm text-slate-500">
-                          {formatMoney(item.price)} each
-                        </p>
-                      </div>
+                    {/* Product name */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-slate-800 truncate">{item.name}</h3>
+                    </div>
 
+                    {/* Unit price */}
+                    <span className="w-16 text-right text-xs text-slate-500 shrink-0">
+                      {formatMoney(item.price)}
+                    </span>
+
+                    {/* Qty controls */}
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => removeItem(item._id)}
-                        className="touch-manipulation rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 active:scale-[0.99]"
+                        onClick={() => decreaseQty(item._id)}
+                        className="touch-manipulation h-7 w-7 rounded-lg border border-slate-300 bg-white text-sm font-bold hover:bg-slate-50 active:scale-[0.97]"
+                        aria-label="Decrease quantity"
                       >
-                        Remove
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const next = raw === '' ? 1 : parseInt(raw, 10);
+                          setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
+                        }}
+                        className="w-10 h-7 rounded-lg border border-slate-300 text-center text-sm"
+                        aria-label="Quantity"
+                      />
+                      <button
+                        onClick={() => increaseQty(item._id)}
+                        className="touch-manipulation h-7 w-7 rounded-lg border border-slate-300 bg-white text-sm font-bold hover:bg-slate-50 active:scale-[0.97]"
+                        aria-label="Increase quantity"
+                      >
+                        +
                       </button>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => decreaseQty(item._id)}
-                          className="touch-manipulation h-10 w-10 rounded-xl border border-slate-300 bg-white text-lg font-bold hover:bg-slate-50 active:scale-[0.99]"
-                          aria-label="Decrease quantity"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const next = raw === '' ? 1 : parseInt(raw, 10);
-                            setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
-                          }}
-                          className="w-16 h-10 rounded-xl border border-slate-300 text-center text-base"
-                          aria-label="Quantity"
-                        />
-                        <button
-                          onClick={() => increaseQty(item._id)}
-                          className="touch-manipulation h-10 w-10 rounded-xl border border-slate-300 bg-white text-lg font-bold hover:bg-slate-50 active:scale-[0.99]"
-                          aria-label="Increase quantity"
-                        >
-                          +
-                        </button>
-                      </div>
+                    {/* Subtotal */}
+                    <span className="w-16 text-right text-sm font-semibold text-slate-800 shrink-0">
+                      {formatMoney(item.price * item.quantity)}
+                    </span>
 
-                      <span className="font-medium text-slate-800">
-                        {formatMoney(item.price * item.quantity)}
-                      </span>
-                    </div>
+                    {/* Trash icon */}
+                    <button
+                      onClick={() => removeItem(item._id)}
+                      className="touch-manipulation w-8 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0"
+                      aria-label="Remove item"
+                      title="Remove"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1214,8 +1363,15 @@ const handleCreateSale = async () => {
               {/* Customer Selection */}
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Customer (Optional)
+                  {selectedCustomerId ? 'Customer' : 'Customer'}
                 </label>
+                {!selectedCustomerId && (
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                      👤 Walk-in Customer
+                    </span>
+                  </div>
+                )}
                 <div className="relative">
                   {selectedCustomerId ? (
                     <div className="flex items-center justify-between bg-blue-50 rounded-2xl px-5 py-4 border border-blue-200">
@@ -1254,6 +1410,7 @@ const handleCreateSale = async () => {
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <input
+                          ref={customerSearchRef}
                           type="text"
                           value={customerSearch}
                           onChange={(e) => {
@@ -1261,7 +1418,7 @@ const handleCreateSale = async () => {
                             setShowCustomerSearch(true);
                           }}
                           onFocus={() => setShowCustomerSearch(true)}
-                          placeholder="Search customer by name/phone..."
+                          placeholder="Search customer... (F5)"
                           className="touch-manipulation w-full rounded-2xl border border-slate-300 px-5 py-4 text-lg"
                         />
                         {showCustomerSearch && customerSearch && (
@@ -1487,8 +1644,8 @@ const handleCreateSale = async () => {
             </div>
           </div>
 
-          {/* Totals (kept visible while cart content scrolls) */}
-          <div className="shrink-0 mt-4 space-y-2 border-t border-slate-200 pt-4">
+          {/* Totals — ALWAYS VISIBLE at bottom of cart */}
+          <div className="shrink-0 px-4 sm:px-5 pb-3 pt-2 border-t border-slate-200 bg-white space-y-1.5">
             <div className="flex items-center justify-between text-sm text-slate-600">
               <span>Subtotal</span>
               <span>{formatMoney(subtotal())}</span>
@@ -1529,19 +1686,17 @@ const handleCreateSale = async () => {
               </div>
             )}
 
-            <div className="flex items-center justify-between text-base font-semibold text-slate-900 pt-2 border-t">
+            <div className="flex items-center justify-between text-lg font-bold text-slate-900 pt-2 border-t">
               <span>Total</span>
               <span>{formatMoney(finalTotal())}</span>
             </div>
           </div>
-
-          {/* Actions moved to bottom touch bar */}
         </aside>
       </main>
 
       {/* Bottom Touch Action Bar */}
-      <div className="shrink-0 border-t border-slate-200 bg-white sticky bottom-0 z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
-        <div className="flex items-stretch gap-2 px-3 py-2">
+      <div className="shrink-0 border-t border-slate-200 bg-white z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
+        <div className="flex items-stretch gap-2 px-3 py-3 flex-wrap">
           {/* Order Type */}
           <div className="flex rounded-xl bg-slate-100 p-1">
             {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
@@ -1634,27 +1789,97 @@ const handleCreateSale = async () => {
 
       {/* Tables Modal (Touch friendly) */}
       {showTablesModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-4xl max-h-[90vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">🍽️ Tables</h3>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+          <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col premium-shadow-xl border border-white/20 overflow-hidden">
+
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 shrink-0 bg-slate-50/50 backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 shadow-lg shadow-indigo-100">
+                  <span className="text-xl">🍽️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Tables Management</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      {availableTables.length} Online · {occupiedTables.length} Active
+                      {cleaningTables.length > 0 && ` · ${cleaningTables.length} Cleaning`}
+                    </span>
+                  </div>
+                </div>
+              </div>
               <button
                 onClick={() => setShowTablesModal(false)}
-                className="touch-manipulation rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift"
               >
-                ✕
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-600 mb-2">Available</h4>
-                {availableTables.length === 0 ? (
-                  <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
-                    No available tables.
+            {/* ── Tabs ── */}
+            <div className="flex px-8 py-2 border-b border-slate-100 shrink-0 bg-white gap-2">
+              <button
+                onClick={() => setTablesTab('available')}
+                className={`py-3 px-6 text-sm font-bold rounded-xl tab-transition flex items-center gap-3 ${
+                  tablesTab === 'available'
+                    ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100'
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${tablesTab === 'available' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
+                Available
+                <span className={`ml-1 px-2 py-0.5 rounded-lg text-[10px] ${tablesTab === 'available' ? 'bg-emerald-200/50' : 'bg-slate-100'}`}>
+                  {availableTables.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setTablesTab('active')}
+                className={`py-3 px-6 text-sm font-bold rounded-xl tab-transition flex items-center gap-3 ${
+                  tablesTab === 'active'
+                    ? 'bg-amber-50 text-amber-700 shadow-sm border border-amber-100'
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${tablesTab === 'active' ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`}></span>
+                Active Orders
+                <span className={`ml-1 px-2 py-0.5 rounded-lg text-[10px] ${tablesTab === 'active' ? 'bg-amber-200/50' : 'bg-slate-100'}`}>
+                  {occupiedTables.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setTablesTab('cleaning')}
+                className={`py-3 px-6 text-sm font-bold rounded-xl tab-transition flex items-center gap-3 ${
+                  tablesTab === 'cleaning'
+                    ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100'
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${tablesTab === 'cleaning' ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`}></span>
+                Cleaning
+                <span className={`ml-1 px-2 py-0.5 rounded-lg text-[10px] ${tablesTab === 'cleaning' ? 'bg-indigo-200/50' : 'bg-slate-100'}`}>
+                  {cleaningTables.length}
+                </span>
+              </button>
+            </div>
+
+            {/* ── Scrollable body ── */}
+            <div className="overflow-y-auto flex-1 px-8 py-8 bg-slate-50/30">
+
+              {/* ── TAB 1: Available Tables ── */}
+              {tablesTab === 'available' && (
+                availableTables.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-3xl">☕</div>
+                    <div className="text-center">
+                      <p className="text-base font-bold text-slate-900">No tables available</p>
+                      <p className="text-xs text-slate-400 mt-1">Wait for a table to be cleared or cleaned.</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {availableTables.map((t) => (
                       <button
                         key={t._id}
@@ -1663,60 +1888,418 @@ const handleCreateSale = async () => {
                           setSelectedTable(t._id);
                           setShowTablesModal(false);
                         }}
-                        className="touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                        className="group relative touch-manipulation flex flex-col items-center justify-center rounded-[2rem] border border-emerald-100 bg-white px-2 py-6 text-center premium-shadow hover:border-emerald-500 hover:shadow-emerald-100 transition-all hover-lift"
                       >
-                        {t.tableNumber}
-                        <div className="mt-1 text-[11px] font-medium text-slate-500">
-                          {t.capacity} seats
+                        <div className="absolute top-3 right-4 h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                        <span className="text-2xl font-black text-slate-900 group-hover:text-emerald-700 leading-tight">
+                          {t.tableNumber}
+                        </span>
+                        {t.section && (
+                          <span className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate w-full px-4">
+                            {t.section}
+                          </span>
+                        )}
+                        <div className="mt-3 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-[10px] font-bold text-emerald-600 border border-emerald-100">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {t.capacity} SEATS
                         </div>
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
+                )
+              )}
 
-              <div>
-                <h4 className="text-sm font-semibold text-slate-600 mb-2">Active</h4>
-                {occupiedTables.length === 0 ? (
-                  <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
-                    No active tables.
+              {/* ── TAB 2: Active Orders ── */}
+              {tablesTab === 'active' && (
+                occupiedTables.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-3xl">📭</div>
+                    <div className="text-center">
+                      <p className="text-base font-bold text-slate-900">No active tables</p>
+                      <p className="text-xs text-slate-400 mt-1">Tables will appear here once guests are seated.</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {occupiedTables.map((t) => (
-                      <div key={t._id} className="rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Table {t.tableNumber}</div>
-                            <div className="text-xs text-slate-500">{t.section ? `${t.section} • ` : ''}{t.capacity} seats</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {occupiedTables.map((t) => {
+                      const saleId = t.currentSale
+                        ? (typeof t.currentSale === 'string' ? t.currentSale : (t.currentSale as any)._id)
+                        : null;
+                      return (
+                        <div
+                          key={t._id}
+                          className="flex flex-col rounded-[2.5rem] border border-amber-100 bg-white p-6 shadow-xl shadow-amber-50/50 hover:shadow-amber-100 transition-all border-l-4 border-l-amber-400"
+                        >
+                          {/* Table info */}
+                          <div className="flex items-start justify-between mb-6">
+                            <div>
+                              <div className="text-xl font-black text-slate-900 leading-none">Table {t.tableNumber}</div>
+                              <div className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-widest">
+                                {t.section ? `${t.section} · ` : ''}{t.capacity} SEATS
+                              </div>
+                            </div>
+                            <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-[10px] font-black text-amber-700 shadow-sm border border-amber-200">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                               OCCUPIED
+                            </span>
                           </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setOrderType('DINE_IN');
-                                setSelectedTable(t._id);
-                                setShowTablesModal(false);
-                              }}
-                              className="touch-manipulation rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
-                            >
-                              Add Items
-                            </button>
+
+                          {/* 3 buttons: View | Add Items | Pay Bill */}
+                          <div className="grid grid-cols-1 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {/* VIEW */}
+                              <button
+                                onClick={async () => {
+                                  setLoadingViewOrder(true);
+                                  try {
+                                    let items: any[] = [];
+                                    let total = 0;
+
+                                    if (saleId) {
+                                      try {
+                                        const sale = await getSaleById(saleId);
+                                        items = (sale?.items || []).map((si: any) => ({
+                                          name: typeof si.product === 'object' && si.product
+                                            ? (si.product.name || si.product.sku || 'Item')
+                                            : (si.productName || si.name || 'Item'),
+                                          quantity: si.quantity,
+                                          price: si.price,
+                                          status: sale.status,
+                                        }));
+                                        total = sale?.grandTotal ?? 0;
+                                      } catch (apiErr: any) {
+                                        const localOrder = tableOrders.find(o => o.tableId === t._id);
+                                        if (localOrder && localOrder.items.length > 0) {
+                                          items = localOrder.items.map(i => ({
+                                            name: i.name,
+                                            quantity: i.quantity,
+                                            price: i.price,
+                                            status: 'OPEN',
+                                          }));
+                                          total = localOrder.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+                                        } else {
+                                          toast.error('Order record not found.');
+                                          return;
+                                        }
+                                      }
+                                    } else {
+                                      const localOrder = tableOrders.find(o => o.tableId === t._id);
+                                      if (localOrder && localOrder.items.length > 0) {
+                                        items = localOrder.items.map(i => ({
+                                          name: i.name,
+                                          quantity: i.quantity,
+                                          price: i.price,
+                                          status: 'OPEN',
+                                        }));
+                                        total = localOrder.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+                                      } else {
+                                        toast.error('No items on this table yet');
+                                        return;
+                                      }
+                                    }
+                                    setViewOrderTable({ table: t, items, total });
+                                  } catch (err) {
+                                    toast.error('Could not load order');
+                                  } finally {
+                                    setLoadingViewOrder(false);
+                                  }
+                                }}
+                                disabled={loadingViewOrder}
+                                className="touch-manipulation flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 py-3 text-xs font-bold text-slate-700 hover:bg-white hover:border-slate-300 transition-all hover-lift active:scale-95 disabled:opacity-40"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View Order
+                              </button>
+
+                              {/* ADD ITEMS */}
+                              <button
+                                onClick={() => {
+                                  setOrderType('DINE_IN');
+                                  setSelectedTable(t._id);
+                                  setShowTablesModal(false);
+                                }}
+                                className="touch-manipulation flex items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3 text-xs font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                Add More
+                              </button>
+                            </div>
+
+                            {/* PAY BILL */}
                             <button
                               onClick={() => {
                                 setShowTablesModal(false);
                                 handleOpenTableBill(t);
                               }}
-                              className="touch-manipulation rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 active:scale-[0.99]"
+                              className="touch-manipulation flex items-center justify-center gap-2 rounded-[1.25rem] bg-emerald-600 py-4 text-sm font-black text-white hover:bg-emerald-700 transition-all hover-lift active:scale-95 shadow-lg shadow-emerald-100 button-glow-emerald"
                             >
-                              Pay Bill
+                              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                              Settle Bill
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+                )
+              )}
+
+              {/* ── TAB 3: Cleaning ── */}
+              {tablesTab === 'cleaning' && (
+                cleaningTables.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-3xl">✨</div>
+                    <div className="text-center">
+                      <p className="text-base font-bold text-slate-900">All set!</p>
+                      <p className="text-xs text-slate-400 mt-1">No tables requiring immediate cleaning.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mb-6 rounded-[1.5rem] border border-indigo-100 bg-indigo-50/50 px-6 py-4 flex items-start gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">🧹</div>
+                      <div>
+                        <p className="text-sm font-bold text-indigo-900">Physical Clearing Required</p>
+                        <p className="text-[11px] font-medium text-indigo-600 mt-0.5 leading-relaxed italic">The guest has paid. Once the table is physically sanitized, mark it as available to allow new guests.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {cleaningTables.map((t) => (
+                        <div
+                          key={t._id}
+                          className="flex flex-col items-center rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 transition-all border-b-4 border-b-indigo-400"
+                        >
+                          <div className="text-center mb-6">
+                            <div className="text-xl font-black text-slate-900">Table {t.tableNumber}</div>
+                            {t.section && <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{t.section}</div>}
+                            <div className="mt-3 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-50 text-[10px] font-bold text-slate-400 border border-slate-100">
+                              {t.capacity} SEATS
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(`Release Table ${t.tableNumber}?\nConfirm physical cleaning is complete.`)) return;
+                              try {
+                                await tablesApi.updateStatus(t._id, 'AVAILABLE');
+                                const refreshed = await tablesApi.getAll();
+                                setTables(refreshed);
+                                toast.success(`✅ Table ${t.tableNumber} is ready`);
+                              } catch {
+                                toast.error('Error updating status');
+                              }
+                            }}
+                            className="w-full touch-manipulation flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3 text-xs font-bold text-white hover:bg-indigo-700 transition-all hover-lift active:scale-95 shadow-lg shadow-indigo-100"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Ready to Open
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              )}
+
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="shrink-0 border-t border-slate-100 px-8 py-5 flex items-center justify-between bg-slate-50/50 backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[10px]">ℹ️</div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  {tablesTab === 'available' ? 'Tap a table to seat guests' :
+                   tablesTab === 'active' ? 'Active Table Controls — Status locked during order' :
+                   'Physical validation required for cleaning status'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTablesModal(false)}
+                className="rounded-2xl border border-slate-200 bg-white px-8 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all hover-lift active:scale-95 shadow-sm"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── View Order Modal ── */}
+      {viewOrderTable && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 transition-all duration-300">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl flex flex-col max-h-[85vh] overflow-hidden premium-shadow-xl border border-white/20">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Table {viewOrderTable.table.tableNumber}</h3>
+                </div>
+                {viewOrderTable.table.section && (
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{viewOrderTable.table.section} SECTION</p>
                 )}
               </div>
+              <button
+                onClick={() => setViewOrderTable(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Items List */}
+            <div className="overflow-y-auto flex-1 px-8 py-6 bg-white">
+              {viewOrderTable.items.length === 0 ? (
+                <div className="py-20 text-center">
+                  <div className="text-4xl mb-4">📝</div>
+                  <p className="text-sm font-bold text-slate-400">Order is empty</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">
+                    <span>Menu Item</span>
+                    <div className="flex gap-8">
+                      <span className="w-8 text-center">QTY</span>
+                      <span className="w-20 text-right">TOTAL</span>
+                    </div>
+                  </div>
+
+                  {viewOrderTable.items.map((item, i) => (
+                    <div key={i} className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{item.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-black tracking-tight ${
+                            item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                            item.status === 'OPEN' ? 'bg-blue-100 text-blue-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>
+                            {item.status}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">@{formatMoney(item.price)}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-8 shrink-0 ml-4">
+                        <span className="w-8 text-center text-sm font-black text-slate-900">{item.quantity}</span>
+                        <span className="w-20 text-right text-sm font-black text-slate-900 font-mono tracking-tighter">
+                          {formatMoney(item.price * item.quantity)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Receipt Style Divider */}
+                  <div className="border-t-2 border-dashed border-slate-100 pt-6 mt-6"></div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer / Total */}
+            <div className="shrink-0 border-t border-slate-100 px-8 py-6 flex items-center justify-between bg-slate-50/50 backdrop-blur-md">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Grand Total</p>
+                <p className="text-sm text-slate-400 italic">Incl. all taxes</p>
+              </div>
+              <div className="text-3xl font-black text-slate-900 font-mono tracking-tighter">
+                {formatMoney(viewOrderTable.total)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Kitchen Orders Viewer (read-only) ── */}
+      {showKitchenViewer && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">👨‍🍳</span>
+                <h3 className="text-lg font-bold text-slate-900">Kitchen Orders</h3>
+                <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">View only</span>
+              </div>
+              <button
+                onClick={() => setShowKitchenViewer(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 text-lg transition"
+              >✕</button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-5">
+              {loadingKitchen ? (
+                <div className="flex items-center justify-center py-16 text-slate-400">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-violet-600 mr-3"></div>
+                  Loading kitchen orders…
+                </div>
+              ) : kitchenOrders.length === 0 ? (
+                <div className="py-16 text-center text-sm text-slate-400">No active kitchen orders</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {kitchenOrders.map((order) => {
+                    const statusStyles: Record<string, string> = {
+                      PENDING:   'bg-amber-100 text-amber-800 border-amber-200',
+                      PREPARING: 'bg-blue-100 text-blue-800 border-blue-200',
+                      READY:     'bg-emerald-100 text-emerald-800 border-emerald-200',
+                      SERVED:    'bg-slate-100 text-slate-600 border-slate-200',
+                    };
+                    const statusIcons: Record<string, string> = {
+                      PENDING: '⏳', PREPARING: '🔥', READY: '✅', SERVED: '🍽️',
+                    };
+                    const waitMins = order.waitingMinutes ?? Math.round((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+                    return (
+                      <div key={order._id} className={`rounded-2xl border-2 p-4 ${
+                        order.status === 'PENDING'   ? 'border-amber-200 bg-amber-50' :
+                        order.status === 'PREPARING' ? 'border-blue-200 bg-blue-50' :
+                        order.status === 'READY'     ? 'border-emerald-200 bg-emerald-50' :
+                        'border-slate-200 bg-slate-50'
+                      }`}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            {order.tableNumber && (
+                              <div className="text-sm font-bold text-slate-900">Table {order.tableNumber}</div>
+                            )}
+                            <div className="text-xs text-slate-500 mt-0.5">{waitMins}m waiting</div>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[order.status] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                            {statusIcons[order.status]} {order.status}
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {order.items.map((item, i) => (
+                            <div key={i} className="flex items-center justify-between py-1 border-t border-white/60">
+                              <span className="text-sm font-medium text-slate-800">{item.name}</span>
+                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-800 shadow-sm">
+                                {item.quantity}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t border-slate-100 px-6 py-3 flex items-center justify-between bg-slate-50 rounded-b-2xl">
+              <p className="text-xs text-slate-400">Read-only view · Status updates are managed from the Kitchen screen</p>
+              <button
+                onClick={() => setShowKitchenViewer(false)}
+                className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-white transition"
+              >Close</button>
             </div>
           </div>
         </div>
@@ -2038,6 +2621,37 @@ const handleCreateSale = async () => {
                 className="w-full rounded-xl border border-slate-300 px-5 py-4 text-base font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-7 w-full max-w-sm shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <svg className="h-7 w-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">Log out?</h3>
+              <p className="text-sm text-slate-500 mb-6">Are you sure you want to log out?</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-base font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowLogoutConfirm(false); logout(); }}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-base font-semibold text-white hover:bg-red-700 transition"
+              >
+                Log out
               </button>
             </div>
           </div>

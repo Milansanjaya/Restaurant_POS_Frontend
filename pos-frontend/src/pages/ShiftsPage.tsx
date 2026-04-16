@@ -175,10 +175,13 @@ export default function ShiftsPage() {
       render: (shift: Shift) => {
         const diff = shift.cashDifference;
         if (diff === undefined) return '-';
+        const isPositive = diff >= 0;
         return (
-          <span className={diff >= 0 ? 'text-green-700' : 'text-red-700'}>
-            {diff >= 0 ? '+' : ''}
-            {formatMoney(diff)}
+          <span className={`inline-flex items-center gap-1 font-semibold ${
+            isPositive ? 'text-green-700' : 'text-red-700'
+          }`}>
+            {isPositive ? '+' : '−'}
+            {formatMoney(Math.abs(diff))}
           </span>
         );
       },
@@ -455,67 +458,98 @@ export default function ShiftsPage() {
             {!viewShift ? (
               <div className="text-sm text-slate-600">No shift selected.</div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
+                {/* Status + ID header */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Badge variant={viewShift.status === 'OPEN' ? 'warning' : 'default'}>
                     {viewShift.status}
                   </Badge>
-                  <div className="text-sm text-slate-600">ID: {viewShift._id}</div>
+                  <div className="text-xs text-slate-400 font-mono">ID: {viewShift._id}</div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Cashier</div>
-                    <div className="mt-1 font-medium text-slate-900">
+                {/* Key info grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cashier</div>
+                    <div className="mt-1.5 font-semibold text-slate-900">
                       {getCashierLabel(viewShift.cashier)}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Opened At</div>
-                    <div className="mt-1 font-medium text-slate-900">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Duration</div>
+                    <div className="mt-1.5 font-semibold text-slate-900">
+                      {(() => {
+                        const start = new Date(viewShift.openedAt);
+                        const end = viewShift.closedAt ? new Date(viewShift.closedAt) : new Date();
+                        const mins = Math.round((end.getTime() - start.getTime()) / 60000);
+                        const h = Math.floor(mins / 60);
+                        const m = mins % 60;
+                        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                      })()}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Opened At</div>
+                    <div className="mt-1.5 font-semibold text-slate-900">
                       {new Date(viewShift.openedAt).toLocaleString()}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Closed At</div>
-                    <div className="mt-1 font-medium text-slate-900">
-                      {viewShift.closedAt ? new Date(viewShift.closedAt).toLocaleString() : '-'}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Closed At</div>
+                    <div className="mt-1.5 font-semibold text-slate-900">
+                      {viewShift.closedAt ? new Date(viewShift.closedAt).toLocaleString() : <span className="text-green-600">Still open</span>}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Opening Cash</div>
-                    <div className="mt-1 font-medium text-slate-900">
-                      {formatMoney(viewShift.openingCash)}
-                    </div>
+                </div>
+
+                {/* Cash reconciliation */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                    Cash Reconciliation
                   </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Closing Cash</div>
-                    <div className="mt-1 font-medium text-slate-900">
-                      {viewShift.closingCash === undefined ? '-' : formatMoney(viewShift.closingCash)}
+                  <div className="divide-y divide-slate-100">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-sm text-slate-600">Opening Balance</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(viewShift.openingCash)}</span>
                     </div>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <div className="text-xs uppercase text-slate-500">Expected Cash</div>
-                    <div className="mt-1 font-medium text-slate-900">
-                      {viewShift.expectedCash === undefined ? '-' : formatMoney(viewShift.expectedCash)}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-4 md:col-span-2">
-                    <div className="text-xs uppercase text-slate-500">Difference</div>
-                    {viewShift.cashDifference === undefined ? (
-                      <div className="mt-1 font-medium text-slate-900">-</div>
-                    ) : (
-                      <div
-                        className={`mt-1 text-lg font-semibold ${
+                    {viewShift.expectedCash !== undefined && (
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-sm text-slate-600">Expected Closing</span>
+                        <span className="font-semibold text-slate-900">{formatMoney(viewShift.expectedCash)}</span>
+                      </div>
+                    )}
+                    {viewShift.closingCash !== undefined && (
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-sm text-slate-600">Actual Closing</span>
+                        <span className="font-semibold text-slate-900">{formatMoney(viewShift.closingCash)}</span>
+                      </div>
+                    )}
+                    {viewShift.cashDifference !== undefined && (
+                      <div className={`flex items-center justify-between px-4 py-3 ${
+                        viewShift.cashDifference >= 0 ? 'bg-green-50' : 'bg-red-50'
+                      }`}>
+                        <span className={`text-sm font-semibold ${
+                          viewShift.cashDifference >= 0 ? 'text-green-800' : 'text-red-800'
+                        }`}>
+                          {viewShift.cashDifference >= 0 ? '✅ Overage' : '⚠️ Shortage'}
+                        </span>
+                        <span className={`text-lg font-bold ${
                           viewShift.cashDifference >= 0 ? 'text-green-700' : 'text-red-700'
-                        }`}
-                      >
-                        {viewShift.cashDifference >= 0 ? '+' : ''}
-                        {formatMoney(viewShift.cashDifference)}
+                        }`}>
+                          {viewShift.cashDifference >= 0 ? '+' : '−'}
+                          {formatMoney(Math.abs(viewShift.cashDifference))}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
+
+                {/* Notes if any */}
+                {(viewShift as any).notes && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                    <span className="font-semibold">Notes:</span> {(viewShift as any).notes}
+                  </div>
+                )}
               </div>
             )}
           </Modal>

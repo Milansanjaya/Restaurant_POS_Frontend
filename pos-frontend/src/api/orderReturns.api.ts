@@ -4,8 +4,10 @@ export interface OrderReturnItem {
   product: string;
   productName: string;
   quantity: number;
-  price: number;
-  refundAmount: number;
+  price: number;        // sale price per unit
+  costPrice: number;    // COGS per unit
+  refundAmount: number; // price × qty
+  costAmount: number;   // costPrice × qty
   reason: string;
 }
 
@@ -17,7 +19,9 @@ export interface OrderReturn {
   branch_id: string;
   returnType: 'INTERNAL' | 'CUSTOMER';
   items: OrderReturnItem[];
-  refundAmount: number;
+  refundAmount: number;    // total revenue reversed
+  totalCostAmount: number; // total COGS impacted
+  netPnlImpact: number;    // accounting loss (always ≤ 0)
   status: 'COMPLETED';
   notes?: string;
   imageUrl?: string;
@@ -36,6 +40,12 @@ export interface CreateOrderReturnData {
     reason: string;
   }[];
   notes?: string;
+}
+
+export interface PnlSummary {
+  totalRefunds: number;
+  totalCostImpact: number;
+  totalPnlImpact: number;
 }
 
 export const orderReturnsApi = {
@@ -62,8 +72,9 @@ export const orderReturnsApi = {
     const res = await api.get('/order-returns', { params });
     return {
       orderReturns: res.data.orderReturns as OrderReturn[],
-      total: res.data.total as number,
-      page: res.data.page as number,
+      total:        res.data.total        as number,
+      page:         res.data.page         as number,
+      pnlSummary:   res.data.pnlSummary   as PnlSummary,
     };
   },
 
