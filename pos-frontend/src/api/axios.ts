@@ -1,9 +1,10 @@
 import axios from "axios";
+import { useAuthStore } from "../store/auth.store";
 
 const baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const api = axios.create({
-  baseURL
+  baseURL,
 });
 
 api.interceptors.request.use((config) => {
@@ -15,5 +16,26 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+let hasHandledUnauthorized = false;
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = String(error?.config?.url || "");
+
+    if (status === 401 && !hasHandledUnauthorized && !url.includes("/auth/login")) {
+      hasHandledUnauthorized = true;
+      useAuthStore.getState().logout();
+
+      if (window.location.pathname !== "/") {
+        window.location.assign("/");
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export default api;

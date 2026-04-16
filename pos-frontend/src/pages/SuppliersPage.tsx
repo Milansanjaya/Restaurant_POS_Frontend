@@ -11,6 +11,9 @@ export default function SuppliersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
   
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
@@ -81,6 +84,11 @@ export default function SuppliersPage() {
       panNumber: supplier.panNumber || '',
     });
     setModalOpen(true);
+  };
+
+  const openViewModal = (supplier: Supplier) => {
+    setViewSupplier(supplier);
+    setViewOpen(true);
   };
 
   const handleSave = async () => {
@@ -160,6 +168,9 @@ export default function SuppliersPage() {
       header: 'Actions',
       render: (item: Supplier) => (
         <div className="flex gap-1">
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
+            View
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
             Edit
           </Button>
@@ -215,15 +226,7 @@ export default function SuppliersPage() {
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Supplier Code"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              required
-              disabled={!!editingSupplier}
-              placeholder="e.g., SUP001"
-            />
+          <div className="grid grid-cols-1 gap-4">
             <Input
               label="Company Name"
               value={formData.name}
@@ -288,6 +291,87 @@ export default function SuppliersPage() {
               onChange={(e) => setFormData({ ...formData, panNumber: e.target.value })}
               required
             />
+          </div>
+        </div>
+      </Modal>
+
+      {/* View Modal */}
+      <Modal
+        isOpen={viewOpen && !!viewSupplier}
+        onClose={() => setViewOpen(false)}
+        title={`Supplier: ${viewSupplier?.name || ''}`}
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setViewOpen(false)}>
+              Close
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-slate-500">Code</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.code || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Status</p>
+            {viewSupplier ? (
+              <Badge
+                variant={
+                  viewSupplier.status === 'ACTIVE'
+                    ? 'success'
+                    : viewSupplier.status === 'BLOCKED'
+                      ? 'danger'
+                      : 'default'
+                }
+              >
+                {viewSupplier.status}
+              </Badge>
+            ) : (
+              <span className="text-slate-700">-</span>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">Contact Person</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.contactPerson || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Phone</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.phone || '-'}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">Email</p>
+            <p className="font-medium text-slate-900 break-all">{viewSupplier?.email || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Address</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.address || '-'}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">Credit Limit</p>
+            <p className="font-medium text-slate-900">{formatMoney(viewSupplier?.creditLimit || 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Payment Terms</p>
+            <p className="font-medium text-slate-900">{String(viewSupplier?.paymentTerms ?? '-') || '-'}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">GST Number</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.gstNumber || '-'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">PAN Number</p>
+            <p className="font-medium text-slate-900">{viewSupplier?.panNumber || '-'}</p>
+          </div>
+
+          <div className="sm:col-span-2">
+            <p className="text-xs text-slate-500">Outstanding Balance</p>
+            <p className="font-medium text-slate-900">{formatMoney(viewSupplier?.outstandingBalance || 0)}</p>
           </div>
         </div>
       </Modal>

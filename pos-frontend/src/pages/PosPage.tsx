@@ -108,8 +108,12 @@ export default function PosPage() {
   
   // Shift modal
   const [showShiftModal, setShowShiftModal] = useState(false);
-  const [openingCash, setOpeningCash] = useState<number>(0);
+  const [openingCash, setOpeningCash] = useState<string>("");
   const [processingShift, setProcessingShift] = useState(false);
+
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [closingCash, setClosingCash] = useState<string>("");
+  const [processingCloseShift, setProcessingCloseShift] = useState(false);
 
   // Logout confirmation
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -319,22 +323,66 @@ export default function PosPage() {
   }, [items, currentShift, selectedTableForPayment, orderType, selectedTable]);
 
   const handleOpenShift = async () => {
-    if (openingCash < 0) {
+    const openingCashNumber = openingCash === "" ? 0 : Number(openingCash);
+
+    if (!Number.isFinite(openingCashNumber)) {
+      toast.error("Opening cash amount is invalid");
+      return;
+    }
+
+    if (openingCashNumber < 0) {
       toast.error("Opening cash cannot be negative");
       return;
     }
     
     setProcessingShift(true);
     try {
-      const shift = await shiftsApi.open(openingCash);
+      const shift = await shiftsApi.open(openingCashNumber);
       setCurrentShift(shift);
       setShowShiftModal(false);
-      setOpeningCash(0);
+      setOpeningCash("");
       toast.success("✅ Shift opened successfully!");
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to open shift");
     } finally {
       setProcessingShift(false);
+    }
+  };
+
+  const handleCloseShift = async () => {
+    if (!currentShift) {
+      toast.error("No open shift");
+      return;
+    }
+
+    if (closingCash.trim() === "") {
+      toast.error("Closing cash amount is required");
+      return;
+    }
+
+    const closingCashNumber = Number(closingCash);
+
+    if (!Number.isFinite(closingCashNumber)) {
+      toast.error("Closing cash amount is invalid");
+      return;
+    }
+
+    if (closingCashNumber < 0) {
+      toast.error("Closing cash cannot be negative");
+      return;
+    }
+
+    setProcessingCloseShift(true);
+    try {
+      await shiftsApi.close(closingCashNumber);
+      setCurrentShift(null);
+      setShowCloseShiftModal(false);
+      setClosingCash("");
+      toast.success("✅ Shift closed successfully!");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to close shift");
+    } finally {
+      setProcessingCloseShift(false);
     }
   };
 
@@ -901,7 +949,17 @@ const handleCreateSale = async () => {
       {currentShift && (
         <div className="bg-emerald-600 text-white px-4 py-1.5 sm:px-6 text-[12px] font-bold tracking-wide flex items-center gap-2 premium-shadow z-50">
           <span className="flex h-2 w-2 rounded-full bg-white animate-pulse"></span>
-          ACTIVE SHIFT: OPENED WITH {formatMoney(currentShift.openingCash)}
+          <span className="flex-1">ACTIVE SHIFT: OPENED WITH {formatMoney(currentShift.openingCash)}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setClosingCash("");
+              setShowCloseShiftModal(true);
+            }}
+            className="touch-manipulation rounded-lg bg-white/20 px-4 py-1.5 text-[11px] font-black text-white hover:bg-white/30 active:scale-[0.99]"
+          >
+            Close Shift
+          </button>
         </div>
       )}
 
@@ -1039,11 +1097,11 @@ const handleCreateSale = async () => {
                 setTablesTab('available');
                 setShowTablesModal(true);
               }}
-              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-amber-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all hover-lift active:scale-95 button-glow-amber"
+              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
             >
               🍽️ Tables
               {(occupiedTables.length + cleaningTables.length) > 0 && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-amber-600 premium-shadow">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-900 premium-shadow">
                   {occupiedTables.length + cleaningTables.length}
                 </span>
               )}
@@ -1062,7 +1120,7 @@ const handleCreateSale = async () => {
                 } catch { setKitchenOrders([]); }
                 finally { setLoadingKitchen(false); }
               }}
-              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all hover-lift active:scale-95 button-glow-primary"
+              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
             >
               👨‍🍳 Kitchen
             </button>
@@ -2320,7 +2378,7 @@ const handleCreateSale = async () => {
                 min="0"
                 step="0.01"
                 value={openingCash}
-                onChange={(e) => setOpeningCash(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setOpeningCash(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3"
                 placeholder="Enter opening cash..."
               />
@@ -2339,6 +2397,46 @@ const handleCreateSale = async () => {
                 className="flex-1 rounded-xl bg-green-600 px-4 py-3 font-medium text-white hover:bg-green-700 disabled:opacity-50"
               >
                 {processingShift ? 'Opening...' : 'Open Shift'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close Shift Modal */}
+      {showCloseShiftModal && currentShift && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Close Shift</h3>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Closing Cash Amount
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={closingCash}
+                onChange={(e) => setClosingCash(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-4 py-3"
+                placeholder="Enter closing cash..."
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCloseShiftModal(false)}
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCloseShift}
+                disabled={processingCloseShift}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {processingCloseShift ? 'Closing...' : 'Close Shift'}
               </button>
             </div>
           </div>

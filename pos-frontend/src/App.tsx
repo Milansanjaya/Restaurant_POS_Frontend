@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import LoginPage from "./pages/LoginPage";
@@ -24,8 +25,57 @@ import CouponsPage from "./pages/CouponsPage";
 import RolesPage from "./pages/RolesPage";
 import UsersPage from "./pages/UsersPage";
 import SalesPage from "./pages/SalesPage";
+import { useAuthStore } from "./store/auth.store";
+
+const getJwtExpiryMs = (token: string): number | null => {
+  try {
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) return null;
+
+    const base64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = window.atob(base64 + pad);
+    const payload = JSON.parse(json);
+
+    const exp = payload?.exp;
+    if (typeof exp !== "number") return null;
+
+    return exp * 1000;
+  } catch {
+    return null;
+  }
+};
 
 export default function App() {
+  const token = useAuthStore((s) => s.token);
+  const logout = useAuthStore((s) => s.logout);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!token) return;
+
+    const expMs = getJwtExpiryMs(token);
+    if (!expMs) return;
+
+    const remainingMs = expMs - Date.now();
+
+    if (remainingMs <= 0) {
+      logout();
+      if (window.location.pathname !== "/") window.location.assign("/");
+      return;
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      logout();
+      if (window.location.pathname !== "/") window.location.assign("/");
+    }, remainingMs);
+  }, [token, logout]);
+
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
