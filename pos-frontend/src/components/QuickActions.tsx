@@ -12,12 +12,6 @@ export const QuickActions: React.FC = () => {
       color: 'bg-blue-500 hover:bg-blue-600'
     },
     {
-      label: 'Reports',
-      icon: '📊',
-      path: '/reports',
-      color: 'bg-green-500 hover:bg-green-600'
-    },
-    {
       label: 'Inventory',
       icon: '📦',
       path: '/inventory',

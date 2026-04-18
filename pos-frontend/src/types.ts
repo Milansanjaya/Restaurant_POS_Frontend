@@ -609,7 +609,16 @@ export interface CurrencyConfig {
 export interface InvoiceFormat {
   prefix: string;
   numberLength: number;
+  header?: string;
   footer: string;
+}
+
+export interface BusinessDetails {
+  name: string;
+  address: string;
+  phone: string;
+  email?: string;
+  logo?: string;
 }
 
 export interface SystemConfig {
@@ -625,6 +634,8 @@ export interface SystemConfig {
   packagingCharge: number;
   packagingChargeType: 'FIXED' | 'PERCENTAGE';
   logo?: string;
+  businessDetails?: BusinessDetails;
+  kitchenBillPrintingEnabled?: boolean;
   pointsPerDollar: number;
   pointsExpiryDays: number;
 }
@@ -783,6 +794,7 @@ export interface KitchenOrder {
   items: KitchenOrderItem[];
   status: KitchenOrderStatus;
   createdBy: string;
+  orderNumber?: string;
   tableNumber?: string;
   section?: string;
   waitingMinutes?: number;

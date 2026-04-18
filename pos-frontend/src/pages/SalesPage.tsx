@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import * as salesApi from '../api/sales.api';
-import type { Sale, SaleFilters, Product, Customer, RestaurantTable, OrderType } from '../types';
+import { configApi } from '../api';
+import type { Sale, SaleFilters, Product, Customer, RestaurantTable, OrderType, Invoice } from '../types';
 import { formatMoney } from '../money';
 
 const SalesPage: React.FC = () => {
@@ -12,6 +13,7 @@ const SalesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [totalSales, setTotalSales] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
   const [filters, setFilters] = useState<SaleFilters>({
     page: 1,
     limit: 20,
@@ -43,6 +45,15 @@ const SalesPage: React.FC = () => {
   useEffect(() => {
     loadSales();
   }, [filters]);
+
+  const displayedSales = useMemo(() => {
+    const term = invoiceSearch.trim().toLowerCase();
+    if (!term) return sales;
+    return sales.filter((sale) => {
+      const invoiceNumber = (sale.invoiceNumber || '').toLowerCase();
+      return invoiceNumber.includes(term);
+    });
+  }, [invoiceSearch, sales]);
 
   const handleViewDetails = (sale: Sale) => {
     setSelectedSale(sale);
@@ -97,33 +108,86 @@ const SalesPage: React.FC = () => {
     }
   };
 
+  const escapeHtml = (value: unknown) => {
+    const str = String(value ?? '');
+    return str
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  };
+
+  const deriveOrderNumber = (invoiceNumber?: string) => {
+    if (!invoiceNumber) return '';
+    const digits = invoiceNumber.match(/\d+/g)?.join('') || '';
+    if (!digits) return invoiceNumber;
+    const short = digits.length >= 4 ? digits.slice(-4) : digits.padStart(4, '0');
+    return short;
+  };
+
   const handlePrintInvoice = async (sale: Sale) => {
     setSelectedSale(sale);
-    // Open in new window for printing
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (printWindow) {
-      const invoiceHtml = generateInvoiceHtml(sale);
-      printWindow.document.write(invoiceHtml);
+
+    // Open immediately (avoids popup blockers), then fill once invoice data arrives.
+    const printWindow = window.open('', '_blank', 'width=420,height=680');
+    if (!printWindow) {
+      toast.error('Popup blocked. Please allow popups to print.');
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html><html><head><title>Loading...</title></head><body>Loading...</body></html>`);
+    printWindow.document.close();
+
+    try {
+      const [invoice, config] = await Promise.all([
+        salesApi.getInvoice(sale._id).catch(() => null as Invoice | null),
+        configApi.get().catch(() => null),
+      ]);
+
+      const configCompany = config?.businessDetails
+        ? {
+            name: config.businessDetails.name || '',
+            address: config.businessDetails.address || '',
+            phone: config.businessDetails.phone || '',
+            email: config.businessDetails.email || '',
+            logo: config.businessDetails.logo || config.logo || undefined,
+          }
+        : null;
+
+      const company = configCompany || invoice?.company;
+      const headerText = config?.invoiceFormat?.header || '';
+      const footerText = config?.invoiceFormat?.footer || '';
+
+      const html = generateThermalReceiptHtml(invoice?.sale ?? sale, company || undefined, headerText, footerText);
+
+      printWindow.document.open();
+      printWindow.document.write(html);
       printWindow.document.close();
+
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        try {
+          printWindow.close();
+        } catch {
+          // ignore
+        }
+      };
       printWindow.print();
+    } catch (error) {
+      console.error('Print invoice failed:', error);
+      toast.error('Failed to print invoice');
+      try {
+        printWindow.close();
+      } catch {
+        // ignore
+      }
     }
   };
 
-  const generateInvoiceHtml = (sale: Sale) => {
-    const itemsHtml = sale.items.map(item => {
-      const productName = typeof item.product === 'object' ? (item.product as Product).name : 'Product';
-      return `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${productName}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${item.quantity}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoney(item.price)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoney(item.subtotal)}</td>
-        </tr>
-      `;
-    }).join('');
-
+  const generateThermalReceiptHtml = (sale: Sale, company?: Invoice['company'], headerText?: string, footerText?: string) => {
     const orderType = (sale.orderType || (sale as any).saleType) as OrderType | undefined;
-    const orderTypeLabel = orderType ? orderType.replace('_', ' ') : 'POS';
+    const orderTypeLabel = orderType ? orderType.replaceAll('_', ' ') : 'POS';
 
     const customer = sale.customer_id && typeof sale.customer_id === 'object'
       ? (sale.customer_id as Customer)
@@ -133,68 +197,159 @@ const SalesPage: React.FC = () => {
       ? (sale.table as RestaurantTable)
       : null;
 
+    const orderNumber = deriveOrderNumber(sale.invoiceNumber);
+
+    const itemsHtml = sale.items.map((item) => {
+      const productName = typeof item.product === 'object' ? (item.product as Product).name : 'Product';
+      const safeName = escapeHtml(productName);
+      return `
+        <div class="item">
+          <div class="item-top">
+            <div class="name">${safeName}</div>
+            <div class="qty">${escapeHtml(item.quantity)}</div>
+            <div class="amt">${escapeHtml(formatMoney(item.subtotal))}</div>
+          </div>
+          <div class="item-sub">${escapeHtml(item.quantity)} x ${escapeHtml(formatMoney(item.price))}</div>
+        </div>
+      `;
+    }).join('');
+
+    const companyName = company?.name ? escapeHtml(company.name) : '';
+    const companyAddress = company?.address ? escapeHtml(company.address) : '';
+    const companyPhone = company?.phone ? escapeHtml(company.phone) : '';
+    const companyEmail = company?.email ? escapeHtml(company.email) : '';
+    const companyLogo = company?.logo ? String(company.logo) : '';
+
+    const companyHtml = (companyName || companyAddress || companyPhone || companyEmail || companyLogo)
+      ? `
+        <div class="company">
+          ${companyLogo ? `<div class="logo"><img src="${escapeHtml(companyLogo)}" alt="Logo" /></div>` : ''}
+          ${companyName ? `<div class="company-name">${companyName}</div>` : ''}
+          ${companyAddress ? `<div class="muted">${companyAddress}</div>` : ''}
+          ${companyPhone ? `<div class="muted">Tel: ${companyPhone}</div>` : ''}
+          ${companyEmail ? `<div class="muted">${companyEmail}</div>` : ''}
+        </div>
+      `
+      : '';
+
+    const headerLines = String(headerText || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const headerHtml = headerLines.length
+      ? `<div class="center header">${headerLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}</div>`
+      : '';
+
+    const footerLines = String(footerText || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const footerHtml = footerLines.length
+      ? footerLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
+      : '<div>Thank you!</div><div class="muted">Please come again</div>';
+
     const customerHtml = customer
-      ? `<p><strong>Customer:</strong> ${customer.name} (${customer.phone})</p>`
+      ? `<div class="muted">Customer: ${escapeHtml(customer.name)}${customer.phone ? ` (${escapeHtml(customer.phone)})` : ''}</div>`
       : '';
 
     const tableHtml = table
-      ? `<p><strong>Table:</strong> ${table.tableNumber}${table.section ? ` (${table.section})` : ''}</p>`
+      ? `<div class="muted">Table: ${escapeHtml(table.tableNumber)}${table.section ? ` (${escapeHtml(table.section)})` : ''}</div>`
       : '';
+
+    const discountHtml = sale.discount > 0
+      ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>`
+      : '';
+
+    const serviceChargeValue = (sale.serviceCharge || (sale as any).serviceCharge || 0) as number;
+    const packagingChargeValue = (sale.packagingCharge || (sale as any).packagingCharge || 0) as number;
 
     return `
       <!DOCTYPE html>
       <html>
-      <head>
-        <title>Invoice - ${sale.invoiceNumber}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
-          h1 { text-align: center; }
-          .header { text-align: center; margin-bottom: 30px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th { background: #f5f5f5; padding: 10px; text-align: left; }
-          .totals { margin-top: 20px; text-align: right; }
-          .total-row { display: flex; justify-content: space-between; max-width: 340px; margin-left: auto; padding: 5px 0; }
-          .grand-total { font-weight: bold; font-size: 1.2em; border-top: 2px solid #000; padding-top: 10px; }
-          @media print { button { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>INVOICE</h1>
-          <p><strong>Invoice #:</strong> ${sale.invoiceNumber}</p>
-          <p><strong>Date:</strong> ${new Date(sale.createdAt).toLocaleString()}</p>
-          <p><strong>Order Type:</strong> ${orderTypeLabel}</p>
-          ${customerHtml}
-          ${tableHtml}
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th style="text-align: center;">Qty</th>
-              <th style="text-align: right;">Price</th>
-              <th style="text-align: right;">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Receipt - ${escapeHtml(sale.invoiceNumber)}</title>
+          <style>
+            @page { size: 80mm auto; margin: 6mm; }
+            html, body { padding: 0; margin: 0; }
+            body {
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+              color: #000;
+              font-size: 12px;
+              line-height: 1.25;
+            }
+            .receipt { width: 100%; }
+            .center { text-align: center; }
+            .muted { color: #111; opacity: 0.85; }
+            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+            .company { text-align: center; }
+            .header { font-weight: 900; letter-spacing: 0.4px; margin-top: 6px; }
+            .company-name { font-weight: 800; font-size: 14px; margin-top: 4px; }
+            .logo img { max-width: 160px; max-height: 60px; object-fit: contain; }
+            .company .muted { white-space: pre-line; }
+            .order-block { border: 2px solid #000; padding: 10px 8px; margin: 10px 0; text-align: center; }
+            .order-label { font-weight: 800; letter-spacing: 0.5px; }
+            .order-number { font-size: 28px; font-weight: 900; margin-top: 4px; }
+            .meta { margin-top: 8px; }
+            .meta .row { display: flex; justify-content: space-between; gap: 8px; }
+            .meta .row span:last-child { text-align: right; }
+            .items-header { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; font-weight: 800; }
+            .item { margin-top: 8px; }
+            .item-top { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; }
+            .item-top .qty, .item-top .amt { text-align: right; }
+            .item-sub { font-size: 11px; opacity: 0.85; margin-top: 2px; }
+            .totals { margin-top: 8px; }
+            .totals .row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+            .total-due { border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-weight: 900; font-size: 14px; }
+            .footer { margin-top: 12px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            ${companyHtml}
+            ${headerHtml}
 
-        <div class="totals">
-          <div class="total-row"><span>Subtotal:</span> <span>${formatMoney(sale.subtotal)}</span></div>
-          <div class="total-row"><span>Service Charge:</span> <span>${formatMoney((sale as any).serviceCharge || 0)}</span></div>
-          <div class="total-row"><span>Packaging Charge:</span> <span>${formatMoney((sale as any).packagingCharge || 0)}</span></div>
-          ${sale.discount > 0 ? `<div class="total-row"><span>Discount:</span> <span>- ${formatMoney(sale.discount)}</span></div>` : ''}
-          <div class="total-row grand-total"><span>Grand Total:</span> <span>${formatMoney(sale.grandTotal)}</span></div>
-          <div class="total-row"><span>Paid:</span> <span>${formatMoney(sale.paidAmount)}</span></div>
-          ${sale.balanceAmount > 0 ? `<div class="total-row"><span>Balance Due:</span> <span>${formatMoney(sale.balanceAmount)}</span></div>` : ''}
-        </div>
+            <div class="divider"></div>
 
-        <p style="text-align: center; margin-top: 40px; color: #666;">Thank you for your business!</p>
-        <button onclick="window.print()" style="display: block; margin: 20px auto; padding: 10px 30px; cursor: pointer;">Print Invoice</button>
-      </body>
+            <div class="order-block">
+              <div class="order-label">ORDER NUMBER</div>
+              <div class="order-number">${escapeHtml(orderNumber || sale.invoiceNumber)}</div>
+            </div>
+
+            <div class="meta">
+              <div class="row"><span>Date</span><span>${escapeHtml(new Date(sale.createdAt).toLocaleString())}</span></div>
+              <div class="row"><span>Invoice</span><span>${escapeHtml(sale.invoiceNumber)}</span></div>
+              <div class="row"><span>Order Type</span><span>${escapeHtml(orderTypeLabel)}</span></div>
+              ${customerHtml}
+              ${tableHtml}
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="items">
+              <div class="items-header">
+                <div>ITEM</div>
+                <div style="text-align:right;">QTY</div>
+                <div style="text-align:right;">AMT</div>
+              </div>
+              ${itemsHtml}
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="totals">
+              <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
+              <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
+              <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(serviceChargeValue))}</span></div>
+              <div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>
+              ${discountHtml}
+              <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
+              <div class="row"><span>Paid</span><span>${escapeHtml(formatMoney(sale.paidAmount))}</span></div>
+              ${sale.balanceAmount > 0 ? `<div class="row"><span>Balance</span><span>${escapeHtml(formatMoney(sale.balanceAmount))}</span></div>` : ''}
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="footer">
+              ${footerHtml}
+            </div>
+          </div>
+        </body>
       </html>
     `;
   };
@@ -308,7 +463,15 @@ const SalesPage: React.FC = () => {
       
       <PageContent>
         {/* Filters */}
-        <div className="mb-4 flex gap-4">
+        <div className="mb-4 flex flex-wrap gap-4">
+          <input
+            type="text"
+            value={invoiceSearch}
+            onChange={(e) => setInvoiceSearch(e.target.value)}
+            className="border rounded px-3 py-2"
+            placeholder="Search Invoice #"
+          />
+
           <select
             value={filters.status || ''}
             onChange={(e) => setFilters({ ...filters, status: e.target.value as any, page: 1 })}
@@ -349,7 +512,10 @@ const SalesPage: React.FC = () => {
           />
 
           <Button 
-            onClick={() => setFilters({ page: 1, limit: 20 })}
+            onClick={() => {
+              setInvoiceSearch('');
+              setFilters({ page: 1, limit: 20 });
+            }}
             variant="ghost"
           >
             Clear Filters
@@ -358,14 +524,14 @@ const SalesPage: React.FC = () => {
 
         <Table
           columns={columns}
-          data={sales}
+          data={displayedSales}
           keyExtractor={(sale) => sale._id}
           loading={loading}
           emptyMessage="No sales found"
         />
 
         {/* Pagination */}
-        {totalSales > (filters.limit || 20) && (
+        {!invoiceSearch.trim() && totalSales > (filters.limit || 20) && (
           <div className="mt-4 flex justify-center gap-2">
             <Button
               size="sm"

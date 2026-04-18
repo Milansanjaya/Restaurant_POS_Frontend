@@ -14,12 +14,21 @@ export default function SettingsPage() {
     position: 'BEFORE' as const 
   });
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
+  const [invoiceHeader, setInvoiceHeader] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
   const [expiryAlertDays, setExpiryAlertDays] = useState(30);
   const [serviceCharge, setServiceCharge] = useState(0);
   const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
   const [packagingCharge, setPackagingCharge] = useState(0);
   const [packagingChargeType, setPackagingChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
+
+  const [businessName, setBusinessName] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [businessPhone, setBusinessPhone] = useState('');
+  const [businessEmail, setBusinessEmail] = useState('');
+  const [businessLogo, setBusinessLogo] = useState('');
+
+  const [kitchenBillPrintingEnabled, setKitchenBillPrintingEnabled] = useState(true);
 
   const loadConfig = async () => {
     try {
@@ -32,12 +41,21 @@ export default function SettingsPage() {
       setTaxes(data.taxes || []);
       setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' as const });
       setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
+      setInvoiceHeader(data.invoiceFormat?.header || '');
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
       setExpiryAlertDays(data.expiryAlertDays || 30);
       setServiceCharge(typeof data.serviceCharge === 'number' ? data.serviceCharge : 0);
       setServiceChargeType((data.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
       setPackagingCharge(typeof data.packagingCharge === 'number' ? data.packagingCharge : 0);
       setPackagingChargeType((data.packagingChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
+
+      setBusinessName(data.businessDetails?.name || '');
+      setBusinessAddress(data.businessDetails?.address || '');
+      setBusinessPhone(data.businessDetails?.phone || '');
+      setBusinessEmail(data.businessDetails?.email || '');
+      setBusinessLogo(data.businessDetails?.logo || data.logo || '');
+
+      setKitchenBillPrintingEnabled(typeof data.kitchenBillPrintingEnabled === 'boolean' ? data.kitchenBillPrintingEnabled : true);
     } catch (error) {
       console.error('Failed to load config:', error);
       alert('⚠️ Failed to load settings. Please try again.');
@@ -56,9 +74,19 @@ export default function SettingsPage() {
       await configApi.update({
         taxes,
         currency,
+        logo: businessLogo || undefined,
+        kitchenBillPrintingEnabled,
+        businessDetails: {
+          name: businessName,
+          address: businessAddress,
+          phone: businessPhone,
+          email: businessEmail || undefined,
+          logo: businessLogo || undefined,
+        },
         invoiceFormat: {
           prefix: invoicePrefix,
           numberLength: 6,
+          header: invoiceHeader,
           footer: invoiceFooter,
         },
         expiryAlertDays,
@@ -110,6 +138,50 @@ export default function SettingsPage() {
       />
       <PageContent>
         <div className="max-w-3xl space-y-6">
+          {/* Business Details */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Business Details</h3>
+            <div className="space-y-4">
+              <Input
+                label="Business Name"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="Your business name"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Address</label>
+                <textarea
+                  value={businessAddress}
+                  onChange={(e) => setBusinessAddress(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={3}
+                  placeholder="Street, city, etc."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Phone"
+                  value={businessPhone}
+                  onChange={(e) => setBusinessPhone(e.target.value)}
+                  placeholder="+94..."
+                />
+                <Input
+                  label="Email"
+                  value={businessEmail}
+                  onChange={(e) => setBusinessEmail(e.target.value)}
+                  placeholder="name@company.com"
+                />
+              </div>
+              <Input
+                label="Logo URL"
+                value={businessLogo}
+                onChange={(e) => setBusinessLogo(e.target.value)}
+                placeholder="https://..."
+                helperText="Used on printed invoice/receipt"
+              />
+            </div>
+          </Card>
+
           {/* Tax Settings */}
           <Card>
             <div className="mb-4 flex items-center justify-between">
@@ -256,6 +328,17 @@ export default function SettingsPage() {
                 onChange={(e) => setInvoicePrefix(e.target.value)}
                 placeholder="INV"
               />
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Invoice Header</label>
+                <textarea
+                  value={invoiceHeader}
+                  onChange={(e) => setInvoiceHeader(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={2}
+                  placeholder="e.g. TAX INVOICE"
+                />
+              </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Invoice Footer</label>
                 <textarea
@@ -266,6 +349,23 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+          </Card>
+
+          {/* Cashier Settings */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Cashier Settings</h3>
+            <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Enable kitchen bill printing</div>
+                <div className="text-sm text-slate-500">Shows a Print button in the POS Kitchen Orders view.</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={kitchenBillPrintingEnabled}
+                onChange={(e) => setKitchenBillPrintingEnabled(e.target.checked)}
+                className="h-5 w-5"
+              />
+            </label>
           </Card>
 
           {/* Other Settings */}

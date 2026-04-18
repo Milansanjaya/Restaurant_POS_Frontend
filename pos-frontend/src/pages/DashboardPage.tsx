@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout, PageHeader, PageContent, StatCard, Card, Badge, PageLoader } from '../components';
 import { dashboardApi, reportsApi } from '../api';
 import { getSales } from '../api/sales.api';
@@ -119,6 +120,9 @@ const HourlyChart = ({ data, height = 300 }: { data: { hour: string; revenue: nu
 };
 
 export default function DashboardPage() {
+  const location = useLocation();
+  const isEmbedded = new URLSearchParams(location.search).get('embedded') === '1';
+
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [lowStock, setLowStock] = useState<Inventory[]>([]);
@@ -132,6 +136,13 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        if (isEmbedded) {
+          const summaryData = await dashboardApi.getSummary();
+          setSummary(summaryData);
+          setTodayProfit(typeof summaryData?.todayProfit === 'number' ? summaryData.todayProfit : 0);
+          return;
+        }
+
         // Calculate date ranges
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
@@ -292,7 +303,7 @@ export default function DashboardPage() {
       }
     };
     loadData();
-  }, []);
+  }, [isEmbedded]);
 
   if (loading) {
     return (
@@ -304,10 +315,12 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      <PageHeader 
-        title="Dashboard" 
-        subtitle="Overview of your business"
-      />
+      {!isEmbedded && (
+        <PageHeader 
+          title="Dashboard" 
+          subtitle="Overview of your business"
+        />
+      )}
       <PageContent>
         {/* Quick Actions */}
         <div className="mb-6">
@@ -363,130 +376,134 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Sales Trend & Category Charts */}
-        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Sales Chart with Period Selector */}
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Sales Trend
-              </h3>
-              <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                {(['today', 'week', 'month'] as const).map((period) => (
-                  <button
-                    key={period}
-                    onClick={() => setSalesPeriod(period)}
-                    className={`px-3 py-1 text-sm rounded-md transition ${
-                      salesPeriod === period
-                        ? 'bg-white shadow text-slate-900 font-medium'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {period === 'today' ? 'Today' : period === 'week' ? 'Week' : 'Month'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {salesPeriod === 'today' && hourlyData.length === 0 ? (
-              <div className="flex h-[300px] items-center justify-center text-slate-500">
-                No hourly data available
-              </div>
-            ) : salesPeriod === 'today' ? (
-              <HourlyChart data={hourlyData} height={300} />
-            ) : (
-              <SimpleBarChart 
-                data={salesPeriod === 'week' ? revenueData.slice(-7) : revenueData.slice(-30)} 
-                height={300} 
-              />
-            )}
-          </Card>
-
-          {/* Category Breakdown Chart */}
-          <Card>
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              Sales by Category
-            </h3>
-            {categoryData.length === 0 ? (
-              <div className="flex h-[320px] items-center justify-center text-slate-500">
-                No category data available
-              </div>
-            ) : (
-              <SimplePieChart data={categoryData} height={320} />
-            )}
-          </Card>
-        </div>
-
-        {/* Revenue & Products Charts — duplicate section removed */}
-
-        {/* Main Content: Top Products + Low Stock (full width, 2 col) */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Top Products */}
-          <Card>
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">Top Products</h3>
-            {topProducts.length === 0 ? (
-              <p className="text-slate-500">No sales data yet</p>
-            ) : (
-              <div className="space-y-3">
-                {topProducts.map((product, index) => (
-                  <div
-                    key={product.productId}
-                    className="flex items-center justify-between rounded-lg bg-slate-50 p-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm font-medium text-white">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <p className="font-medium text-slate-900">{product.name}</p>
-                        <p className="text-sm text-slate-500">
-                          {product.quantitySold} sold
-                        </p>
-                      </div>
-                    </div>
-                    <span className="font-semibold text-slate-900">
-                      {formatMoney(product.revenue)}
-                    </span>
+        {!isEmbedded && (
+          <>
+            {/* Sales Trend & Category Charts */}
+            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Sales Chart with Period Selector */}
+              <Card>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Sales Trend
+                  </h3>
+                  <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                    {(['today', 'week', 'month'] as const).map((period) => (
+                      <button
+                        key={period}
+                        onClick={() => setSalesPeriod(period)}
+                        className={`px-3 py-1 text-sm rounded-md transition ${
+                          salesPeriod === period
+                            ? 'bg-white shadow text-slate-900 font-medium'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {period === 'today' ? 'Today' : period === 'week' ? 'Week' : 'Month'}
+                      </button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                </div>
+                {salesPeriod === 'today' && hourlyData.length === 0 ? (
+                  <div className="flex h-[300px] items-center justify-center text-slate-500">
+                    No hourly data available
+                  </div>
+                ) : salesPeriod === 'today' ? (
+                  <HourlyChart data={hourlyData} height={300} />
+                ) : (
+                  <SimpleBarChart 
+                    data={salesPeriod === 'week' ? revenueData.slice(-7) : revenueData.slice(-30)} 
+                    height={300} 
+                  />
+                )}
+              </Card>
 
-          {/* Low Stock Alert */}
-          <Card>
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">Low Stock Alerts</h3>
-            {lowStock.length === 0 ? (
-              <p className="text-slate-500">All items are well stocked ✅</p>
-            ) : (
-              <div className="space-y-3">
-                {lowStock.slice(0, 8).map((item) => {
-                  const product = typeof item.product === 'object' ? item.product : null;
-                  return (
-                    <div
-                      key={item._id}
-                      className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3"
-                    >
-                      <div>
-                        <p className="font-medium text-slate-900">
-                          {product?.name || 'Unknown Product'}
-                        </p>
-                        <p className="text-sm text-slate-500">
-                          SKU: {product?.sku || 'N/A'}
-                        </p>
+              {/* Category Breakdown Chart */}
+              <Card>
+                <h3 className="mb-4 text-lg font-semibold text-slate-900">
+                  Sales by Category
+                </h3>
+                {categoryData.length === 0 ? (
+                  <div className="flex h-[320px] items-center justify-center text-slate-500">
+                    No category data available
+                  </div>
+                ) : (
+                  <SimplePieChart data={categoryData} height={320} />
+                )}
+              </Card>
+            </div>
+
+            {/* Revenue & Products Charts — duplicate section removed */}
+
+            {/* Main Content: Top Products + Low Stock (full width, 2 col) */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Top Products */}
+              <Card>
+                <h3 className="mb-4 text-lg font-semibold text-slate-900">Top Products</h3>
+                {topProducts.length === 0 ? (
+                  <p className="text-slate-500">No sales data yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {topProducts.map((product, index) => (
+                      <div
+                        key={product.productId}
+                        className="flex items-center justify-between rounded-lg bg-slate-50 p-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm font-medium text-white">
+                            {index + 1}
+                          </span>
+                          <div>
+                            <p className="font-medium text-slate-900">{product.name}</p>
+                            <p className="text-sm text-slate-500">
+                              {product.quantitySold} sold
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-semibold text-slate-900">
+                          {formatMoney(product.revenue)}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="danger">{item.stockQuantity} left</Badge>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Min: {item.lowStockThreshold}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-        </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Low Stock Alert */}
+              <Card>
+                <h3 className="mb-4 text-lg font-semibold text-slate-900">Low Stock Alerts</h3>
+                {lowStock.length === 0 ? (
+                  <p className="text-slate-500">All items are well stocked ✅</p>
+                ) : (
+                  <div className="space-y-3">
+                    {lowStock.slice(0, 8).map((item) => {
+                      const product = typeof item.product === 'object' ? item.product : null;
+                      return (
+                        <div
+                          key={item._id}
+                          className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3"
+                        >
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {product?.name || 'Unknown Product'}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              SKU: {product?.sku || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="danger">{item.stockQuantity} left</Badge>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Min: {item.lowStockThreshold}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </>
+        )}
       </PageContent>
     </Layout>
   );

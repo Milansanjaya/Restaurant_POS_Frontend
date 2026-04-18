@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
-import { createSale, getSaleById } from "../api/sales.api";
+import { createSale, getSaleById, getInvoice, paySale } from "../api/sales.api";
 import { categoriesApi, configApi, inventoryApi } from "../api";
 import { tablesApi } from "../api/tables.api";
 import { shiftsApi } from "../api/shifts.api";
@@ -13,7 +13,7 @@ import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
 import { reservationsApi } from "../api/reservations.api";
 import { kitchenApi } from "../api/kitchen.api";
-import type { Category, RestaurantTable, Shift, Customer, Reservation, KitchenOrder } from "../types";
+import type { Category, RestaurantTable, Shift, Customer, Reservation, KitchenOrder, Sale, Invoice } from "../types";
 import { formatMoney } from "../money";
 
 type Product = {
@@ -118,6 +118,258 @@ export default function PosPage() {
   // Logout confirmation
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // Post-payment actions (no auto-print)
+  const [postPaymentSale, setPostPaymentSale] = useState<Sale | null>(null);
+  const [printingReceipt, setPrintingReceipt] = useState(false);
+
+  const escapeHtml = (value: unknown) => {
+    const str = String(value ?? '');
+    return str
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  };
+
+  const deriveOrderNumber = (invoiceNumber?: string) => {
+    if (!invoiceNumber) return '';
+    const digits = invoiceNumber.match(/\d+/g)?.join('') || '';
+    if (!digits) return invoiceNumber;
+    const short = digits.length >= 4 ? digits.slice(-4) : digits.padStart(4, '0');
+    return short;
+  };
+
+  const getLocalDayKey = (value: string | Date) => {
+    const d = value instanceof Date ? value : new Date(value);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const buildDailyKitchenSequenceMap = (orders: KitchenOrder[]) => {
+    const groups = new Map<string, KitchenOrder[]>();
+    for (const order of orders) {
+      const key = getLocalDayKey(order.createdAt);
+      const list = groups.get(key);
+      if (list) list.push(order);
+      else groups.set(key, [order]);
+    }
+
+    const map: Record<string, number> = {};
+    for (const [, list] of groups) {
+      list
+        .slice()
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .forEach((order, idx) => {
+          map[order._id] = (idx % 1000) + 1;
+        });
+    }
+    return map;
+  };
+
+  const generateThermalReceiptHtml = (sale: Sale, company?: Invoice['company'], headerText?: string, footerText?: string) => {
+    const orderTypeLabel = sale.orderType ? sale.orderType.replaceAll('_', ' ') : 'POS';
+    const orderNumber = deriveOrderNumber(sale.invoiceNumber);
+
+    const customer = sale.customer_id && typeof sale.customer_id === 'object'
+      ? (sale.customer_id as any)
+      : null;
+
+    const table = sale.table && typeof sale.table === 'object'
+      ? (sale.table as any)
+      : null;
+
+    const itemsHtml = sale.items.map((item: any) => {
+      const productName = typeof item.product === 'object'
+        ? (item.product?.name ?? 'Product')
+        : 'Product';
+
+      return `
+        <div class="item">
+          <div class="item-top">
+            <div class="name">${escapeHtml(productName)}</div>
+            <div class="qty">${escapeHtml(item.quantity)}</div>
+            <div class="amt">${escapeHtml(formatMoney(item.subtotal))}</div>
+          </div>
+          <div class="item-sub">${escapeHtml(item.quantity)} x ${escapeHtml(formatMoney(item.price))}</div>
+        </div>
+      `;
+    }).join('');
+
+    const companyName = company?.name ? escapeHtml(company.name) : '';
+    const companyAddress = company?.address ? escapeHtml(company.address) : '';
+    const companyPhone = company?.phone ? escapeHtml(company.phone) : '';
+    const companyEmail = company?.email ? escapeHtml(company.email) : '';
+    const companyLogo = company?.logo ? String(company.logo) : '';
+
+    const companyHtml = (companyName || companyAddress || companyPhone || companyEmail || companyLogo)
+      ? `
+        <div class="company">
+          ${companyLogo ? `<div class="logo"><img src="${escapeHtml(companyLogo)}" alt="Logo" /></div>` : ''}
+          ${companyName ? `<div class="company-name">${companyName}</div>` : ''}
+          ${companyAddress ? `<div class="muted">${companyAddress}</div>` : ''}
+          ${companyPhone ? `<div class="muted">Tel: ${companyPhone}</div>` : ''}
+          ${companyEmail ? `<div class="muted">${companyEmail}</div>` : ''}
+        </div>
+      `
+      : '';
+
+    const customerHtml = customer
+      ? `<div class="muted">Customer: ${escapeHtml(customer.name)}${customer.phone ? ` (${escapeHtml(customer.phone)})` : ''}</div>`
+      : '';
+
+    const tableHtml = table
+      ? `<div class="muted">Table: ${escapeHtml(table.tableNumber)}${table.section ? ` (${escapeHtml(table.section)})` : ''}</div>`
+      : '';
+
+    const headerLines = String(headerText || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const headerHtml = headerLines.length
+      ? `<div class="header">${headerLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}</div>`
+      : '';
+
+    const footerLines = String(footerText || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const footerHtml = footerLines.length
+      ? footerLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
+      : '<div>Thank you!</div><div class="muted">Please come again</div>';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Receipt - ${escapeHtml(sale.invoiceNumber)}</title>
+          <style>
+            @page { size: 80mm auto; margin: 6mm; }
+            html, body { padding: 0; margin: 0; }
+            body {
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+              color: #000;
+              font-size: 12px;
+              line-height: 1.25;
+            }
+            .receipt { width: 100%; }
+            .muted { color: #111; opacity: 0.85; }
+            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+            .company { text-align: center; }
+            .header { text-align: center; font-weight: 900; letter-spacing: 0.4px; margin-top: 6px; }
+            .company-name { font-weight: 800; font-size: 14px; margin-top: 4px; }
+            .logo img { max-width: 160px; max-height: 60px; object-fit: contain; }
+            .order-block { border: 2px solid #000; padding: 10px 8px; margin: 10px 0; text-align: center; }
+            .order-label { font-weight: 800; letter-spacing: 0.5px; }
+            .order-number { font-size: 28px; font-weight: 900; margin-top: 4px; }
+            .meta { margin-top: 8px; }
+            .meta .row { display: flex; justify-content: space-between; gap: 8px; }
+            .meta .row span:last-child { text-align: right; }
+            .items-header { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; font-weight: 800; }
+            .item { margin-top: 8px; }
+            .item-top { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; }
+            .item-top .qty, .item-top .amt { text-align: right; }
+            .item-sub { font-size: 11px; opacity: 0.85; margin-top: 2px; }
+            .totals { margin-top: 8px; }
+            .totals .row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+            .total-due { border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-weight: 900; font-size: 14px; }
+            .footer { margin-top: 12px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            ${companyHtml}
+            ${headerHtml}
+            <div class="divider"></div>
+            <div class="order-block">
+              <div class="order-label">ORDER NUMBER</div>
+              <div class="order-number">${escapeHtml(orderNumber || sale.invoiceNumber)}</div>
+            </div>
+            <div class="meta">
+              <div class="row"><span>Date</span><span>${escapeHtml(new Date(sale.createdAt).toLocaleString())}</span></div>
+              <div class="row"><span>Invoice</span><span>${escapeHtml(sale.invoiceNumber)}</span></div>
+              <div class="row"><span>Order Type</span><span>${escapeHtml(orderTypeLabel)}</span></div>
+              ${customerHtml}
+              ${tableHtml}
+            </div>
+            <div class="divider"></div>
+            <div class="items">
+              <div class="items-header">
+                <div>ITEM</div>
+                <div style="text-align:right;">QTY</div>
+                <div style="text-align:right;">AMT</div>
+              </div>
+              ${itemsHtml}
+            </div>
+            <div class="divider"></div>
+            <div class="totals">
+              <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
+              <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
+              <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</span></div>
+              <div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(sale.packagingCharge || 0))}</span></div>
+              ${sale.discount > 0 ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>` : ''}
+              <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
+              <div class="row"><span>Paid</span><span>${escapeHtml(formatMoney(sale.paidAmount))}</span></div>
+              ${sale.balanceAmount > 0 ? `<div class="row"><span>Balance</span><span>${escapeHtml(formatMoney(sale.balanceAmount))}</span></div>` : ''}
+            </div>
+            <div class="divider"></div>
+            <div class="footer">${footerHtml}</div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!postPaymentSale || printingReceipt) return;
+
+    setPrintingReceipt(true);
+    const printWindow = window.open('', '_blank', 'width=420,height=680');
+    if (!printWindow) {
+      toast.error('Popup blocked. Please allow popups to print.');
+      setPrintingReceipt(false);
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html><html><head><title>Loading...</title></head><body>Loading...</body></html>`);
+    printWindow.document.close();
+
+    try {
+      const [invoice, config] = await Promise.all([
+        getInvoice(postPaymentSale._id).catch(() => null as Invoice | null),
+        configApi.get().catch(() => null),
+      ]);
+
+      const configCompany = config?.businessDetails
+        ? {
+            name: config.businessDetails.name || '',
+            address: config.businessDetails.address || '',
+            phone: config.businessDetails.phone || '',
+            email: config.businessDetails.email || '',
+            logo: config.businessDetails.logo || config.logo || undefined,
+          }
+        : null;
+
+      const company = configCompany || invoice?.company;
+      const headerText = config?.invoiceFormat?.header || '';
+      const footerText = config?.invoiceFormat?.footer || '';
+
+      const html = generateThermalReceiptHtml((invoice?.sale as Sale) ?? postPaymentSale, company || undefined, headerText, footerText);
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        try { printWindow.close(); } catch { /* ignore */ }
+      };
+      printWindow.print();
+    } catch (error) {
+      console.error('Print receipt failed:', error);
+      toast.error('Failed to print receipt');
+      try { printWindow.close(); } catch { /* ignore */ }
+    } finally {
+      setPrintingReceipt(false);
+    }
+  };
+
   // Touch/quick actions
   const [showTablesModal, setShowTablesModal] = useState(false);
   const [tablesTab, setTablesTab] = useState<'available' | 'active' | 'cleaning'>('available');
@@ -128,9 +380,149 @@ export default function PosPage() {
   const [showKitchenViewer, setShowKitchenViewer] = useState(false);
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
   const [loadingKitchen, setLoadingKitchen] = useState(false);
+  const [kitchenStatusFilter, setKitchenStatusFilter] = useState<'ALL' | 'PENDING' | 'PREPARING' | 'READY'>('ALL');
+  const [kitchenViewMode, setKitchenViewMode] = useState<'QUEUE' | 'TABLES'>('QUEUE');
+  const [kitchenBillPrintingEnabled, setKitchenBillPrintingEnabled] = useState(true);
   const cartSectionRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const customerSearchRef = useRef<HTMLInputElement | null>(null);
+
+  const kitchenDailySequenceMap = useMemo(() => buildDailyKitchenSequenceMap(kitchenOrders), [kitchenOrders]);
+
+  const isDineInKitchenOrder = (order: KitchenOrder) => {
+    if (order.tableNumber) return true;
+    if (typeof order.sale === 'object' && order.sale) {
+      return (order.sale as any).orderType === 'DINE_IN' || Boolean((order.sale as any).table);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    if (!showKitchenViewer) return;
+    const active = kitchenOrders.filter((o) => o.status !== 'SERVED');
+    const tableCount = active.filter(isDineInKitchenOrder).length;
+    const queueCount = active.length - tableCount;
+
+    // If there are only table orders, open Table View automatically
+    if (kitchenViewMode === 'QUEUE' && queueCount === 0 && tableCount > 0) {
+      setKitchenViewMode('TABLES');
+    }
+  }, [showKitchenViewer, kitchenOrders, kitchenViewMode]);
+
+  const handlePrintKitchenOrder = async (order: KitchenOrder) => {
+    if (!kitchenBillPrintingEnabled) {
+      toast.error('Kitchen printing is disabled in Settings');
+      return;
+    }
+
+    try {
+      const cfg = await configApi.get().catch(() => null);
+      const businessName = cfg?.businessDetails?.name || '';
+      const businessPhone = cfg?.businessDetails?.phone || '';
+
+      const saleInvoiceNumber = typeof order.sale === 'object' && order.sale ? (order.sale as any).invoiceNumber : '';
+      const dailySeq = kitchenDailySequenceMap[order._id];
+      const orderNo = (order as any).orderNumber || (dailySeq ? String(dailySeq) : '') || saleInvoiceNumber || '';
+      const tableText = order.tableNumber ? `Table ${order.tableNumber}${order.section ? ` (${order.section})` : ''}` : '';
+      const created = order.createdAt ? new Date(order.createdAt) : null;
+      const createdText = created && !Number.isNaN(created.getTime()) ? created.toLocaleString() : '';
+
+      const escapeHtml = (value: any) =>
+        String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+
+      const itemsHtml = (order.items || [])
+        .map((it) => `
+          <tr>
+            <td class="name">${escapeHtml(it.name)}</td>
+            <td class="qty">${escapeHtml(it.quantity)}</td>
+          </tr>
+        `)
+        .join('');
+
+      const html = `
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Kitchen Print</title>
+            <style>
+              @page { size: 80mm auto; margin: 4mm; }
+              html, body { padding: 0; margin: 0; }
+              body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; color: #000; }
+              .center { text-align: center; }
+              .title { font-weight: 900; font-size: 16px; letter-spacing: 0.6px; }
+              .sub { font-size: 12px; margin-top: 2px; }
+              .divider { border-top: 1px dashed #000; margin: 8px 0; }
+              .order-no { font-weight: 900; font-size: 18px; letter-spacing: 0.6px; margin-top: 6px; }
+              table { width: 100%; border-collapse: collapse; }
+              td { padding: 4px 0; vertical-align: top; }
+              .name { width: 78%; }
+              .qty { width: 22%; text-align: right; font-weight: 900; }
+              .meta { font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="center">
+              ${businessName ? `<div class="title">${escapeHtml(businessName)}</div>` : `<div class="title">KITCHEN ORDER</div>`}
+              ${businessPhone ? `<div class="sub">Tel: ${escapeHtml(businessPhone)}</div>` : ''}
+              <div class="order-no">${orderNo ? `ORDER # ${escapeHtml(orderNo)}` : 'ORDER'}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="meta">
+              ${tableText ? `<div>${escapeHtml(tableText)}</div>` : ''}
+              ${createdText ? `<div>${escapeHtml(createdText)}</div>` : ''}
+              <div>Status: ${escapeHtml(order.status)}</div>
+            </div>
+            <div class="divider"></div>
+            <table>
+              ${itemsHtml}
+            </table>
+            <div class="divider"></div>
+            <div class="center sub">(Kitchen Copy)</div>
+          </body>
+        </html>
+      `;
+
+      // Print without popups (avoids popup-blocker issues)
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.opacity = '0';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (!doc || !iframe.contentWindow) {
+        try { document.body.removeChild(iframe); } catch { /* ignore */ }
+        toast.error('Unable to start printing');
+        return;
+      }
+
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+
+      window.setTimeout(() => {
+        try { document.body.removeChild(iframe); } catch { /* ignore */ }
+      }, 1000);
+    } catch (e) {
+      console.error('Kitchen print failed:', e);
+      toast.error('Failed to print kitchen order');
+    }
+  };
 
   const scrollToCart = () => {
     cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -210,6 +602,7 @@ export default function PosPage() {
         setServiceChargeType((configRes?.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
         setPackagingCharge(typeof configRes?.packagingCharge === 'number' ? configRes.packagingCharge : 0);
         setPackagingChargeType((configRes?.packagingChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
+        setKitchenBillPrintingEnabled(typeof configRes?.kitchenBillPrintingEnabled === 'boolean' ? configRes.kitchenBillPrintingEnabled : true);
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -548,42 +941,60 @@ export default function PosPage() {
 
     setProcessingPayment(true);
     try {
-      // Create the sale with all items and payment
-      const payload: any = {
-        items: items.map((item) => ({
-          product: item._id,
-          quantity: item.quantity
-        })),
-        paymentMethod: paymentMethod,
-        orderType: 'DINE_IN',
-        tableId: selectedTableForPayment._id,
-      };
+      let sale: Sale;
 
-      // Add customer if selected
-      if (selectedCustomerId) {
-        payload.customerId = selectedCustomerId;
-      }
+      if (selectedTableForPayment.currentSale) {
+        const saleId =
+          typeof selectedTableForPayment.currentSale === 'string'
+            ? selectedTableForPayment.currentSale
+            : selectedTableForPayment.currentSale._id;
 
-      // Add discount if applied
-      if (discountType && discountValue > 0) {
-        payload.discountType = discountType;
-        payload.discountValue = discountValue;
-      }
+        const existing = await getSaleById(saleId);
+        const amountToPay =
+          typeof existing?.balanceAmount === 'number'
+            ? existing.balanceAmount
+            : (typeof existing?.grandTotal === 'number' ? existing.grandTotal : finalTotal());
 
-      // Add coupon if entered
-      if (couponCode.trim()) {
-        payload.couponCode = couponCode.trim();
-      }
+        sale = await paySale(saleId, { amount: amountToPay, paymentMethod });
+      } else {
+        // Fallback: Create the sale with all items and payment
+        const payload: any = {
+          items: items.map((item) => ({
+            product: item._id,
+            quantity: item.quantity
+          })),
+          paymentMethod: paymentMethod,
+          orderType: 'DINE_IN',
+          tableId: selectedTableForPayment._id,
+        };
 
-      // Add serviceCharge and packagingCharge computed values
-      if (getServiceCharge() > 0) {
-        payload.serviceCharge = getServiceCharge();
-      }
-      if (getPackagingCharge() > 0) {
-        payload.packagingCharge = getPackagingCharge();
-      }
+        // Add customer if selected
+        if (selectedCustomerId) {
+          payload.customerId = selectedCustomerId;
+        }
 
-      const sale = await createSale(payload);
+        // Add discount if applied
+        if (discountType && discountValue > 0) {
+          payload.discountType = discountType;
+          payload.discountValue = discountValue;
+        }
+
+        // Add coupon if entered
+        if (couponCode.trim()) {
+          payload.couponCode = couponCode.trim();
+        }
+
+        // Add serviceCharge and packagingCharge computed values
+        if (getServiceCharge() > 0) {
+          payload.serviceCharge = getServiceCharge();
+        }
+        if (getPackagingCharge() > 0) {
+          payload.packagingCharge = getPackagingCharge();
+        }
+
+        sale = (await createSale(payload)) as Sale;
+      }
+      setPostPaymentSale(sale);
 
       // Earn loyalty points for customer if selected
       if (selectedCustomerId && sale.grandTotal > 0) {
@@ -618,7 +1029,7 @@ export default function PosPage() {
       }
 
       // Remove table order from state
-      setTableOrders(tableOrders.filter(order => order.tableId !== selectedTableForPayment._id));
+      setTableOrders((prev) => prev.filter(order => order.tableId !== selectedTableForPayment._id));
 
       // Refresh tables and reservations
       const [tablesRes, reservationsRes] = await Promise.all([
@@ -679,15 +1090,6 @@ export default function PosPage() {
   const calculatePointsDiscount = () => {
     if (!usePoints || pointsToUse <= 0) return 0;
     return (pointsToUse / 100) * 10;
-  };
-
-  // Maximum points that can be used (based on available points and order total)
-  const getMaxUsablePoints = () => {
-    if (!selectedCustomerLoyalty) return 0;
-    const remainingTotal =
-      subtotal() + taxTotal() + getChargesTotal() - calculateManualDiscount() - calculateCouponDiscount();
-    const maxPointsForTotal = Math.floor((Math.max(0, remainingTotal) / 10) * 100); // Convert amount to points
-    return Math.min(selectedCustomerLoyalty, maxPointsForTotal);
   };
 
   // Total discount (manual + coupon + points)
@@ -768,6 +1170,12 @@ const handleAddToTable = async () => {
     return;
   }
 
+  if (!currentShift) {
+    toast.error("No open shift. Please open a shift first.");
+    setShowShiftModal(true);
+    return;
+  }
+
   addingToTableRef.current = true;
   setAddingToTable(true);
 
@@ -800,6 +1208,43 @@ const handleAddToTable = async () => {
 
     // Update table status to OCCUPIED
     await tablesApi.updateStatus(selectedTable, 'OCCUPIED');
+
+    // Sync to backend OPEN sale so Kitchen can show it
+    try {
+      const payload: any = {
+        items: items.map((item) => ({
+          product: item._id,
+          quantity: item.quantity,
+        })),
+        orderType: 'DINE_IN',
+        tableId: selectedTable,
+      };
+
+      if (selectedCustomerId) {
+        payload.customerId = selectedCustomerId;
+      }
+      if (discountType && discountValue > 0) {
+        payload.discountType = discountType;
+        payload.discountValue = discountValue;
+      }
+      if (couponCode.trim()) {
+        payload.couponCode = couponCode.trim();
+      }
+      if (getServiceCharge() > 0) {
+        payload.serviceCharge = getServiceCharge();
+      }
+      if (getPackagingCharge() > 0) {
+        payload.packagingCharge = getPackagingCharge();
+      }
+
+      // Important: omit paymentMethod to keep it as an OPEN sale
+      await createSale(payload);
+
+      // Backend is now source-of-truth for this table order
+      setTableOrders((prev) => prev.filter((o) => o.tableId !== selectedTable));
+    } catch (saleErr: any) {
+      console.warn('Kitchen sync failed (open table sale):', saleErr?.response?.data || saleErr);
+    }
     
     // Refresh tables
     const tablesRes = await tablesApi.getAll();
@@ -867,7 +1312,8 @@ const handleCreateSale = async () => {
       payload.packagingCharge = getPackagingCharge();
     }
 
-    const sale = await createSale(payload);
+    const sale = (await createSale(payload)) as Sale;
+    setPostPaymentSale(sale);
 
     // Redeem loyalty points if used
     if (selectedCustomerId && usePoints && pointsToUse > 0) {
@@ -930,51 +1376,53 @@ const handleCreateSale = async () => {
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
-      
-      {/* Shift Warning Banner */}
-      {!currentShift && !loading && (
-        <div className="bg-yellow-500 text-white px-4 py-2 sm:px-6 flex items-center justify-between">
-          <span className="font-medium">⚠️ No shift open. You need to open a shift to create sales.</span>
-          <button
-            onClick={() => setShowShiftModal(true)}
-            className="touch-manipulation rounded-lg bg-white text-yellow-700 px-5 py-2 text-sm font-semibold hover:bg-yellow-50 active:scale-[0.99]"
-          >
-            Open Shift
-          </button>
-        </div>
-      )}
-
-      {/* Current Shift Info */}
-      {/* Top Banner (Shift) */}
-      {currentShift && (
-        <div className="bg-emerald-600 text-white px-4 py-1.5 sm:px-6 text-[12px] font-bold tracking-wide flex items-center gap-2 premium-shadow z-50">
-          <span className="flex h-2 w-2 rounded-full bg-white animate-pulse"></span>
-          <span className="flex-1">ACTIVE SHIFT: OPENED WITH {formatMoney(currentShift.openingCash)}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setClosingCash("");
-              setShowCloseShiftModal(true);
-            }}
-            className="touch-manipulation rounded-lg bg-white/20 px-4 py-1.5 text-[11px] font-black text-white hover:bg-white/30 active:scale-[0.99]"
-          >
-            Close Shift
-          </button>
-        </div>
-      )}
-
       {/* Main Header */}
-      <header className="flex h-20 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-40 sticky top-0">
-        <div>
+      <header className="flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-50 sticky top-0">
+        <div className="min-w-0">
           <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
             POS <span className="text-indigo-600">Terminal</span>
           </h1>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            Restaurant Management System
-          </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 truncate">
+              Restaurant Management System
+            </p>
+            {!loading && !currentShift && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
+                ⚠️ NO SHIFT
+              </span>
+            )}
+            {currentShift && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+                ACTIVE SHIFT
+              </span>
+            )}
+          </div>
         </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          {!loading && !currentShift && (
+            <button
+              type="button"
+              onClick={() => setShowShiftModal(true)}
+              className="touch-manipulation rounded-2xl bg-yellow-500 text-white px-4 py-2 text-sm font-extrabold hover:bg-yellow-600 active:scale-95 shadow-sm"
+            >
+              Open Shift
+            </button>
+          )}
 
-        <div className="flex items-center gap-4">
+          {currentShift && (
+            <button
+              type="button"
+              onClick={() => {
+                setClosingCash("");
+                setShowCloseShiftModal(true);
+              }}
+              className="touch-manipulation rounded-2xl bg-emerald-600 text-white px-4 py-2 text-sm font-extrabold hover:bg-emerald-700 active:scale-95 shadow-sm"
+            >
+              Close Shift
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -997,7 +1445,7 @@ const handleCreateSale = async () => {
               </svg>
             )}
           </button>
-          
+
           <button
             type="button"
             onClick={(e) => {
@@ -1026,7 +1474,7 @@ const handleCreateSale = async () => {
       </header>
 
       {/* Quick Navigation Bar */}
-      <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-4 sm:px-8">
+      <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-3 sm:px-8">
         <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
           <button
             type="button"
@@ -1071,17 +1519,6 @@ const handleCreateSale = async () => {
             className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
           >
             ↩️ Returns
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openQuickView("Reports", "/reports");
-            }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-          >
-            📑 Reports
           </button>
 
           {/* Divider */}
@@ -1294,7 +1731,7 @@ const handleCreateSale = async () => {
 
         <aside
           ref={cartSectionRef}
-          className="w-full border-t border-slate-200 bg-white flex flex-col lg:w-[440px] lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 min-h-0 overflow-hidden"
+          className="w-full border-t border-slate-200 bg-white flex flex-col lg:w-130 lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 min-h-0 overflow-hidden"
         >
           {/* Cart Header — fixed */}
           <div className="px-4 pt-4 pb-2 sm:px-5 shrink-0">
@@ -1333,7 +1770,7 @@ const handleCreateSale = async () => {
             )}
           </div>
 
-          {/* Scrollable Cart Items + Payment Fields */}
+          {/* Scrollable Cart Items */}
           <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 pb-2">
             {items.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
@@ -1415,291 +1852,6 @@ const handleCreateSale = async () => {
                 ))}
               </div>
             )}
-
-            {/* Payment & Discount Section */}
-            <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
-              {/* Customer Selection */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  {selectedCustomerId ? 'Customer' : 'Customer'}
-                </label>
-                {!selectedCustomerId && (
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
-                      👤 Walk-in Customer
-                    </span>
-                  </div>
-                )}
-                <div className="relative">
-                  {selectedCustomerId ? (
-                    <div className="flex items-center justify-between bg-blue-50 rounded-2xl px-5 py-4 border border-blue-200">
-                      <div className="flex-1">
-                        <span className="text-base font-semibold text-blue-900">
-                          {selectedCustomer?.name}
-                        </span>
-                        <span className="text-sm text-blue-600 ml-2">
-                          ({selectedCustomer?.phone})
-                        </span>
-                        {selectedCustomerLoyalty !== null && (
-                          <span className="ml-2 text-sm bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
-                            🎁 {selectedCustomerLoyalty} pts
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setShowCustomerDetailsModal(true)}
-                          className="touch-manipulation rounded-xl px-4 py-3 text-base font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
-                        >
-                          Details
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedCustomerId('');
-                            setSelectedCustomerLoyalty(null);
-                          }}
-                          className="touch-manipulation rounded-xl px-4 py-3 text-base text-blue-700 hover:bg-blue-100 active:scale-[0.99]"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          ref={customerSearchRef}
-                          type="text"
-                          value={customerSearch}
-                          onChange={(e) => {
-                            setCustomerSearch(e.target.value);
-                            setShowCustomerSearch(true);
-                          }}
-                          onFocus={() => setShowCustomerSearch(true)}
-                          placeholder="Search customer... (F5)"
-                          className="touch-manipulation w-full rounded-2xl border border-slate-300 px-5 py-4 text-lg"
-                        />
-                        {showCustomerSearch && customerSearch && (
-                          <div className="absolute z-20 mt-2 w-full bg-white rounded-xl border shadow-lg max-h-64 overflow-y-auto">
-                            {filteredCustomers.length === 0 ? (
-                              <div className="p-4 text-base text-slate-500 text-center">
-                                No customers found
-                              </div>
-                            ) : (
-                              filteredCustomers.slice(0, 10).map((customer) => (
-                                <button
-                                  key={customer._id}
-                                  onClick={() => {
-                                    setSelectedCustomerId(customer._id);
-                                    setCustomerSearch('');
-                                    setShowCustomerSearch(false);
-                                  }}
-                                  className="touch-manipulation w-full text-left px-4 py-4 text-base hover:bg-slate-50 border-b last:border-b-0"
-                                >
-                                  <div className="font-semibold text-slate-900">{customer.name}</div>
-                                  <div className="text-sm text-slate-500">{customer.phone} • {customer.tier}</div>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => setShowNewCustomerModal(true)}
-                        className="touch-manipulation w-14 h-14 flex items-center justify-center bg-green-500 text-white rounded-2xl text-2xl font-semibold hover:bg-green-600 active:scale-[0.99]"
-                        title="Add New Customer"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">
-                  Payment Method
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="WALLET">Wallet</option>
-                </select>
-              </div>
-
-              {/* Discount */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Discount
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-5 py-4 text-base"
-                  >
-                    <option value="">No Discount</option>
-                    <option value="PERCENTAGE">Percentage (%)</option>
-                    <option value="FLAT">Fixed Amount</option>
-                  </select>
-                  {discountType && (
-                    <input
-                      type="number"
-                      min="0"
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                      className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-5 py-4 text-base"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Coupon Code */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Coupon Code
-                </label>
-                {couponValidation?.success ? (
-                  <div className="flex items-center justify-between bg-green-50 rounded-2xl px-5 py-4 border border-green-200">
-                    <div>
-                      <span className="text-base font-semibold text-green-800">{couponCode}</span>
-                      <span className="text-sm text-green-600 ml-2">
-                        ({couponValidation.coupon?.discountType === 'PERCENTAGE' 
-                          ? `${couponValidation.coupon?.value}% off`
-                          : `${formatMoney(couponValidation.coupon?.value)} off`})
-                      </span>
-                    </div>
-                    <button
-                      onClick={handleClearCoupon}
-                      className="touch-manipulation rounded-xl px-4 py-3 text-base text-green-700 hover:bg-green-100 active:scale-[0.99]"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={couponCode}
-                      onChange={(e) => {
-                        setCouponCode(e.target.value.toUpperCase());
-                        setCouponValidation(null);
-                      }}
-                      placeholder="Enter coupon code"
-                      className={`touch-manipulation flex-1 rounded-2xl border px-5 py-4 text-base ${
-                        couponValidation?.success === false 
-                          ? 'border-red-300 bg-red-50' 
-                          : 'border-slate-300'
-                      }`}
-                    />
-                    <button
-                      onClick={handleValidateCoupon}
-                      disabled={!couponCode.trim() || validatingCoupon}
-                      className="touch-manipulation px-5 py-4 bg-blue-500 text-white rounded-2xl text-base font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {validatingCoupon ? '...' : 'Apply'}
-                    </button>
-                  </div>
-                )}
-                {couponValidation?.success === false && (
-                  <p className="text-sm text-red-500 mt-1">{couponValidation.message}</p>
-                )}
-              </div>
-
-              {/* Loyalty Points Payment */}
-              {selectedCustomerId && selectedCustomerLoyalty !== null && selectedCustomerLoyalty > 0 && (
-                <div className="bg-linear-to-r from-purple-50 to-pink-50 p-5 rounded-2xl border border-purple-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">🎁</span>
-                      <div>
-                        <h4 className="text-base font-semibold text-purple-900">Loyalty Points</h4>
-                        <p className="text-sm text-purple-600">
-                          Available: <strong>{selectedCustomerLoyalty} points</strong> 
-                          <span className="text-purple-500 ml-1">(≈ {formatMoney((selectedCustomerLoyalty / 100) * 10)})</span>
-                        </p>
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={usePoints}
-                        onChange={(e) => {
-                          setUsePoints(e.target.checked);
-                          if (e.target.checked) {
-                            const maxPoints = getMaxUsablePoints();
-                            setPointsToUse(maxPoints);
-                          } else {
-                            setPointsToUse(0);
-                          }
-                        }}
-                        className="w-6 h-6 text-purple-600 rounded"
-                      />
-                      <span className="text-base font-semibold text-purple-900">Use Points</span>
-                    </label>
-                  </div>
-
-                  {usePoints && (
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-sm font-semibold text-purple-700">
-                            Points to use: {pointsToUse}
-                          </label>
-                          <span className="text-sm text-purple-600 font-semibold">
-                            Discount: {formatMoney(calculatePointsDiscount())}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max={getMaxUsablePoints()}
-                          step="10"
-                          value={pointsToUse}
-                          onChange={(e) => setPointsToUse(Number(e.target.value))}
-                          className="w-full h-4 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                        />
-                        <div className="flex justify-between text-sm text-purple-600 mt-1">
-                          <span>0</span>
-                          <span className="font-medium">Max: {getMaxUsablePoints()}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        {[25, 50, 75, 100].map(percent => {
-                          const pointsValue = Math.floor(getMaxUsablePoints() * (percent / 100));
-                          if (pointsValue <= 0) return null;
-                          return (
-                            <button
-                              key={percent}
-                              onClick={() => setPointsToUse(pointsValue)}
-                              className={`flex-1 px-4 py-3 text-base rounded-xl font-semibold ${
-                                pointsToUse === pointsValue
-                                  ? 'bg-purple-600 text-white'
-                                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                              }`}
-                            >
-                              {percent}%
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <p className="text-sm text-purple-600 text-center">
-                        💡 Conversion: 100 points = Rs. 10
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Totals — ALWAYS VISIBLE at bottom of cart */}
@@ -1754,7 +1906,8 @@ const handleCreateSale = async () => {
 
       {/* Bottom Touch Action Bar */}
       <div className="shrink-0 border-t border-slate-200 bg-white z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
-        <div className="flex items-stretch gap-2 px-3 py-3 flex-wrap">
+        <div className="px-3 py-3 sm:px-6">
+          <div className="flex items-stretch gap-2 flex-wrap">
           {/* Order Type */}
           <div className="flex rounded-xl bg-slate-100 p-1">
             {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
@@ -1800,26 +1953,219 @@ const handleCreateSale = async () => {
             Clear all
           </button>
 
-          <button
-            onClick={
-              isPayingTable
-                ? handleTablePayment
-                : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
-            }
-            disabled={
-              !currentShift ||
-              items.length === 0 ||
-              (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
-              isProcessing
-            }
-            className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-          >
-            {isPayingTable
-              ? (processingPayment ? 'Processing…' : 'Pay Bill')
-              : (orderType === 'DINE_IN' && selectedTable
-                ? (addingToTable ? 'Adding…' : 'Add to Table')
-                : (creatingSale ? 'Processing…' : 'Pay'))}
-          </button>
+          {postPaymentSale ? (
+            <div className="ml-auto flex gap-2">
+              <button
+                type="button"
+                onClick={handlePrintReceipt}
+                disabled={printingReceipt}
+                className="touch-manipulation rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+              >
+                {printingReceipt ? 'Printing…' : 'Print'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPostPaymentSale(null)}
+                className="touch-manipulation rounded-xl border border-slate-200 bg-white px-10 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+              >
+                Next
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={
+                isPayingTable
+                  ? handleTablePayment
+                  : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
+              }
+              disabled={
+                !currentShift ||
+                items.length === 0 ||
+                (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
+                isProcessing
+              }
+              className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+            >
+              {isPayingTable
+                ? (processingPayment ? 'Processing…' : 'Pay Bill')
+                : (orderType === 'DINE_IN' && selectedTable
+                  ? (addingToTable ? 'Adding…' : 'Add to Table')
+                  : (creatingSale ? 'Processing…' : 'Pay'))}
+            </button>
+          )}
+          </div>
+
+          {/* Bottom Bar Inputs (Customer / Discount / Coupon) */}
+          <div className="mt-3 grid w-full gap-3 lg:grid-cols-12">
+            {/* Customer */}
+            <div className="lg:col-span-5">
+              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Customer</label>
+              <div className="relative">
+                {selectedCustomerId ? (
+                  <div className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-blue-900">{selectedCustomer?.name}</div>
+                      <div className="truncate text-xs font-semibold text-blue-700">{selectedCustomer?.phone}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomerDetailsModal(true)}
+                        className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId('');
+                          setSelectedCustomerLoyalty(null);
+                          setUsePoints(false);
+                          setPointsToUse(0);
+                        }}
+                        className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
+                        aria-label="Clear customer"
+                        title="Clear"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        ref={customerSearchRef}
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setShowCustomerSearch(true);
+                        }}
+                        onFocus={() => setShowCustomerSearch(true)}
+                        placeholder="Search customer... (F5)"
+                        className="touch-manipulation w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+                      />
+
+                      {showCustomerSearch && customerSearch && (
+                        <div className="absolute bottom-full mb-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto z-60">
+                          {filteredCustomers.length === 0 ? (
+                            <div className="p-4 text-sm text-slate-500 text-center">No customers found</div>
+                          ) : (
+                            filteredCustomers.slice(0, 10).map((customer) => (
+                              <button
+                                key={customer._id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerId(customer._id);
+                                  setCustomerSearch('');
+                                  setShowCustomerSearch(false);
+                                }}
+                                className="touch-manipulation w-full text-left px-4 py-3 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                              >
+                                <div className="font-bold text-slate-900">{customer.name}</div>
+                                <div className="text-xs font-semibold text-slate-500">{customer.phone} • {customer.tier}</div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCustomerModal(true)}
+                      className="touch-manipulation w-12 h-12 flex items-center justify-center rounded-2xl bg-green-500 text-white text-2xl font-black hover:bg-green-600 active:scale-[0.99]"
+                      title="Add New Customer"
+                      aria-label="Add New Customer"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Discount */}
+            <div className="lg:col-span-3">
+              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Discount</label>
+              <div className="flex gap-2">
+                <select
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                  className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm"
+                >
+                  <option value="">None</option>
+                  <option value="PERCENTAGE">%</option>
+                  <option value="FLAT">Rs</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={discountType ? discountValue : 0}
+                  onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                  placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
+                  disabled={!discountType}
+                  className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm disabled:bg-slate-50 disabled:opacity-60"
+                />
+              </div>
+            </div>
+
+            {/* Coupon */}
+            <div className="lg:col-span-4">
+              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Coupon</label>
+              {couponValidation?.success ? (
+                <div className="flex items-center justify-between rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-black text-green-800">{couponCode}</div>
+                    <div className="truncate text-xs font-semibold text-green-700">
+                      {couponValidation.coupon?.discountType === 'PERCENTAGE'
+                        ? `${couponValidation.coupon?.value}% off`
+                        : `${formatMoney(couponValidation.coupon?.value)} off`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearCoupon}
+                    className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-green-800 hover:bg-white active:scale-[0.99]"
+                    aria-label="Clear coupon"
+                    title="Clear"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value.toUpperCase());
+                      setCouponValidation(null);
+                    }}
+                    placeholder="Enter code"
+                    className={`touch-manipulation flex-1 rounded-2xl border px-3 py-3 text-sm ${
+                      couponValidation?.success === false
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-slate-300'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleValidateCoupon}
+                    disabled={!couponCode.trim() || validatingCoupon}
+                    className="touch-manipulation rounded-2xl bg-blue-500 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {validatingCoupon ? '...' : 'Apply'}
+                  </button>
+                </div>
+              )}
+
+              {couponValidation?.success === false && (
+                <p className="text-xs font-semibold text-red-500 mt-1">{couponValidation.message}</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1848,7 +2194,7 @@ const handleCreateSale = async () => {
       {/* Tables Modal (Touch friendly) */}
       {showTablesModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
-          <div className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col premium-shadow-xl border border-white/20 overflow-hidden">
+          <div className="bg-white rounded-4xl w-full max-w-5xl max-h-[90vh] flex flex-col premium-shadow-xl border border-white/20 overflow-hidden">
 
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 shrink-0 bg-slate-50/50 backdrop-blur-md">
@@ -1929,7 +2275,7 @@ const handleCreateSale = async () => {
               {/* ── TAB 1: Available Tables ── */}
               {tablesTab === 'available' && (
                 availableTables.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-4xl">
                     <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-3xl">☕</div>
                     <div className="text-center">
                       <p className="text-base font-bold text-slate-900">No tables available</p>
@@ -1946,7 +2292,7 @@ const handleCreateSale = async () => {
                           setSelectedTable(t._id);
                           setShowTablesModal(false);
                         }}
-                        className="group relative touch-manipulation flex flex-col items-center justify-center rounded-[2rem] border border-emerald-100 bg-white px-2 py-6 text-center premium-shadow hover:border-emerald-500 hover:shadow-emerald-100 transition-all hover-lift"
+                        className="group relative touch-manipulation flex flex-col items-center justify-center rounded-4xl border border-emerald-100 bg-white px-2 py-6 text-center premium-shadow hover:border-emerald-500 hover:shadow-emerald-100 transition-all hover-lift"
                       >
                         <div className="absolute top-3 right-4 h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
                         <span className="text-2xl font-black text-slate-900 group-hover:text-emerald-700 leading-tight">
@@ -1972,7 +2318,7 @@ const handleCreateSale = async () => {
               {/* ── TAB 2: Active Orders ── */}
               {tablesTab === 'active' && (
                 occupiedTables.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-4xl">
                     <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-3xl">📭</div>
                     <div className="text-center">
                       <p className="text-base font-bold text-slate-900">No active tables</p>
@@ -2114,7 +2460,7 @@ const handleCreateSale = async () => {
               {/* ── TAB 3: Cleaning ── */}
               {tablesTab === 'cleaning' && (
                 cleaningTables.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-[2rem]">
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 glass-panel rounded-4xl">
                     <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-3xl">✨</div>
                     <div className="text-center">
                       <p className="text-base font-bold text-slate-900">All set!</p>
@@ -2123,7 +2469,7 @@ const handleCreateSale = async () => {
                   </div>
                 ) : (
                   <div>
-                    <div className="mb-6 rounded-[1.5rem] border border-indigo-100 bg-indigo-50/50 px-6 py-4 flex items-start gap-4">
+                    <div className="mb-6 rounded-3xl border border-indigo-100 bg-indigo-50/50 px-6 py-4 flex items-start gap-4">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">🧹</div>
                       <div>
                         <p className="text-sm font-bold text-indigo-900">Physical Clearing Required</p>
@@ -2134,7 +2480,7 @@ const handleCreateSale = async () => {
                       {cleaningTables.map((t) => (
                         <div
                           key={t._id}
-                          className="flex flex-col items-center rounded-[2rem] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 transition-all border-b-4 border-b-indigo-400"
+                          className="flex flex-col items-center rounded-4xl border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50 transition-all border-b-4 border-b-indigo-400"
                         >
                           <div className="text-center mb-6">
                             <div className="text-xl font-black text-slate-900">Table {t.tableNumber}</div>
@@ -2195,7 +2541,7 @@ const handleCreateSale = async () => {
 
       {/* ── View Order Modal ── */}
       {viewOrderTable && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 transition-all duration-300">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-60 p-4 transition-all duration-300">
           <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl flex flex-col max-h-[85vh] overflow-hidden premium-shadow-xl border border-white/20">
             
             {/* Header */}
@@ -2282,7 +2628,7 @@ const handleCreateSale = async () => {
 
       {/* ── Kitchen Orders Viewer (read-only) ── */}
       {showKitchenViewer && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60 p-4">
           <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
@@ -2296,27 +2642,80 @@ const handleCreateSale = async () => {
               >✕</button>
             </div>
 
+            <div className="shrink-0 px-6 py-3 border-b border-slate-100 bg-white">
+              <div className="flex flex-wrap items-center gap-2">
+                {(['ALL', 'PENDING', 'PREPARING', 'READY'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setKitchenStatusFilter(st)}
+                    className={`touch-manipulation rounded-xl px-4 py-2 text-sm font-bold border transition active:scale-[0.99] ${
+                      kitchenStatusFilter === st
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {st === 'ALL' ? 'All' : st}
+                  </button>
+                ))}
+
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setKitchenViewMode('QUEUE')}
+                    className={`touch-manipulation rounded-xl px-4 py-2 text-sm font-bold border transition active:scale-[0.99] ${
+                      kitchenViewMode === 'QUEUE'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Queue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKitchenViewMode('TABLES')}
+                    className={`touch-manipulation rounded-xl px-4 py-2 text-sm font-bold border transition active:scale-[0.99] ${
+                      kitchenViewMode === 'TABLES'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Tables
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-y-auto flex-1 px-6 py-5">
               {loadingKitchen ? (
                 <div className="flex items-center justify-center py-16 text-slate-400">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-violet-600 mr-3"></div>
                   Loading kitchen orders…
                 </div>
-              ) : kitchenOrders.length === 0 ? (
+              ) : kitchenOrders.filter((o) => o.status !== 'SERVED').length === 0 ? (
                 <div className="py-16 text-center text-sm text-slate-400">No active kitchen orders</div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {kitchenOrders.map((order) => {
+                  {[...kitchenOrders]
+                    .filter((o) => o.status !== 'SERVED')
+                    .filter((o) => (kitchenStatusFilter === 'ALL' ? true : o.status === kitchenStatusFilter))
+                    .filter((o) => (kitchenViewMode === 'TABLES' ? isDineInKitchenOrder(o) : !isDineInKitchenOrder(o)))
+                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                    .map((order) => {
                     const statusStyles: Record<string, string> = {
                       PENDING:   'bg-amber-100 text-amber-800 border-amber-200',
                       PREPARING: 'bg-blue-100 text-blue-800 border-blue-200',
                       READY:     'bg-emerald-100 text-emerald-800 border-emerald-200',
-                      SERVED:    'bg-slate-100 text-slate-600 border-slate-200',
                     };
                     const statusIcons: Record<string, string> = {
-                      PENDING: '⏳', PREPARING: '🔥', READY: '✅', SERVED: '🍽️',
+                      PENDING: '⏳', PREPARING: '🔥', READY: '✅',
                     };
                     const waitMins = order.waitingMinutes ?? Math.round((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+
+                    const saleInvoiceNumber = typeof order.sale === 'object' && order.sale ? (order.sale as any).invoiceNumber : '';
+                    const dailySeq = kitchenDailySequenceMap[order._id];
+                    const orderNo = (order as any).orderNumber || (dailySeq ? String(dailySeq) : '') || saleInvoiceNumber || '';
+
                     return (
                       <div key={order._id} className={`rounded-2xl border-2 p-4 ${
                         order.status === 'PENDING'   ? 'border-amber-200 bg-amber-50' :
@@ -2326,14 +2725,28 @@ const handleCreateSale = async () => {
                       }`}>
                         <div className="flex items-start justify-between mb-3">
                           <div>
+                            {orderNo && (
+                              <div className="text-base font-black text-slate-900 font-mono tracking-tight">#{orderNo}</div>
+                            )}
                             {order.tableNumber && (
                               <div className="text-sm font-bold text-slate-900">Table {order.tableNumber}</div>
                             )}
                             <div className="text-xs text-slate-500 mt-0.5">{waitMins}m waiting</div>
                           </div>
-                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[order.status] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                            {statusIcons[order.status]} {order.status}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {kitchenBillPrintingEnabled && (
+                              <button
+                                type="button"
+                                onClick={() => handlePrintKitchenOrder(order)}
+                                className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-slate-800 border border-white/40 hover:bg-white active:scale-[0.99]"
+                              >
+                                Print
+                              </button>
+                            )}
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[order.status] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                              {statusIcons[order.status]} {order.status}
+                            </span>
+                          </div>
                         </div>
                         <div className="space-y-1.5">
                           {order.items.map((item, i) => (
@@ -2531,48 +2944,6 @@ const handleCreateSale = async () => {
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* Discount Section */}
-              <div>
-                <label className="block text-base font-semibold text-slate-700 mb-1">
-                  Discount (Optional)
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-                    className="touch-manipulation w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
-                  >
-                    <option value="">No Discount</option>
-                    <option value="PERCENTAGE">Percentage (%)</option>
-                    <option value="FLAT">Fixed Amount</option>
-                  </select>
-                  {discountType && (
-                    <input
-                      type="number"
-                      min="0"
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                      className="touch-manipulation w-1/2 rounded-xl border border-slate-300 px-4 py-3 text-base"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Coupon Code */}
-              <div>
-                <label className="block text-base font-semibold text-slate-700 mb-1">
-                  Coupon Code (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="Enter coupon code"
-                  className="touch-manipulation w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
-                />
               </div>
 
               <div className="flex gap-3 pt-4">
