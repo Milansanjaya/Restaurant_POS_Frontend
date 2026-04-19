@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader, Badge } from '../components';
 import { categoriesApi } from '../api';
 import type { Category, CategoryFormData } from '../types';
 
@@ -23,7 +23,53 @@ export default function CategoriesPage() {
     try {
       setLoading(true);
       const cats = await categoriesApi.getAll();
-      setCategories(cats || []);
+
+      // If backend defaults to returning active-only when `isActive` isn't provided,
+      // fetch inactive categories explicitly and merge.
+      const allFlat = flattenCategories(cats || []);
+      const hasInactive = allFlat.some((c) => c.isActive === false);
+
+      if (hasInactive) {
+        setCategories(cats || []);
+        return;
+      }
+
+      const [activeCats, inactiveCats] = await Promise.all([
+        categoriesApi.getAll({ isActive: true }).catch(() => []),
+        categoriesApi.getAll({ isActive: false }).catch(() => []),
+      ]);
+
+      const mergeCategoryTrees = (a: Category[], b: Category[]): Category[] => {
+        const byId = new Map<string, Category>();
+        const order: string[] = [];
+
+        const mergeOne = (existing: Category, incoming: Category): Category => {
+          const merged: Category = { ...existing, ...incoming };
+          const existingChildren = Array.isArray(existing.children) ? existing.children : [];
+          const incomingChildren = Array.isArray(incoming.children) ? incoming.children : [];
+          const mergedChildren = mergeCategoryTrees(existingChildren, incomingChildren);
+          if (mergedChildren.length) merged.children = mergedChildren;
+          else delete (merged as any).children;
+          return merged;
+        };
+
+        const upsert = (cat: Category) => {
+          const current = byId.get(cat._id);
+          if (!current) {
+            byId.set(cat._id, { ...cat });
+            order.push(cat._id);
+          } else {
+            byId.set(cat._id, mergeOne(current, cat));
+          }
+        };
+
+        (a || []).forEach(upsert);
+        (b || []).forEach(upsert);
+
+        return order.map((id) => byId.get(id)!).filter(Boolean);
+      };
+
+      setCategories(mergeCategoryTrees(activeCats || [], inactiveCats || []));
     } catch (error) {
       console.error('Failed to load categories:', error);
       setCategories([]);
@@ -109,14 +155,15 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
+  const handleToggleActive = async (category: Category) => {
     try {
-      await categoriesApi.delete(id);
-      toast.success('🗑️ Category deleted successfully');
+      const currentlyActive = category.isActive !== false;
+      const nextActive = !currentlyActive;
+      await categoriesApi.update(category._id, { isActive: nextActive });
+      toast.success(nextActive ? '✅ Category activated' : '🚫 Category marked inactive');
       loadCategories();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete category');
+      toast.error(error?.response?.data?.message || 'Failed to update category status');
     }
   };
 
@@ -138,11 +185,16 @@ export default function CategoriesPage() {
     if (!Array.isArray(cats)) return null;
     return cats.map((cat) => (
       <div key={cat._id} style={{ marginLeft: level * 24 }}>
-        <div className="mb-2 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+        <div className={`mb-2 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 ${cat.isActive === false ? 'opacity-60' : ''}`}>
           <div className="flex items-center gap-3">
             {cat.icon && <span className="text-xl">{cat.icon}</span>}
             <div>
-              <p className="font-medium text-slate-900">{cat.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-slate-900">{cat.name}</p>
+                <Badge variant={cat.isActive === false ? 'default' : 'success'}>
+                  {cat.isActive === false ? 'Inactive' : 'Active'}
+                </Badge>
+              </div>
               {cat.description && (
                 <p className="text-sm text-slate-500">{cat.description}</p>
               )}
@@ -155,8 +207,8 @@ export default function CategoriesPage() {
             <Button size="sm" variant="ghost" onClick={() => openEditModal(cat)}>
               Edit
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => handleDelete(cat._id)}>
-              Delete
+            <Button size="sm" variant="ghost" onClick={() => handleToggleActive(cat)}>
+              {cat.isActive === false ? 'Set Active' : 'Set Inactive'}
             </Button>
           </div>
         </div>

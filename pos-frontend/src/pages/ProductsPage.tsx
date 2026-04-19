@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal } from '../components';
 import { productsApi, categoriesApi, unitsApi } from '../api';
 import type { Product, Category, ProductFormData, Unit } from '../types';
@@ -52,12 +52,86 @@ export default function ProductsPage() {
   const loadCategories = async () => {
     try {
       const cats = await categoriesApi.getAll();
-      setCategories(cats || []);
+
+      // If backend defaults to active-only when `isActive` isn't provided,
+      // fetch inactive categories explicitly and merge.
+      const flatten = (arr: Category[]): Category[] => {
+        const out: Category[] = [];
+        const walk = (list: Category[]) => {
+          for (const c of list || []) {
+            out.push(c);
+            if (Array.isArray(c.children) && c.children.length) walk(c.children);
+          }
+        };
+        if (Array.isArray(arr)) walk(arr);
+        return out;
+      };
+
+      const hasInactive = flatten(cats || []).some((c) => c.isActive === false);
+      if (hasInactive) {
+        setCategories(cats || []);
+        return;
+      }
+
+      const [activeCats, inactiveCats] = await Promise.all([
+        categoriesApi.getAll({ isActive: true }).catch(() => []),
+        categoriesApi.getAll({ isActive: false }).catch(() => []),
+      ]);
+
+      const mergeCategoryTrees = (a: Category[], b: Category[]): Category[] => {
+        const byId = new Map<string, Category>();
+        const order: string[] = [];
+
+        const mergeOne = (existing: Category, incoming: Category): Category => {
+          const merged: Category = { ...existing, ...incoming };
+          const existingChildren = Array.isArray(existing.children) ? existing.children : [];
+          const incomingChildren = Array.isArray(incoming.children) ? incoming.children : [];
+          const mergedChildren = mergeCategoryTrees(existingChildren, incomingChildren);
+          if (mergedChildren.length) merged.children = mergedChildren;
+          else delete (merged as any).children;
+          return merged;
+        };
+
+        const upsert = (cat: Category) => {
+          const current = byId.get(cat._id);
+          if (!current) {
+            byId.set(cat._id, { ...cat });
+            order.push(cat._id);
+          } else {
+            byId.set(cat._id, mergeOne(current, cat));
+          }
+        };
+
+        (a || []).forEach(upsert);
+        (b || []).forEach(upsert);
+
+        return order.map((id) => byId.get(id)!).filter(Boolean);
+      };
+
+      setCategories(mergeCategoryTrees(activeCats || [], inactiveCats || []));
     } catch (error) {
       console.error('Failed to load categories:', error);
       setCategories([]);
     }
   };
+
+  const flatCategories = useMemo(() => {
+    const out: Category[] = [];
+    const walk = (arr: Category[]) => {
+      for (const c of arr || []) {
+        out.push(c);
+        if (Array.isArray(c.children) && c.children.length) walk(c.children);
+      }
+    };
+    if (Array.isArray(categories)) walk(categories);
+    return out;
+  }, [categories]);
+
+  const categoryById = useMemo(() => {
+    const map = new Map<string, Category>();
+    flatCategories.forEach((c) => map.set(c._id, c));
+    return map;
+  }, [flatCategories]);
 
   const loadUnits = async () => {
     try {
@@ -199,7 +273,7 @@ export default function ProductsPage() {
     if (!Array.isArray(cats)) return [];
     let result: { value: string; label: string }[] = [];
     for (const cat of cats) {
-      result.push({ value: cat._id, label: prefix + cat.name });
+      result.push({ value: cat._id, label: prefix + cat.name + (cat.isActive === false ? ' (Inactive)' : '') });
       if (cat.children?.length) {
         result = result.concat(flattenCategories(cat.children, prefix + '  '));
       }
@@ -213,8 +287,16 @@ export default function ProductsPage() {
     {
       key: 'category',
       header: 'Category',
-      render: (item: Product) =>
-        typeof item.category === 'object' ? item.category.name : '-',
+      render: (item: Product) => {
+        const cat = typeof item.category === 'object' ? item.category : categoryById.get(item.category);
+        if (!cat) return '-';
+        return (
+          <div className="flex items-center gap-2">
+            <span>{cat.name}</span>
+            {cat.isActive === false && <Badge variant="default">Inactive</Badge>}
+          </div>
+        );
+      },
     },
     {
       key: 'price',
@@ -225,6 +307,15 @@ export default function ProductsPage() {
       key: 'taxRate',
       header: 'Tax',
       render: (item: Product) => `${item.taxRate || 0}%`,
+    },
+    {
+      key: 'trackStock',
+      header: 'Stock Tracking',
+      render: (item: Product) => (
+        <Badge variant={item.trackStock ? 'success' : 'default'}>
+          {item.trackStock ? 'Enabled' : 'Disabled'}
+        </Badge>
+      ),
     },
     {
       key: 'isAvailable',

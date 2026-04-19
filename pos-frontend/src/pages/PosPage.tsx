@@ -67,6 +67,12 @@ export default function PosPage() {
   const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
   const [packagingCharge, setPackagingCharge] = useState(0);
   const [packagingChargeType, setPackagingChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
+  const [pointsMultiplierByTier, setPointsMultiplierByTier] = useState({
+    BASIC: 1,
+    SILVER: 1,
+    GOLD: 1,
+    PLATINUM: 1,
+  } as Record<'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM', number>);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Coupon validation
@@ -550,9 +556,10 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, categoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes, inventoryRes] = await Promise.all([
+        const [productsRes, activeCategoriesRes, inactiveCategoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes, inventoryRes] = await Promise.all([
           api.get("/products"),
-          categoriesApi.getAll(),
+          categoriesApi.getAll({ isActive: true }).catch(() => []),
+          categoriesApi.getAll({ isActive: false }).catch(() => []),
           tablesApi.getAll(),
           shiftsApi.getCurrent().catch(() => null),
           customersApi.getAll({ limit: 100 }).catch(() => ({ customers: [] })),
@@ -560,6 +567,25 @@ export default function PosPage() {
           configApi.get().catch(() => null),
           inventoryApi.getAll().catch(() => []),
         ]);
+
+        const flattenCats = (cats: Category[]): Category[] => {
+          const out: Category[] = [];
+          const walk = (arr: Category[]) => {
+            for (const c of arr || []) {
+              out.push(c);
+              if (Array.isArray(c.children) && c.children.length) walk(c.children);
+            }
+          };
+          if (Array.isArray(cats)) walk(cats);
+          return out;
+        };
+
+        // Store a flat list so we always have inactive category IDs available
+        const mergedCategoryMap = new Map<string, Category>();
+        [...flattenCats(activeCategoriesRes || []), ...flattenCats(inactiveCategoriesRes || [])].forEach((c) => {
+          mergedCategoryMap.set(c._id, c);
+        });
+        const mergedCategories = Array.from(mergedCategoryMap.values());
 
         const inventoryByProductId = new Map<string, number>();
         (inventoryRes || []).forEach((inv) => {
@@ -580,7 +606,7 @@ export default function PosPage() {
         });
 
         setProducts(mergedProducts);
-        setCategories(categoriesRes || []);
+        setCategories(mergedCategories);
         setTables(tablesRes || []);
         setCurrentShift(shiftRes);
         // Store active reservations (CONFIRMED or SEATED)
@@ -603,6 +629,16 @@ export default function PosPage() {
         setPackagingCharge(typeof configRes?.packagingCharge === 'number' ? configRes.packagingCharge : 0);
         setPackagingChargeType((configRes?.packagingChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
         setKitchenBillPrintingEnabled(typeof configRes?.kitchenBillPrintingEnabled === 'boolean' ? configRes.kitchenBillPrintingEnabled : true);
+
+        const m = (configRes as any)?.pointsMultiplierByTier;
+        if (m && typeof m === 'object') {
+          setPointsMultiplierByTier({
+            BASIC: typeof m.BASIC === 'number' ? m.BASIC : 1,
+            SILVER: typeof m.SILVER === 'number' ? m.SILVER : 1,
+            GOLD: typeof m.GOLD === 'number' ? m.GOLD : 1,
+            PLATINUM: typeof m.PLATINUM === 'number' ? m.PLATINUM : 1,
+          });
+        }
       } catch (error) {
         console.error("Failed to load data:", error);
       } finally {
@@ -1127,10 +1163,37 @@ export default function PosPage() {
     ? processingPayment
     : (orderType === 'DINE_IN' && selectedTable ? addingToTable : creatingSale);
 
+  const flattenCategories = (cats: Category[]): Category[] => {
+    let result: Category[] = [];
+    for (const cat of cats) {
+      result.push(cat);
+      if (cat.children?.length) {
+        result = result.concat(flattenCategories(cat.children));
+      }
+    }
+    return result;
+  };
+
+  const flatCategories = useMemo(() => flattenCategories(categories), [categories]);
+  const inactiveCategoryIds = useMemo(
+    () => new Set(flatCategories.filter((c) => c.isActive === false).map((c) => c._id)),
+    [flatCategories]
+  );
+  const activeFlatCategories = useMemo(
+    () => flatCategories.filter((c) => c.isActive !== false),
+    [flatCategories]
+  );
+
+  useEffect(() => {
+    if (selectedCategory && inactiveCategoryIds.has(selectedCategory)) {
+      setSelectedCategory('');
+    }
+  }, [selectedCategory, inactiveCategoryIds]);
+
   const getCategoryName = (product: Product) => {
     if (!product.category) return "General";
     if (typeof product.category === "object") return product.category.name;
-    const cat = categories.find((c) => c._id === product.category);
+    const cat = flatCategories.find((c) => c._id === product.category);
     return cat?.name || "General";
   };
 
@@ -1142,20 +1205,10 @@ export default function PosPage() {
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !selectedCategory || getCategoryId(product) === selectedCategory;
+    const categoryId = getCategoryId(product);
+    const matchesCategory = !selectedCategory || categoryId === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const flattenCategories = (cats: Category[]): Category[] => {
-    let result: Category[] = [];
-    for (const cat of cats) {
-      result.push(cat);
-      if (cat.children?.length) {
-        result = result.concat(flattenCategories(cat.children));
-      }
-    }
-    return result;
-  };
 
 const handleAddToTable = async () => {
   if (addingToTableRef.current) return;
@@ -1333,8 +1386,14 @@ const handleCreateSale = async () => {
     // Earn loyalty points for customer if selected (only if not paying with points)
     if (selectedCustomerId && sale.grandTotal > 0 && !usePoints) {
       try {
-        await loyaltyApi.earnPoints(selectedCustomerId, sale.grandTotal, sale._id);
-        const pointsEarned = Math.floor(sale.grandTotal / 10);
+        const tier = customers.find((c) => c._id === selectedCustomerId)?.tier as 'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM' | undefined;
+        const multiplier = tier ? (pointsMultiplierByTier[tier] ?? 1) : 1;
+        const adjustedAmount = sale.grandTotal * multiplier;
+
+        await loyaltyApi.earnPoints(selectedCustomerId, adjustedAmount, sale._id);
+
+        // Display-only estimate (backend is source of truth)
+        const pointsEarned = Math.floor(adjustedAmount / 10);
         if (pointsEarned > 0) {
           toast.success(`🎉 Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
         }
@@ -1582,7 +1641,7 @@ const handleCreateSale = async () => {
             >
               All
             </button>
-            {flattenCategories(categories).map((cat) => (
+            {activeFlatCategories.map((cat) => (
               <button
                 key={cat._id}
                 onClick={() => setSelectedCategory(cat._id)}
@@ -1613,7 +1672,7 @@ const handleCreateSale = async () => {
               >
                 All
               </button>
-              {flattenCategories(categories).map((cat) => (
+              {activeFlatCategories.map((cat) => (
                 <button
                   key={cat._id}
                   onClick={() => setSelectedCategory(cat._id)}
@@ -1652,15 +1711,18 @@ const handleCreateSale = async () => {
                   (product.trackStock !== false &&
                     typeof product.stockQuantity === 'number' &&
                     product.stockQuantity <= 0);
+                const categoryId = getCategoryId(product);
+                const isInactiveCategory = Boolean(categoryId) && inactiveCategoryIds.has(categoryId);
                 const isUnavailable = product.isAvailable === false || isOutOfStock;
+                const isDisabled = isUnavailable || isInactiveCategory;
                 return (
                   <div
                     key={product._id}
-                    role={isUnavailable ? undefined : "button"}
-                    tabIndex={isUnavailable ? -1 : 0}
-                    aria-disabled={isUnavailable}
+                    role={isDisabled ? undefined : "button"}
+                    tabIndex={isDisabled ? -1 : 0}
+                    aria-disabled={isDisabled}
                     onClick={
-                      isUnavailable
+                      isDisabled
                         ? undefined
                         : () =>
                             addItem({
@@ -1671,7 +1733,7 @@ const handleCreateSale = async () => {
                             })
                     }
                     onKeyDown={
-                      isUnavailable
+                      isDisabled
                         ? undefined
                         : (e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -1686,7 +1748,7 @@ const handleCreateSale = async () => {
                           }
                     }
                     className={`touch-manipulation select-none rounded-2xl border p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-slate-400 ${
-                      isUnavailable
+                      isDisabled
                         ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60'
                         : 'cursor-pointer border-slate-200 bg-white hover:shadow-md active:scale-[0.99] active:bg-slate-50'
                     }`}
@@ -1696,7 +1758,11 @@ const handleCreateSale = async () => {
                         {product.name}
                       </h3>
 
-                      {isUnavailable ? (
+                      {isInactiveCategory ? (
+                        <span className="shrink-0 rounded-full bg-slate-200 px-2 py-1 text-[10px] font-medium text-slate-700">
+                          Inactive
+                        </span>
+                      ) : isUnavailable ? (
                         <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
                           Out of Stock
                         </span>
@@ -1712,11 +1778,11 @@ const handleCreateSale = async () => {
                     </p>
 
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-sm font-bold ${isUnavailable ? 'text-slate-400' : 'text-slate-900'}`}>
+                      <span className={`text-sm font-bold ${isDisabled ? 'text-slate-400' : 'text-slate-900'}`}>
                         {formatMoney(product.price)}
                       </span>
 
-                      {isUnavailable && (
+                      {isDisabled && (
                         <span className="shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-lg font-bold bg-slate-200 text-slate-400">
                           —
                         </span>

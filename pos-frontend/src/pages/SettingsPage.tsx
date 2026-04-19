@@ -30,6 +30,15 @@ export default function SettingsPage() {
 
   const [kitchenBillPrintingEnabled, setKitchenBillPrintingEnabled] = useState(true);
 
+  const [pointsPerDollar, setPointsPerDollar] = useState(0);
+  const [pointsExpiryDays, setPointsExpiryDays] = useState(0);
+  const [pointsMultiplierByTier, setPointsMultiplierByTier] = useState({
+    BASIC: 1,
+    SILVER: 1,
+    GOLD: 1,
+    PLATINUM: 1,
+  } as Record<'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM', number>);
+
   const loadConfig = async () => {
     try {
       setLoading(true);
@@ -56,6 +65,19 @@ export default function SettingsPage() {
       setBusinessLogo(data.businessDetails?.logo || data.logo || '');
 
       setKitchenBillPrintingEnabled(typeof data.kitchenBillPrintingEnabled === 'boolean' ? data.kitchenBillPrintingEnabled : true);
+
+      setPointsPerDollar(typeof data.pointsPerDollar === 'number' ? data.pointsPerDollar : 0);
+      setPointsExpiryDays(typeof data.pointsExpiryDays === 'number' ? data.pointsExpiryDays : 0);
+
+      const m = (data as any).pointsMultiplierByTier;
+      if (m && typeof m === 'object') {
+        setPointsMultiplierByTier({
+          BASIC: typeof m.BASIC === 'number' ? m.BASIC : 1,
+          SILVER: typeof m.SILVER === 'number' ? m.SILVER : 1,
+          GOLD: typeof m.GOLD === 'number' ? m.GOLD : 1,
+          PLATINUM: typeof m.PLATINUM === 'number' ? m.PLATINUM : 1,
+        });
+      }
     } catch (error) {
       console.error('Failed to load config:', error);
       alert('⚠️ Failed to load settings. Please try again.');
@@ -76,6 +98,9 @@ export default function SettingsPage() {
         currency,
         logo: businessLogo || undefined,
         kitchenBillPrintingEnabled,
+        pointsPerDollar,
+        pointsExpiryDays,
+        pointsMultiplierByTier,
         businessDetails: {
           name: businessName,
           address: businessAddress,
@@ -242,6 +267,61 @@ export default function SettingsPage() {
               {/* Service Charge */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
+
+            {/* Loyalty Points Settings */}
+            <Card>
+              <h3 className="mb-4 text-lg font-semibold text-slate-900">Loyalty Points Settings</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Points Per Currency Unit"
+                  type="number"
+                  value={pointsPerDollar}
+                  onChange={(e) => setPointsPerDollar(parseFloat(e.target.value) || 0)}
+                  helperText="Base points earned per 1 unit of currency (global)"
+                />
+                <Input
+                  label="Points Expiry Days"
+                  type="number"
+                  value={pointsExpiryDays}
+                  onChange={(e) => setPointsExpiryDays(parseInt(e.target.value) || 0)}
+                  helperText="0 = no expiry (if supported by backend)"
+                />
+              </div>
+
+              <div className="mt-4">
+                <p className="mb-2 text-sm font-medium text-slate-700">Tier Multipliers</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Basic (x)"
+                    type="number"
+                    value={pointsMultiplierByTier.BASIC}
+                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, BASIC: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  />
+                  <Input
+                    label="Silver (x)"
+                    type="number"
+                    value={pointsMultiplierByTier.SILVER}
+                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, SILVER: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  />
+                  <Input
+                    label="Gold (x)"
+                    type="number"
+                    value={pointsMultiplierByTier.GOLD}
+                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, GOLD: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  />
+                  <Input
+                    label="Platinum (x)"
+                    type="number"
+                    value={pointsMultiplierByTier.PLATINUM}
+                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Multiplier increases earned points based on customer tier.
+                </p>
+              </div>
+            </Card>
                   Service Charge (Dine-in)
                 </label>
                 <div className="flex gap-2">

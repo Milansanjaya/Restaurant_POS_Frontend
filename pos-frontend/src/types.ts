@@ -151,6 +151,7 @@ export interface CategoryFormData {
   icon?: string;
   image?: string;
   displayOrder?: number;
+  isActive?: boolean;
 }
 
 // ==================== INVENTORY ====================
@@ -638,6 +639,7 @@ export interface SystemConfig {
   kitchenBillPrintingEnabled?: boolean;
   pointsPerDollar: number;
   pointsExpiryDays: number;
+  pointsMultiplierByTier?: Partial<Record<CustomerTier, number>>;
 }
 
 // ==================== SUPPLIER RETURN ====================

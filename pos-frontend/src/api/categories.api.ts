@@ -3,10 +3,12 @@ import type { Category, CategoryFormData } from '../types';
 
 export const categoriesApi = {
   getAll: async (opts?: { isActive?: boolean }) => {
+    const params: Record<string, any> = {};
+    if (typeof opts?.isActive === 'boolean') {
+      params.isActive = opts.isActive;
+    }
     const res = await api.get<{ success: boolean; data: Category[] }>('/categories', {
-      params: {
-        isActive: opts?.isActive ?? true,
-      },
+      params,
     });
     return res.data.data || [];
   },
