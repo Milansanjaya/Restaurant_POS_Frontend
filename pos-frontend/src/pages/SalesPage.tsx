@@ -5,7 +5,7 @@ import Table from '../components/Table';
 import Modal from '../components/Modal';
 import * as salesApi from '../api/sales.api';
 import { configApi } from '../api';
-import type { Sale, SaleFilters, Product, Customer, RestaurantTable, OrderType, Invoice } from '../types';
+import type { Sale, SaleFilters, Product, Customer, RestaurantTable, OrderType, Invoice, UserRef } from '../types';
 import { formatMoney } from '../money';
 
 const SalesPage: React.FC = () => {
@@ -250,6 +250,14 @@ const SalesPage: React.FC = () => {
       ? `<div class="muted">Table: ${escapeHtml(table.tableNumber)}${table.section ? ` (${escapeHtml(table.section)})` : ''}</div>`
       : '';
 
+    const cashierName = typeof sale.createdBy === 'object'
+      ? (sale.createdBy as UserRef).name || (sale.createdBy as UserRef).email || (sale.createdBy as UserRef)._id
+      : sale.createdBy;
+
+    const cashierHtml = cashierName
+      ? `<div class="muted">Cashier: ${escapeHtml(cashierName)}</div>`
+      : '';
+
     const discountHtml = sale.discount > 0
       ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>`
       : '';
@@ -317,6 +325,7 @@ const SalesPage: React.FC = () => {
               <div class="row"><span>Order Type</span><span>${escapeHtml(orderTypeLabel)}</span></div>
               ${customerHtml}
               ${tableHtml}
+              ${cashierHtml}
             </div>
 
             <div class="divider"></div>
@@ -384,6 +393,16 @@ const SalesPage: React.FC = () => {
         const ot = (sale.orderType || (sale as any).saleType) as string | undefined;
         return ot ? ot.replace('_', ' ') : '-';
       }
+    },
+    {
+      key: 'createdBy',
+      header: 'Cashier',
+      render: (sale: Sale) => {
+        const cashier = sale.createdBy;
+        if (!cashier) return '-';
+        if (typeof cashier === 'object') return cashier.name || cashier.email || cashier._id || '-';
+        return cashier;
+      },
     },
     { 
       key: 'items', 
@@ -617,6 +636,14 @@ const SalesPage: React.FC = () => {
                 <div>
                   <span className="text-gray-500">Status:</span>
                   <span className="ml-2">{selectedSale.status}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Cashier:</span>
+                  <span className="ml-2">
+                    {typeof selectedSale.createdBy === 'object'
+                      ? (selectedSale.createdBy as UserRef).name || (selectedSale.createdBy as UserRef).email || (selectedSale.createdBy as UserRef)._id
+                      : selectedSale.createdBy}
+                  </span>
                 </div>
                 <div>
                   <span className="text-gray-500">Order Type:</span>

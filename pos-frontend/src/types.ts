@@ -73,6 +73,11 @@ export const PERMISSIONS = {
   VIEW_LOYALTY: 'VIEW_LOYALTY',
   // Coupons
   VIEW_COUPONS: 'VIEW_COUPONS',
+  // Discounts
+  VIEW_DISCOUNTS: 'VIEW_DISCOUNTS',
+  CREATE_DISCOUNT: 'CREATE_DISCOUNT',
+  EDIT_DISCOUNT: 'EDIT_DISCOUNT',
+  DELETE_DISCOUNT: 'DELETE_DISCOUNT',
   // Batches
   VIEW_BATCHES: 'VIEW_BATCHES',
   // Returns
@@ -95,6 +100,7 @@ export interface Product {
   sku: string;
   barcode?: string;
   category: string | Category;
+  discount?: string | Discount | null;
   price: number;
   cost: number;
   taxRate: number;
@@ -118,6 +124,7 @@ export interface ProductFormData {
   sku: string;
   barcode?: string;
   category: string;
+  discount?: string;
   price: number;
   cost: number;
   taxRate?: number;
@@ -480,6 +487,12 @@ export interface Refund {
   refundedBy: string;
 }
 
+export interface UserRef {
+  _id: string;
+  name?: string;
+  email?: string;
+}
+
 export interface Sale {
   _id: string;
   invoiceNumber: string;
@@ -504,7 +517,7 @@ export interface Sale {
   couponCode?: string;
   customer_id?: string | Customer;
   reservation?: string;
-  createdBy: string;
+  createdBy: string | UserRef;
   voidedBy?: string;
   voidedAt?: string;
   voidReason?: string;
@@ -890,4 +903,27 @@ export interface CouponFormData {
   validFrom?: string;
   validTo?: string;
   usageLimit?: number;
+}
+
+// ==================== DISCOUNT ====================
+export interface Discount {
+  _id: string;
+  name: string;
+  discountType: DiscountType;
+  value: number;
+  isActive: boolean;
+  validFrom?: string;
+  validTo?: string;
+  branch_id?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscountFormData {
+  name: string;
+  discountType: DiscountType;
+  value: number;
+  validFrom?: string;
+  validTo?: string;
+  isActive: boolean;
 }

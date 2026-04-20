@@ -13,7 +13,8 @@ import { loyaltyApi } from "../api/loyalty.api";
 import { couponsApi, type CouponValidationResult } from "../api/coupons.api";
 import { reservationsApi } from "../api/reservations.api";
 import { kitchenApi } from "../api/kitchen.api";
-import type { Category, RestaurantTable, Shift, Customer, Reservation, KitchenOrder, Sale, Invoice } from "../types";
+import { PERMISSIONS } from "../types";
+import type { Category, RestaurantTable, Shift, Customer, Reservation, ReservationFormData, ReservationStatus, KitchenOrder, Sale, Invoice, Discount } from "../types";
 import { formatMoney } from "../money";
 
 type Product = {
@@ -21,6 +22,7 @@ type Product = {
   name: string;
   price: number;
   category?: string | { _id: string; name: string };
+  discount?: string | Discount | null;
   taxRate?: number;
   lowStockThreshold?: number;
   lowStock?: boolean;
@@ -31,7 +33,7 @@ type Product = {
 };
 
 type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'WALLET' | 'SPLIT';
-type DiscountType = 'PERCENTAGE' | 'FLAT' | '';  // Changed FIXED to FLAT to match backend
+type ManualDiscountType = 'PERCENTAGE' | 'FLAT' | '';  // Changed FIXED to FLAT to match backend
 
 type CustomerOption = {
   _id: string;
@@ -46,11 +48,13 @@ export default function PosPage() {
   const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
   const token = useAuthStore((s) => s.token);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservationsViewer, setReservationsViewer] = useState<Reservation[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -59,7 +63,7 @@ export default function PosPage() {
   // Order options
   const [selectedTable, setSelectedTable] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [discountType, setDiscountType] = useState<DiscountType>('');
+  const [discountType, setDiscountType] = useState<ManualDiscountType>('');
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
@@ -382,6 +386,21 @@ export default function PosPage() {
   // View order on an active table
   const [viewOrderTable, setViewOrderTable] = useState<{ table: RestaurantTable; items: any[]; total: number } | null>(null);
   const [loadingViewOrder, setLoadingViewOrder] = useState(false);
+  // Reservations viewer (read-only for cashier)
+  const [showReservationsViewer, setShowReservationsViewer] = useState(false);
+  const [loadingReservationsViewer, setLoadingReservationsViewer] = useState(false);
+  const [reservationsViewerStatusFilter, setReservationsViewerStatusFilter] = useState<'ALL' | ReservationStatus>('ALL');
+  const [showReservationEditor, setShowReservationEditor] = useState(false);
+  const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+  const [reservationFormData, setReservationFormData] = useState<ReservationFormData>({
+    tableId: '',
+    customerName: '',
+    customerPhone: '',
+    guestCount: 1,
+    reservationDateTime: '',
+    notes: '',
+  });
+  const [savingReservation, setSavingReservation] = useState(false);
   // Kitchen orders viewer (read-only for cashier)
   const [showKitchenViewer, setShowKitchenViewer] = useState(false);
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
@@ -392,8 +411,26 @@ export default function PosPage() {
   const cartSectionRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const customerSearchRef = useRef<HTMLInputElement | null>(null);
+  const [isLgLayout, setIsLgLayout] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
 
   const kitchenDailySequenceMap = useMemo(() => buildDailyKitchenSequenceMap(kitchenOrders), [kitchenOrders]);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 1024px)');
+    setIsLgLayout(mql.matches);
+
+    const handler = (e: MediaQueryListEvent) => setIsLgLayout(e.matches);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', handler);
+      return () => mql.removeEventListener('change', handler);
+    }
+
+    // Safari < 14
+    // eslint-disable-next-line deprecation/deprecation
+    mql.addListener(handler);
+    // eslint-disable-next-line deprecation/deprecation
+    return () => mql.removeListener(handler);
+  }, []);
 
   const isDineInKitchenOrder = (order: KitchenOrder) => {
     if (order.tableNumber) return true;
@@ -862,6 +899,37 @@ export default function PosPage() {
     ? customers.find(c => c._id === selectedCustomerId)
     : undefined;
 
+  const normalizePhone = (value?: string) => String(value ?? '').replace(/\D/g, '');
+
+  const sortedActiveReservations = useMemo(() => {
+    return [...reservations].sort(
+      (a, b) => new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime()
+    );
+  }, [reservations]);
+
+  const sortedReservationsViewer = useMemo(() => {
+    const filtered = reservationsViewerStatusFilter === 'ALL'
+      ? reservationsViewer
+      : reservationsViewer.filter((r) => r.status === reservationsViewerStatusFilter);
+    return [...filtered].sort(
+      (a, b) => new Date(a.reservationDateTime).getTime() - new Date(b.reservationDateTime).getTime()
+    );
+  }, [reservationsViewer, reservationsViewerStatusFilter]);
+
+  const toDateTimeLocalValue = (value?: string) => {
+    if (!value) return '';
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  };
+
+  const selectedCustomerActiveReservation = useMemo(() => {
+    const phone = normalizePhone(selectedCustomer?.phone);
+    if (!phone) return null;
+    return sortedActiveReservations.find((r) => normalizePhone(r.customerPhone) === phone) ?? null;
+  }, [selectedCustomer?.phone, sortedActiveReservations]);
+
   // Validate coupon code
   const handleValidateCoupon = async () => {
     if (!couponCode.trim()) {
@@ -1203,6 +1271,36 @@ export default function PosPage() {
     return product.category;
   };
 
+  const getActiveProductDiscount = (product: Product): Discount | null => {
+    const d = product.discount && typeof product.discount === 'object' ? (product.discount as Discount) : null;
+    if (!d || !d.isActive) return null;
+
+    const now = new Date();
+    if (d.validFrom) {
+      const from = new Date(d.validFrom);
+      if (!Number.isNaN(from.getTime()) && now < from) return null;
+    }
+    if (d.validTo) {
+      const to = new Date(d.validTo);
+      if (!Number.isNaN(to.getTime()) && now > to) return null;
+    }
+    return d;
+  };
+
+  const getDiscountedUnitPrice = (unitPrice: number, discount: Discount) => {
+    const base = Number.isFinite(unitPrice) ? unitPrice : 0;
+    if (base <= 0) return 0;
+
+    if (discount.discountType === 'PERCENTAGE') {
+      const pct = Math.max(0, Math.min(100, discount.value || 0));
+      const discounted = base - (base * pct) / 100;
+      return Math.round(Math.max(0, discounted) * 100) / 100;
+    }
+
+    const flat = Math.max(0, discount.value || 0);
+    return Math.round(Math.max(0, base - flat) * 100) / 100;
+  };
+
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const categoryId = getCategoryId(product);
@@ -1433,11 +1531,216 @@ const handleCreateSale = async () => {
     t.status === 'AVAILABLE' && !confirmedReservationTableIds.includes(t._id)
   );
 
+  const headerActions = (
+    <>
+      {!loading && !currentShift && (
+        <button
+          type="button"
+          onClick={() => setShowShiftModal(true)}
+          className="touch-manipulation rounded-2xl bg-yellow-500 text-white px-4 py-2 text-sm font-extrabold hover:bg-yellow-600 active:scale-95 shadow-sm"
+        >
+          Open Shift
+        </button>
+      )}
+
+      {currentShift && (
+        <button
+          type="button"
+          onClick={() => {
+            setClosingCash("");
+            setShowCloseShiftModal(true);
+          }}
+          className="touch-manipulation rounded-2xl bg-emerald-600 text-white px-4 py-2 text-sm font-extrabold hover:bg-emerald-700 active:scale-95 shadow-sm"
+        >
+          Close Shift
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+          } else {
+            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+          }
+        }}
+        title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+        className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
+      >
+        {isFullscreen ? (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m-6 6h6m3-12v3m0 0h-3m3 0l-4 4m-8 0l4-4m-4 0h3m-3 0V3m0 18v-3m0 0h3m-3 0l4-4m8 0l-4 4m4 0h-3m3 0v3" />
+          </svg>
+        ) : (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigate("/dashboard");
+        }}
+        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-100 transition-all hover-lift active:scale-95 shadow-sm border border-indigo-100"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Dashboard
+      </button>
+
+      <button
+        onClick={() => setShowLogoutConfirm(true)}
+        className="touch-manipulation flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95 shadow-md shadow-slate-200"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </>
+  );
+
+  const quickNavContent = (
+    <div className="flex w-full gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openQuickView("Sale Summary", "/dashboard");
+        }}
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+      >
+        📊 Summary
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openQuickView("Sales", "/sales");
+        }}
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+      >
+        🧻 Sales
+      </button>
+      {hasPermission(PERMISSIONS.VIEW_DISCOUNTS) && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openQuickView("Discounts", "/discounts");
+          }}
+          className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        >
+          🏷️ Discounts
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openQuickView("Stocks", "/inventory");
+        }}
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+      >
+        📦 Stocks
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openQuickView("Returns", "/returns");
+        }}
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+      >
+        ↩️ Returns
+      </button>
+
+      {/* Divider */}
+      <div className="shrink-0 w-px bg-slate-200 my-2 mx-1"></div>
+
+      {/* Live Actions Group */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setTablesTab('available');
+            setShowTablesModal(true);
+          }}
+          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        >
+          🍽️ Tables
+          {(occupiedTables.length + cleaningTables.length) > 0 && (
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-900 premium-shadow">
+              {occupiedTables.length + cleaningTables.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowReservationsViewer(true);
+            setLoadingReservationsViewer(true);
+            try {
+              const reservationsRes = await reservationsApi.getAll().catch(() => []);
+              setReservationsViewer(reservationsRes || []);
+              const activeReservations = (reservationsRes || []).filter(
+                (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
+              );
+              setReservations(activeReservations);
+            } finally {
+              setLoadingReservationsViewer(false);
+            }
+          }}
+          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        >
+          📅 Reservations
+        </button>
+
+        <button
+          type="button"
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowKitchenViewer(true);
+            setLoadingKitchen(true);
+            try {
+              const orders = await kitchenApi.getQueue();
+              setKitchenOrders(orders);
+            } catch {
+              setKitchenOrders([]);
+            } finally {
+              setLoadingKitchen(false);
+            }
+          }}
+          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        >
+          👨‍🍳 Kitchen
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
+    <div className="min-h-screen h-[100dvh] bg-slate-100 flex flex-col overflow-hidden">
       {/* Main Header */}
-      <header className="flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-50 sticky top-0">
-        <div className="min-w-0">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center h-16 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-50 sticky top-0">
+        <div className="min-w-0 justify-self-start">
           <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
             POS <span className="text-indigo-600">Terminal</span>
           </h1>
@@ -1458,171 +1761,22 @@ const handleCreateSale = async () => {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
-          {!loading && !currentShift && (
-            <button
-              type="button"
-              onClick={() => setShowShiftModal(true)}
-              className="touch-manipulation rounded-2xl bg-yellow-500 text-white px-4 py-2 text-sm font-extrabold hover:bg-yellow-600 active:scale-95 shadow-sm"
-            >
-              Open Shift
-            </button>
-          )}
+        {!isLgLayout && (
+          <div className="flex items-center gap-2 sm:gap-4 justify-self-end col-start-3">
+            {headerActions}
+          </div>
+        )}
 
-          {currentShift && (
-            <button
-              type="button"
-              onClick={() => {
-                setClosingCash("");
-                setShowCloseShiftModal(true);
-              }}
-              className="touch-manipulation rounded-2xl bg-emerald-600 text-white px-4 py-2 text-sm font-extrabold hover:bg-emerald-700 active:scale-95 shadow-sm"
-            >
-              Close Shift
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-              } else {
-                document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-              }
-            }}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
-          >
-            {isFullscreen ? (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m-6 6h6m3-12v3m0 0h-3m3 0l-4 4m-8 0l4-4m-4 0h3m-3 0V3m0 18v-3m0 0h3m-3 0l4-4m8 0l-4 4m4 0h-3m3 0v3" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              navigate("/dashboard");
-            }}
-            className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-100 transition-all hover-lift active:scale-95 shadow-sm border border-indigo-100"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            Dashboard
-          </button>
-
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="touch-manipulation flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95 shadow-md shadow-slate-200"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Logout
-          </button>
-        </div>
+        {/* center column spacer */}
+        <div className="col-start-2" />
       </header>
 
       {/* Quick Navigation Bar */}
-      <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-3 sm:px-8">
-        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openQuickView("Sale Summary", "/dashboard");
-            }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-          >
-            📊 Summary
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openQuickView("Sales", "/sales");
-            }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-          >
-            🧻 Sales
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openQuickView("Stocks", "/inventory");
-            }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-          >
-            📦 Stocks
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openQuickView("Returns", "/returns");
-            }}
-            className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-          >
-            ↩️ Returns
-          </button>
-
-          {/* Divider */}
-          <div className="shrink-0 w-px bg-slate-200 my-2 mx-1"></div>
-
-          {/* Live Actions Group */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setTablesTab('available');
-                setShowTablesModal(true);
-              }}
-              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-            >
-              🍽️ Tables
-              {(occupiedTables.length + cleaningTables.length) > 0 && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-900 premium-shadow">
-                  {occupiedTables.length + cleaningTables.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowKitchenViewer(true);
-                setLoadingKitchen(true);
-                try {
-                  const orders = await kitchenApi.getQueue();
-                  setKitchenOrders(orders);
-                } catch { setKitchenOrders([]); }
-                finally { setLoadingKitchen(false); }
-              }}
-              className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
-            >
-              👨‍🍳 Kitchen
-            </button>
-          </div>
-        </div>
-      </nav>
+      {!isLgLayout && (
+        <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-3 sm:px-8">
+          {quickNavContent}
+        </nav>
+      )}
 
       <main className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
         <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
@@ -1658,7 +1812,20 @@ const handleCreateSale = async () => {
           </div>
         </aside>
 
-        <section className="flex-1 p-4 sm:p-6 overflow-visible lg:overflow-auto">
+        <section className="flex-1 p-4 sm:p-6 overflow-visible lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden">
+          {isLgLayout && (
+            <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-3">
+              <div className="flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  {quickNavContent}
+                </div>
+                <div className="shrink-0 flex items-center gap-2 sm:gap-4">
+                  {headerActions}
+                </div>
+              </div>
+            </nav>
+          )}
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-auto">
           {/* Mobile/Tablet Category scroller */}
           <div className="mb-4 lg:hidden">
             <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1715,6 +1882,15 @@ const handleCreateSale = async () => {
                 const isInactiveCategory = Boolean(categoryId) && inactiveCategoryIds.has(categoryId);
                 const isUnavailable = product.isAvailable === false || isOutOfStock;
                 const isDisabled = isUnavailable || isInactiveCategory;
+                const activeDiscount = getActiveProductDiscount(product);
+                const discountedPrice = activeDiscount
+                  ? getDiscountedUnitPrice(product.price, activeDiscount)
+                  : product.price;
+                const discountChip = activeDiscount
+                  ? (activeDiscount.discountType === 'FLAT'
+                    ? `${formatMoney(activeDiscount.value)} OFF`
+                    : `${activeDiscount.value}% OFF`)
+                  : '';
                 return (
                   <div
                     key={product._id}
@@ -1728,7 +1904,7 @@ const handleCreateSale = async () => {
                             addItem({
                               _id: product._id,
                               name: product.name,
-                              price: product.price,
+                              price: discountedPrice,
                               taxRate: product.taxRate || 0,
                             })
                     }
@@ -1741,7 +1917,7 @@ const handleCreateSale = async () => {
                               addItem({
                                 _id: product._id,
                                 name: product.name,
-                                price: product.price,
+                                price: discountedPrice,
                                 taxRate: product.taxRate || 0,
                               });
                             }
@@ -1770,6 +1946,10 @@ const handleCreateSale = async () => {
                         <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-medium text-red-600">
                           Low
                         </span>
+                      ) : activeDiscount ? (
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                          {discountChip}
+                        </span>
                       ) : null}
                     </div>
 
@@ -1778,9 +1958,16 @@ const handleCreateSale = async () => {
                     </p>
 
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-sm font-bold ${isDisabled ? 'text-slate-400' : 'text-slate-900'}`}>
-                        {formatMoney(product.price)}
-                      </span>
+                      <div className="min-w-0">
+                        <span className={`text-sm font-bold ${isDisabled ? 'text-slate-400' : 'text-slate-900'}`}>
+                          {formatMoney(discountedPrice)}
+                        </span>
+                        {activeDiscount && discountedPrice !== product.price && (
+                          <div className="text-[11px] text-slate-400 line-through">
+                            {formatMoney(product.price)}
+                          </div>
+                        )}
+                      </div>
 
                       {isDisabled && (
                         <span className="shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-lg font-bold bg-slate-200 text-slate-400">
@@ -1793,6 +1980,238 @@ const handleCreateSale = async () => {
               })}
             </div>
           )}
+          </div>
+
+          {/* Desktop-only Bottom Bar (stays under products, not under cart) */}
+          {isLgLayout && (
+          <div className="shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 border-t border-slate-200 bg-white z-20 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
+            <div className="py-3">
+              {/* Bottom Bar Inputs (Customer / Discount / Coupon) */}
+              <div className="grid w-full gap-3 lg:grid-cols-12">
+                {/* Customer */}
+                <div className="lg:col-span-5 min-w-0">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Customer</label>
+                  <div className="relative">
+                    {selectedCustomerId ? (
+                      <div className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-blue-900">{selectedCustomer?.name}</div>
+                          <div className="truncate text-xs font-semibold text-blue-700">{selectedCustomer?.phone}</div>
+                          {selectedCustomerActiveReservation && (
+                            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-amber-800">
+                              📅 Active booking
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomerDetailsModal(true)}
+                            className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
+                          >
+                            Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerId('');
+                              setSelectedCustomerLoyalty(null);
+                              setUsePoints(false);
+                              setPointsToUse(0);
+                            }}
+                            className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
+                            aria-label="Clear customer"
+                            title="Clear"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <div className="relative flex-1 min-w-0">
+                          <input
+                            ref={customerSearchRef}
+                            type="text"
+                            value={customerSearch}
+                            onChange={(e) => {
+                              setCustomerSearch(e.target.value);
+                              setShowCustomerSearch(true);
+                            }}
+                            onFocus={() => setShowCustomerSearch(true)}
+                            placeholder="Search customer... (F5)"
+                            className="touch-manipulation w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+                          />
+
+                          {showCustomerSearch && customerSearch && (
+                            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto z-60">
+                              {filteredCustomers.length === 0 ? (
+                                <div className="p-4 text-sm text-slate-500 text-center">No customers found</div>
+                              ) : (
+                                filteredCustomers.slice(0, 10).map((customer) => (
+                                  <button
+                                    key={customer._id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCustomerId(customer._id);
+                                      setCustomerSearch('');
+                                      setShowCustomerSearch(false);
+                                    }}
+                                    className="touch-manipulation w-full text-left px-4 py-3 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                                  >
+                                    <div className="font-bold text-slate-900">{customer.name}</div>
+                                    <div className="text-xs font-semibold text-slate-500">{customer.phone} • {customer.tier}</div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowNewCustomerModal(true)}
+                          className="touch-manipulation w-12 h-12 flex items-center justify-center rounded-2xl bg-green-500 text-white text-2xl font-black hover:bg-green-600 active:scale-[0.99]"
+                          title="Add New Customer"
+                          aria-label="Add New Customer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Discount */}
+                <div className="lg:col-span-3 min-w-0">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Discount</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value as ManualDiscountType)}
+                      className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm"
+                    >
+                      <option value="">None</option>
+                      <option value="PERCENTAGE">%</option>
+                      <option value="FLAT">Rs</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      value={discountType ? discountValue : 0}
+                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
+                      disabled={!discountType}
+                      className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm disabled:bg-slate-50 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                {/* Coupon */}
+                <div className="lg:col-span-4 min-w-0">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Coupon</label>
+                  {couponValidation?.success ? (
+                    <div className="flex items-center justify-between rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-black text-green-800">{couponCode}</div>
+                        <div className="truncate text-xs font-semibold text-green-700">
+                          {couponValidation.coupon?.discountType === 'PERCENTAGE'
+                            ? `${couponValidation.coupon?.value}% off`
+                            : `${formatMoney(couponValidation.coupon?.value)} off`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearCoupon}
+                        className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-green-800 hover:bg-white active:scale-[0.99]"
+                        aria-label="Clear coupon"
+                        title="Clear"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 min-w-0">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={(e) => {
+                          setCouponCode(e.target.value.toUpperCase());
+                          setCouponValidation(null);
+                        }}
+                        placeholder="Enter code"
+                        className={`touch-manipulation flex-1 min-w-0 rounded-2xl border px-3 py-3 text-sm ${
+                          couponValidation?.success === false
+                            ? 'border-red-300 bg-red-50'
+                            : 'border-slate-300'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleValidateCoupon}
+                        disabled={!couponCode.trim() || validatingCoupon}
+                        className="touch-manipulation shrink-0 rounded-2xl bg-blue-500 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {validatingCoupon ? '...' : 'Apply'}
+                      </button>
+                    </div>
+                  )}
+
+                  {couponValidation?.success === false && (
+                    <p className="text-xs font-semibold text-red-500 mt-1">{couponValidation.message}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons (Order Type / Tables / Clear) */}
+              <div className="mt-3 flex items-stretch gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+                <div className="flex rounded-xl bg-slate-100 p-1">
+                  {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setOrderType(type);
+                        if (type !== 'DINE_IN') setSelectedTable('');
+                      }}
+                      className={`touch-manipulation rounded-lg px-5 py-3 text-base font-semibold transition active:scale-[0.99] ${
+                        orderType === type
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowTablesModal(true)}
+                  disabled={orderType !== 'DINE_IN'}
+                  className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                >
+                  Tables
+                  {orderType === 'DINE_IN' && selectedTable && (
+                    <span className="ml-2 text-sm font-medium text-slate-500">
+                      #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    clearCart();
+                    setSelectedTableForPayment(null);
+                    setShowPaymentModal(false);
+                    toast.success('Cart cleared');
+                  }}
+                  className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
+          </div>
+          )}
         </section>
 
         <aside
@@ -1800,7 +2219,7 @@ const handleCreateSale = async () => {
           className="w-full border-t border-slate-200 bg-white flex flex-col lg:w-130 lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 min-h-0 overflow-hidden"
         >
           {/* Cart Header — fixed */}
-          <div className="px-4 pt-4 pb-2 sm:px-5 shrink-0">
+          <div className="px-4 py-3 sm:px-5 shrink-0">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
               {items.length > 0 && (
@@ -1966,103 +2385,60 @@ const handleCreateSale = async () => {
               <span>Total</span>
               <span>{formatMoney(finalTotal())}</span>
             </div>
+
+            {/* Cart Action Buttons */}
+            <div className="pt-3 flex items-center justify-end gap-2">
+              {postPaymentSale ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrintReceipt}
+                    disabled={printingReceipt}
+                    className="touch-manipulation w-full sm:w-auto rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                  >
+                    {printingReceipt ? 'Printing…' : 'Print'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPostPaymentSale(null)}
+                    className="touch-manipulation w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                  >
+                    Next
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={
+                    isPayingTable
+                      ? handleTablePayment
+                      : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
+                  }
+                  disabled={
+                    !currentShift ||
+                    items.length === 0 ||
+                    (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
+                    isProcessing
+                  }
+                  className="touch-manipulation w-full sm:w-auto rounded-xl bg-slate-900 px-8 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                >
+                  {isPayingTable
+                    ? (processingPayment ? 'Processing…' : 'Pay Bill')
+                    : (orderType === 'DINE_IN' && selectedTable
+                      ? (addingToTable ? 'Adding…' : 'Add to Table')
+                      : (creatingSale ? 'Processing…' : 'Pay'))}
+                </button>
+              )}
+            </div>
           </div>
         </aside>
       </main>
 
       {/* Bottom Touch Action Bar */}
+      {!isLgLayout && (
       <div className="shrink-0 border-t border-slate-200 bg-white z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
         <div className="px-3 py-3 sm:px-6">
-          <div className="flex items-stretch gap-2 flex-wrap">
-          {/* Order Type */}
-          <div className="flex rounded-xl bg-slate-100 p-1">
-            {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setOrderType(type);
-                  if (type !== 'DINE_IN') setSelectedTable('');
-                }}
-                className={`touch-manipulation rounded-lg px-5 py-3 text-base font-semibold transition active:scale-[0.99] ${
-                  orderType === type
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setShowTablesModal(true)}
-            disabled={orderType !== 'DINE_IN'}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-          >
-            Tables
-            {orderType === 'DINE_IN' && selectedTable && (
-              <span className="ml-2 text-sm font-medium text-slate-500">
-                #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              clearCart();
-              setSelectedTableForPayment(null);
-              setShowPaymentModal(false);
-              toast.success('Cart cleared');
-            }}
-            className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
-          >
-            Clear all
-          </button>
-
-          {postPaymentSale ? (
-            <div className="ml-auto flex gap-2">
-              <button
-                type="button"
-                onClick={handlePrintReceipt}
-                disabled={printingReceipt}
-                className="touch-manipulation rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-              >
-                {printingReceipt ? 'Printing…' : 'Print'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPostPaymentSale(null)}
-                className="touch-manipulation rounded-xl border border-slate-200 bg-white px-10 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
-              >
-                Next
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={
-                isPayingTable
-                  ? handleTablePayment
-                  : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
-              }
-              disabled={
-                !currentShift ||
-                items.length === 0 ||
-                (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
-                isProcessing
-              }
-              className="touch-manipulation ml-auto rounded-xl bg-slate-900 px-10 py-3 text-base font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-            >
-              {isPayingTable
-                ? (processingPayment ? 'Processing…' : 'Pay Bill')
-                : (orderType === 'DINE_IN' && selectedTable
-                  ? (addingToTable ? 'Adding…' : 'Add to Table')
-                  : (creatingSale ? 'Processing…' : 'Pay'))}
-            </button>
-          )}
-          </div>
-
           {/* Bottom Bar Inputs (Customer / Discount / Coupon) */}
-          <div className="mt-3 grid w-full gap-3 lg:grid-cols-12">
+          <div className="grid w-full gap-3 lg:grid-cols-12">
             {/* Customer */}
             <div className="lg:col-span-5">
               <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Customer</label>
@@ -2072,6 +2448,11 @@ const handleCreateSale = async () => {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-blue-900">{selectedCustomer?.name}</div>
                       <div className="truncate text-xs font-semibold text-blue-700">{selectedCustomer?.phone}</div>
+                      {selectedCustomerActiveReservation && (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-amber-800">
+                          📅 Active booking
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -2158,7 +2539,7 @@ const handleCreateSale = async () => {
               <div className="flex gap-2">
                 <select
                   value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                  onChange={(e) => setDiscountType(e.target.value as ManualDiscountType)}
                   className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm"
                 >
                   <option value="">None</option>
@@ -2232,8 +2613,57 @@ const handleCreateSale = async () => {
               )}
             </div>
           </div>
+
+          {/* Action Buttons (Order Type / Tables / Clear) */}
+          <div className="mt-3 flex items-stretch gap-2 flex-wrap">
+            {/* Order Type */}
+            <div className="flex rounded-xl bg-slate-100 p-1">
+              {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    setOrderType(type);
+                    if (type !== 'DINE_IN') setSelectedTable('');
+                  }}
+                  className={`touch-manipulation rounded-lg px-5 py-3 text-base font-semibold transition active:scale-[0.99] ${
+                    orderType === type
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowTablesModal(true)}
+              disabled={orderType !== 'DINE_IN'}
+              className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+            >
+              Tables
+              {orderType === 'DINE_IN' && selectedTable && (
+                <span className="ml-2 text-sm font-medium text-slate-500">
+                  #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                clearCart();
+                setSelectedTableForPayment(null);
+                setShowPaymentModal(false);
+                toast.success('Cart cleared');
+              }}
+              className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+            >
+              Clear all
+            </button>
+          </div>
         </div>
       </div>
+      )}
 
       {/* Quick View Modal */}
       {quickView && (
@@ -2253,6 +2683,423 @@ const handleCreateSale = async () => {
               src={quickView.path.includes('?') ? `${quickView.path}&embedded=1` : `${quickView.path}?embedded=1`}
               className="flex-1 w-full"
             />
+          </div>
+        </div>
+      )}
+
+      {/* ── Reservations Viewer (read-only) ── */}
+      {showReservationsViewer && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">📅</span>
+                <h3 className="text-lg font-bold text-slate-900">Reservations</h3>
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">Cashier</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingReservation(null);
+                    setReservationFormData({
+                      tableId: selectedTable || '',
+                      customerName: selectedCustomer?.name || '',
+                      customerPhone: selectedCustomer?.phone || '',
+                      guestCount: 1,
+                      reservationDateTime: '',
+                      notes: '',
+                    });
+                    setShowReservationEditor(true);
+                  }}
+                  className="touch-manipulation rounded-xl bg-slate-900 px-4 py-2 text-sm font-extrabold text-white hover:bg-slate-800 active:scale-[0.99]"
+                >
+                  + New
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReservationEditor(false);
+                    setEditingReservation(null);
+                    setShowReservationsViewer(false);
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 text-lg transition"
+                >✕</button>
+              </div>
+            </div>
+
+            <div className="shrink-0 px-6 py-3 border-b border-slate-100 bg-white">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs font-bold text-slate-600">Status</label>
+                <select
+                  value={reservationsViewerStatusFilter}
+                  onChange={(e) => setReservationsViewerStatusFilter(e.target.value as any)}
+                  className="touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-800"
+                >
+                  <option value="ALL">ALL</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="CONFIRMED">CONFIRMED</option>
+                  <option value="SEATED">SEATED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                  <option value="COMPLETED">COMPLETED</option>
+                  
+                </select>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setLoadingReservationsViewer(true);
+                      const reservationsRes = await reservationsApi.getAll().catch(() => []);
+                      setReservationsViewer(reservationsRes || []);
+                      const activeReservations = (reservationsRes || []).filter(
+                        (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
+                      );
+                      setReservations(activeReservations);
+                    } finally {
+                      setLoadingReservationsViewer(false);
+                    }
+                  }}
+                  className="touch-manipulation ml-auto rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-extrabold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-5">
+              {loadingReservationsViewer ? (
+                <div className="flex items-center justify-center py-16 text-slate-400">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900 mr-3"></div>
+                  Loading reservations…
+                </div>
+              ) : sortedReservationsViewer.length === 0 ? (
+                <div className="py-16 text-center text-sm text-slate-400">
+                  {reservationsViewerStatusFilter === 'ALL' ? 'No reservations found' : 'No reservations for this status'}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedReservationsViewer.map((r) => {
+                    const dt = new Date(r.reservationDateTime);
+
+                    const tableObj = typeof r.table === 'object'
+                      ? (r.table as any)
+                      : tables.find((t) => t._id === r.table);
+
+                    const tableLabel = tableObj
+                      ? `Table ${tableObj.tableNumber}${tableObj.section ? ` (${tableObj.section})` : ''}`
+                      : 'Table';
+
+                    const statusStyles: Record<string, string> = {
+                      PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
+                      CONFIRMED: 'bg-amber-100 text-amber-800 border-amber-200',
+                      SEATED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                      CANCELLED: 'bg-rose-100 text-rose-800 border-rose-200',
+                      COMPLETED: 'bg-slate-100 text-slate-700 border-slate-200',
+                      NO_SHOW: 'bg-rose-100 text-rose-800 border-rose-200',
+                    };
+
+                    const canSeat = r.status === 'CONFIRMED';
+                    const canStatusUpdate = !['SEATED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(r.status);
+                    const canCancel = r.status === 'PENDING' || r.status === 'CONFIRMED';
+
+                    return (
+                      <div key={r._id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-slate-900 truncate">{r.customerName}</div>
+                            <div className="text-xs font-semibold text-slate-600 truncate">{r.customerPhone}</div>
+                            <div className="text-xs text-slate-500 mt-1">{dt.toLocaleString()}</div>
+                          </div>
+                          <span className={`shrink-0 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[r.status] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                            {r.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
+                            {tableLabel}
+                          </span>
+                          <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
+                            👥 {r.guestCount}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          {canSeat && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setLoadingReservationsViewer(true);
+                                  await reservationsApi.seat(r._id);
+
+                                  const tableId = typeof r.table === 'object' ? (r.table as any)._id : r.table;
+                                  if (tableId) {
+                                    try {
+                                      await tablesApi.updateStatus(tableId, 'OCCUPIED');
+                                    } catch {
+                                      // ignore; backend may already update
+                                    }
+                                  }
+
+                                  toast.success('🪑 Customer seated');
+                                  const updated = await reservationsApi.getAll().catch(() => []);
+                                  setReservationsViewer(updated || []);
+                                  const activeReservations = (updated || []).filter(
+                                    (x: Reservation) => x.status === 'CONFIRMED' || x.status === 'SEATED'
+                                  );
+                                  setReservations(activeReservations);
+                                } catch (err: any) {
+                                  toast.error(err?.response?.data?.message || 'Failed to seat reservation');
+                                } finally {
+                                  setLoadingReservationsViewer(false);
+                                }
+                              }}
+                              className="touch-manipulation rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-emerald-700 active:scale-[0.99]"
+                            >
+                              Seat
+                            </button>
+                          )}
+
+                          {canStatusUpdate && (
+                            <select
+                              value={r.status}
+                              onChange={async (e) => {
+                                const next = e.target.value as ReservationStatus;
+                                try {
+                                  setLoadingReservationsViewer(true);
+                                  await reservationsApi.updateStatus(r._id, next);
+                                  toast.success(`✅ Status: ${next}`);
+                                  const updated = await reservationsApi.getAll().catch(() => []);
+                                  setReservationsViewer(updated || []);
+                                  const activeReservations = (updated || []).filter(
+                                    (x: Reservation) => x.status === 'CONFIRMED' || x.status === 'SEATED'
+                                  );
+                                  setReservations(activeReservations);
+                                } catch (err: any) {
+                                  toast.error(err?.response?.data?.message || 'Failed to update status');
+                                } finally {
+                                  setLoadingReservationsViewer(false);
+                                }
+                              }}
+                              className="touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-800"
+                            >
+                              <option value="PENDING">PENDING</option>
+                              <option value="CONFIRMED">CONFIRMED</option>
+                              <option value="CANCELLED">CANCELLED</option>
+                              <option value="NO_SHOW">NO_SHOW</option>
+                              <option value="COMPLETED">COMPLETED</option>
+                            </select>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingReservation(r);
+                              setReservationFormData({
+                                tableId: typeof r.table === 'object' ? (r.table as any)._id : (r.table as string),
+                                customerName: r.customerName,
+                                customerPhone: r.customerPhone,
+                                guestCount: r.guestCount,
+                                reservationDateTime: toDateTimeLocalValue(r.reservationDateTime),
+                                notes: r.notes || '',
+                              });
+                              setShowReservationEditor(true);
+                            }}
+                            className="touch-manipulation rounded-xl bg-white px-4 py-2 text-xs font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50 active:scale-[0.99]"
+                          >
+                            Edit
+                          </button>
+
+                          {canCancel && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const ok = window.confirm('Cancel this reservation?');
+                                if (!ok) return;
+                                try {
+                                  setLoadingReservationsViewer(true);
+                                  await reservationsApi.delete(r._id);
+                                  toast.success('🗑️ Reservation cancelled');
+                                  const updated = await reservationsApi.getAll().catch(() => []);
+                                  setReservationsViewer(updated || []);
+                                  const activeReservations = (updated || []).filter(
+                                    (x: Reservation) => x.status === 'CONFIRMED' || x.status === 'SEATED'
+                                  );
+                                  setReservations(activeReservations);
+                                } catch (err: any) {
+                                  toast.error(err?.response?.data?.message || 'Failed to cancel reservation');
+                                } finally {
+                                  setLoadingReservationsViewer(false);
+                                }
+                              }}
+                              className="touch-manipulation rounded-xl bg-rose-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-rose-700 active:scale-[0.99]"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t border-slate-100 px-6 py-3 flex items-center justify-between bg-slate-50 rounded-b-2xl">
+              <p className="text-xs text-slate-400">Create, edit, seat, or cancel reservations</p>
+              <button
+                onClick={() => {
+                  setShowReservationEditor(false);
+                  setEditingReservation(null);
+                  setShowReservationsViewer(false);
+                }}
+                className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-white transition"
+              >Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reservation Editor Modal */}
+      {showReservationsViewer && showReservationEditor && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-70 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">{editingReservation ? 'Edit Reservation' : 'New Reservation'}</h3>
+              <button
+                type="button"
+                onClick={() => setShowReservationEditor(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 text-lg transition"
+              >✕</button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Customer Name</label>
+                <input
+                  value={reservationFormData.customerName}
+                  onChange={(e) => setReservationFormData({ ...reservationFormData, customerName: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                  placeholder="Enter customer name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
+                <input
+                  value={reservationFormData.customerPhone}
+                  onChange={(e) => setReservationFormData({ ...reservationFormData, customerPhone: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                  placeholder="Enter phone number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Table</label>
+                <select
+                  value={reservationFormData.tableId}
+                  onChange={(e) => setReservationFormData({ ...reservationFormData, tableId: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm"
+                >
+                  <option value="">Select table</option>
+                  {(() => {
+                    const currentId = reservationFormData.tableId;
+                    const currentTable = currentId ? tables.find((t) => t._id === currentId) : null;
+                    const base = availableTables;
+                    const list = currentTable && !base.some((t) => t._id === currentTable._id)
+                      ? [currentTable, ...base]
+                      : base;
+                    return list.map((t) => (
+                      <option key={t._id} value={t._id}>
+                        {t.tableNumber}{t.section ? ` (${t.section})` : ''} (Cap: {t.capacity})
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Guests</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={reservationFormData.guestCount}
+                    onChange={(e) => setReservationFormData({ ...reservationFormData, guestCount: parseInt(e.target.value) || 1 })}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={reservationFormData.reservationDateTime}
+                    onChange={(e) => setReservationFormData({ ...reservationFormData, reservationDateTime: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Notes (Optional)</label>
+                <input
+                  value={reservationFormData.notes || ''}
+                  onChange={(e) => setReservationFormData({ ...reservationFormData, notes: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                  placeholder="Special requests, etc."
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setShowReservationEditor(false)}
+                className="touch-manipulation rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.99]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  savingReservation ||
+                  !reservationFormData.customerName ||
+                  !reservationFormData.customerPhone ||
+                  !reservationFormData.tableId ||
+                  !reservationFormData.reservationDateTime
+                }
+                onClick={async () => {
+                  try {
+                    setSavingReservation(true);
+                    if (editingReservation) {
+                      await reservationsApi.update(editingReservation._id, reservationFormData);
+                      toast.success('✅ Reservation updated');
+                    } else {
+                      await reservationsApi.create(reservationFormData);
+                      toast.success('📅 Reservation created');
+                    }
+
+                    const updated = await reservationsApi.getAll().catch(() => []);
+                    setReservationsViewer(updated || []);
+                    const activeReservations = (updated || []).filter(
+                      (x: Reservation) => x.status === 'CONFIRMED' || x.status === 'SEATED'
+                    );
+                    setReservations(activeReservations);
+
+                    setShowReservationEditor(false);
+                    setEditingReservation(null);
+                  } catch (err: any) {
+                    toast.error(err?.response?.data?.message || 'Failed to save reservation');
+                  } finally {
+                    setSavingReservation(false);
+                  }
+                }}
+                className="touch-manipulation rounded-xl bg-slate-900 px-6 py-2 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+              >
+                {savingReservation ? 'Saving…' : (editingReservation ? 'Save' : 'Create')}
+              </button>
+            </div>
           </div>
         </div>
       )}

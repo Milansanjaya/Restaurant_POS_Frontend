@@ -22,5 +22,6 @@ export { kitchenApi } from './kitchen.api';
 export { reservationsApi } from './reservations.api';
 export { shiftsApi } from './shifts.api';
 export { couponsApi } from './coupons.api';
+export { discountsApi } from './discounts.api';
 export { rolesApi } from './roles.api';
 export { usersApi } from './users.api';

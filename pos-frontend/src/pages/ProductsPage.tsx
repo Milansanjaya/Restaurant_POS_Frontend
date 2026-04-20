@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal } from '../components';
-import { productsApi, categoriesApi, unitsApi } from '../api';
-import type { Product, Category, ProductFormData, Unit } from '../types';
+import { productsApi, categoriesApi, unitsApi, discountsApi } from '../api';
+import type { Product, Category, ProductFormData, Unit, Discount } from '../types';
 import toast from 'react-hot-toast';
 import { formatMoney } from '../money';
 
@@ -9,6 +9,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -27,6 +28,7 @@ export default function ProductsPage() {
     sku: '',
     barcode: '',
     category: '',
+    discount: '',
     price: 0,
     cost: 0,
     taxRate: 0,
@@ -144,6 +146,16 @@ export default function ProductsPage() {
     }
   };
 
+  const loadDiscounts = async () => {
+    try {
+      const data = await discountsApi.getAll();
+      setDiscounts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load discounts:', error);
+      setDiscounts([]);
+    }
+  };
+
   const handleCreateUnit = async () => {
     if (!newUnitName.trim()) {
       toast.error('Please enter unit name');
@@ -169,6 +181,7 @@ export default function ProductsPage() {
     loadProducts();
     loadCategories();
     loadUnits();
+    loadDiscounts();
   }, [page, search]);
 
   const openCreateModal = () => {
@@ -178,6 +191,7 @@ export default function ProductsPage() {
       sku: '', 
       barcode: '', 
       category: '', 
+      discount: '',
       price: 0, 
       cost: 0, 
       taxRate: 0,
@@ -191,11 +205,17 @@ export default function ProductsPage() {
 
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
+    const discountId = !product.discount
+      ? ''
+      : typeof product.discount === 'string'
+        ? product.discount
+        : product.discount?._id || '';
     setFormData({
       name: product.name,
       sku: product.sku,
       barcode: product.barcode || '',
       category: typeof product.category === 'string' ? product.category : product.category._id,
+      discount: discountId,
       price: product.price,
       cost: product.cost,
       taxRate: product.taxRate || 0,
@@ -232,11 +252,15 @@ export default function ProductsPage() {
 
     try {
       setSaving(true);
+      const payload: ProductFormData = {
+        ...formData,
+        discount: formData.discount ? formData.discount : undefined,
+      };
       if (editingProduct) {
-        await productsApi.update(editingProduct._id, formData);
+        await productsApi.update(editingProduct._id, payload);
         toast.success('✅ Product updated successfully');
       } else {
-        await productsApi.create(formData);
+        await productsApi.create(payload);
         toast.success('✅ Product created successfully');
       }
       setModalOpen(false);
@@ -281,6 +305,11 @@ export default function ProductsPage() {
     return result;
   };
 
+  const discountLabel = (d: Discount) => {
+    const v = d.discountType === 'FLAT' ? formatMoney(d.value) : `${d.value}%`;
+    return `${d.name} (${v})${d.isActive ? '' : ' [Inactive]'}`;
+  };
+
   const columns = [
     { key: 'name', header: 'Name' },
     { key: 'sku', header: 'SKU' },
@@ -302,6 +331,22 @@ export default function ProductsPage() {
       key: 'price',
       header: 'Price',
       render: (item: Product) => formatMoney(item.price),
+    },
+    {
+      key: 'discount',
+      header: 'Discount',
+      render: (item: Product) => {
+        const d = item.discount && typeof item.discount === 'object' ? item.discount : null;
+        if (!d) return <span className="text-slate-400">—</span>;
+        const value = d.discountType === 'FLAT' ? formatMoney(d.value) : `${d.value}%`;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-900">{d.name}</span>
+            <Badge variant={d.discountType === 'FLAT' ? 'info' : 'warning'}>{value}</Badge>
+            {!d.isActive && <Badge variant="default">Inactive</Badge>}
+          </div>
+        );
+      },
     },
     {
       key: 'taxRate',
@@ -446,6 +491,24 @@ export default function ProductsPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Discount (Optional)
+            </label>
+            <select
+              value={formData.discount || ''}
+              onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">No Discount</option>
+              {discounts.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {discountLabel(d)}
+                </option>
+              ))}
+            </select>
           </div>
           
           {/* Unit Selection with Create Option */}

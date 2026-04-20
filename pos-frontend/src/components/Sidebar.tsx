@@ -183,12 +183,32 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    label: 'Discounts',
+    path: '/discounts',
+    permission: PERMISSIONS.VIEW_DISCOUNTS,
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m5.99 5.99h.01M4 6a2 2 0 012-2h3l10 10v3a2 2 0 01-2 2h-3L4 9V6z" />
+      </svg>
+    ),
+  },
+  {
     label: 'Returns',
     path: '/returns',
     permission: PERMISSIONS.VIEW_RETURNS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Reports',
+    path: '/reports',
+    permission: PERMISSIONS.VIEW_REPORTS,
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2V7m3 10v-4m3 6H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2z" />
       </svg>
     ),
   },

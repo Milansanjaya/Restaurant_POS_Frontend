@@ -22,10 +22,12 @@ import KitchenPage from "./pages/KitchenPage";
 import ReservationsPage from "./pages/ReservationsPage";
 import ShiftsPage from "./pages/ShiftsPage";
 import CouponsPage from "./pages/CouponsPage";
+import DiscountsPage from "./pages/DiscountsPage";
 import RolesPage from "./pages/RolesPage";
 import UsersPage from "./pages/UsersPage";
 import SalesPage from "./pages/SalesPage";
 import { useAuthStore } from "./store/auth.store";
+import { authApi } from "./api";
 
 const getJwtExpiryMs = (token: string): number | null => {
   try {
@@ -49,7 +51,27 @@ const getJwtExpiryMs = (token: string): number | null => {
 export default function App() {
   const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
+  const setUser = useAuthStore((s) => s.setUser);
   const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) return;
+
+    (async () => {
+      try {
+        const me = await authApi.getMe();
+        if (!cancelled) setUser(me);
+      } catch (err) {
+        // 401 is handled centrally in the axios interceptor; other errors can be ignored here.
+        console.warn("Failed to refresh user:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, setUser]);
 
   useEffect(() => {
     if (timerRef.current) {
@@ -94,6 +116,7 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/loyalty" element={<LoyaltyPage />} />
         <Route path="/coupons" element={<CouponsPage />} />
+        <Route path="/discounts" element={<DiscountsPage />} />
         <Route path="/returns" element={<ReturnsPage />} />
         <Route path="/reports" element={<ComprehensiveReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
