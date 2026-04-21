@@ -333,7 +333,16 @@ function CustomerReturnsPanel() {
     const t = setTimeout(async () => {
       try {
         const results = await orderReturnsApi.searchSales(q);
-        if (!cancelled) setSearchResults(Array.isArray(results) ? results : []);
+        const list = Array.isArray(results) ? results : [];
+        const needle = q.toLowerCase();
+        const filtered = list
+          .filter((s) => {
+            const inv = String(s?.invoiceNumber || '').toLowerCase();
+            const id = String(s?._id || '').toLowerCase();
+            return inv.includes(needle) || id.includes(needle);
+          })
+          .slice(0, 12);
+        if (!cancelled) setSearchResults(filtered);
       } catch {
         if (!cancelled) setSearchResults([]);
       }
@@ -1021,6 +1030,61 @@ function SupplierReturnsPanel() {
   }, [grnSearchQuery, grns, selectedGrnId]);
 
   const visibleGrnResults = grnSearchResults.length > 0 ? grnSearchResults : grnSuggestions;
+
+  // ── Auto-suggest GRNs while typing (debounced) ──
+  useEffect(() => {
+    if (activeTab !== 'create') return;
+    if (selectedGrnId) return;
+
+    const q = grnSearchQuery.trim();
+    if (!q) {
+      setGrnSearchResults([]);
+      return;
+    }
+
+    // Avoid spamming backend for very short queries
+    if (q.length < 2) {
+      setGrnSearchResults([]);
+      return;
+    }
+
+    // If supplier is selected, local list-based suggestions are enough
+    if (selectedSupplierId && grns.length > 0) return;
+
+    // Don't auto-fetch for ObjectId-looking inputs (handled by Enter/Search)
+    if (isLikelyObjectId(q)) {
+      setGrnSearchResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await grnApi.getAll({
+          status: 'APPROVED',
+          supplierId: selectedSupplierId || undefined,
+          search: q,
+          page: 1,
+          limit: 30,
+        } as any);
+
+        const all = (res?.grns ?? []) as GRN[];
+        const needle = q.toLowerCase();
+        const matches = all
+          .filter((g) => (g.grnNumber || '').toLowerCase().includes(needle))
+          .slice(0, 12);
+
+        if (!cancelled) setGrnSearchResults(matches);
+      } catch {
+        if (!cancelled) setGrnSearchResults([]);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [activeTab, grnSearchQuery, selectedGrnId, selectedSupplierId, grns.length]);
 
   const resetCreateForm = () => {
     setSelectedSupplierId('');

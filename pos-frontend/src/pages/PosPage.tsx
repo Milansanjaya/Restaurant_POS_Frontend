@@ -180,8 +180,13 @@ export default function PosPage() {
   };
 
   const generateThermalReceiptHtml = (sale: Sale, company?: Invoice['company'], headerText?: string, footerText?: string) => {
-    const orderTypeLabel = sale.orderType ? sale.orderType.replaceAll('_', ' ') : 'POS';
+    const rawOrderType = ((sale.orderType || (sale as any).saleType) as string | undefined) || '';
+    const orderTypeLabel = rawOrderType ? rawOrderType.replaceAll('_', ' ') : 'POS';
     const orderNumber = deriveOrderNumber(sale.invoiceNumber);
+
+    const packagingChargeValue = (sale.packagingCharge || 0) as number;
+    const showPackagingCharge =
+      (rawOrderType === 'TAKEAWAY' || rawOrderType === 'DELIVERY') && packagingChargeValue > 0;
 
     const customer = sale.customer_id && typeof sale.customer_id === 'object'
       ? (sale.customer_id as any)
@@ -314,7 +319,7 @@ export default function PosPage() {
               <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
               <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
               <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</span></div>
-              <div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(sale.packagingCharge || 0))}</span></div>
+              ${showPackagingCharge ? `<div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>` : ''}
               ${sale.discount > 0 ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>` : ''}
               <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
               <div class="row"><span>Paid</span><span>${escapeHtml(formatMoney(sale.paidAmount))}</span></div>
@@ -348,19 +353,35 @@ export default function PosPage() {
         configApi.get().catch(() => null),
       ]);
 
-      const configCompany = config?.businessDetails
+      let localPrintSettings: any = null;
+      try {
+        const raw = localStorage.getItem('pos_print_settings');
+        localPrintSettings = raw ? JSON.parse(raw) : null;
+      } catch {
+        localPrintSettings = null;
+      }
+
+      const businessDetails = config?.businessDetails || localPrintSettings?.businessDetails;
+      const invoiceFormat = config?.invoiceFormat || localPrintSettings?.invoiceFormat;
+
+      const configCompany = businessDetails
         ? {
-            name: config.businessDetails.name || '',
-            address: config.businessDetails.address || '',
-            phone: config.businessDetails.phone || '',
-            email: config.businessDetails.email || '',
-            logo: config.businessDetails.logo || config.logo || undefined,
+            name: businessDetails.name || '',
+            address: businessDetails.address || '',
+            phone: businessDetails.phone || '',
+            email: businessDetails.email || '',
+            logo:
+              businessDetails.logo ||
+              (businessDetails as any).logoUrl ||
+              config?.logo ||
+              localPrintSettings?.logo ||
+              undefined,
           }
         : null;
 
       const company = configCompany || invoice?.company;
-      const headerText = config?.invoiceFormat?.header || '';
-      const footerText = config?.invoiceFormat?.footer || '';
+      const headerText = invoiceFormat?.header || '';
+      const footerText = invoiceFormat?.footer || '';
 
       const html = generateThermalReceiptHtml((invoice?.sale as Sale) ?? postPaymentSale, company || undefined, headerText, footerText);
       printWindow.document.open();
@@ -2385,6 +2406,25 @@ const handleCreateSale = async () => {
               <span>Total</span>
               <span>{formatMoney(finalTotal())}</span>
             </div>
+
+            {/* Payment Method (for immediate pay only) */}
+            {!postPaymentSale && !isPayingTable && !(orderType === 'DINE_IN' && selectedTable) && (
+              <div className="pt-2">
+                <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                  className="touch-manipulation w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold"
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="UPI">UPI</option>
+                  <option value="WALLET">Wallet</option>
+                </select>
+              </div>
+            )}
 
             {/* Cart Action Buttons */}
             <div className="pt-3 flex items-center justify-end gap-2">

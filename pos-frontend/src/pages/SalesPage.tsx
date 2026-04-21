@@ -145,19 +145,35 @@ const SalesPage: React.FC = () => {
         configApi.get().catch(() => null),
       ]);
 
-      const configCompany = config?.businessDetails
+      let localPrintSettings: any = null;
+      try {
+        const raw = localStorage.getItem('pos_print_settings');
+        localPrintSettings = raw ? JSON.parse(raw) : null;
+      } catch {
+        localPrintSettings = null;
+      }
+
+      const businessDetails = config?.businessDetails || localPrintSettings?.businessDetails;
+      const invoiceFormat = config?.invoiceFormat || localPrintSettings?.invoiceFormat;
+
+      const configCompany = businessDetails
         ? {
-            name: config.businessDetails.name || '',
-            address: config.businessDetails.address || '',
-            phone: config.businessDetails.phone || '',
-            email: config.businessDetails.email || '',
-            logo: config.businessDetails.logo || config.logo || undefined,
+            name: businessDetails.name || '',
+            address: businessDetails.address || '',
+            phone: businessDetails.phone || '',
+            email: businessDetails.email || '',
+            logo:
+              businessDetails.logo ||
+              (businessDetails as any).logoUrl ||
+              config?.logo ||
+              localPrintSettings?.logo ||
+              undefined,
           }
         : null;
 
       const company = configCompany || invoice?.company;
-      const headerText = config?.invoiceFormat?.header || '';
-      const footerText = config?.invoiceFormat?.footer || '';
+      const headerText = invoiceFormat?.header || '';
+      const footerText = invoiceFormat?.footer || '';
 
       const html = generateThermalReceiptHtml(invoice?.sale ?? sale, company || undefined, headerText, footerText);
 
@@ -264,6 +280,7 @@ const SalesPage: React.FC = () => {
 
     const serviceChargeValue = (sale.serviceCharge || (sale as any).serviceCharge || 0) as number;
     const packagingChargeValue = (sale.packagingCharge || (sale as any).packagingCharge || 0) as number;
+    const showPackagingCharge = (orderType === 'TAKEAWAY' || orderType === 'DELIVERY') && packagingChargeValue > 0;
 
     return `
       <!DOCTYPE html>
@@ -345,7 +362,7 @@ const SalesPage: React.FC = () => {
               <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
               <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
               <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(serviceChargeValue))}</span></div>
-              <div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>
+              ${showPackagingCharge ? `<div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>` : ''}
               ${discountHtml}
               <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
               <div class="row"><span>Paid</span><span>${escapeHtml(formatMoney(sale.paidAmount))}</span></div>

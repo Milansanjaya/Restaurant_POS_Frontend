@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, Button, Input, PageLoader } from '../components';
 import { configApi } from '../api';
+import toast from 'react-hot-toast';
 import type { TaxSetting } from '../types';
 
 export default function SettingsPage() {
@@ -80,7 +81,7 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load config:', error);
-      alert('⚠️ Failed to load settings. Please try again.');
+      toast.error('Failed to load settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -120,9 +121,32 @@ export default function SettingsPage() {
         packagingCharge,
         packagingChargeType,
       });
-      alert('Settings saved successfully');
+
+      try {
+        localStorage.setItem(
+          'pos_print_settings',
+          JSON.stringify({
+            businessDetails: {
+              name: businessName,
+              address: businessAddress,
+              phone: businessPhone,
+              email: businessEmail || undefined,
+              logo: businessLogo || undefined,
+            },
+            invoiceFormat: {
+              header: invoiceHeader,
+              footer: invoiceFooter,
+              prefix: invoicePrefix,
+            },
+          })
+        );
+      } catch {
+        // ignore localStorage failures
+      }
+
+      toast.success('✅ Settings saved successfully');
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save settings');
+      toast.error(error?.response?.data?.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -267,61 +291,6 @@ export default function SettingsPage() {
               {/* Service Charge */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
-
-            {/* Loyalty Points Settings */}
-            <Card>
-              <h3 className="mb-4 text-lg font-semibold text-slate-900">Loyalty Points Settings</h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Points Per Currency Unit"
-                  type="number"
-                  value={pointsPerDollar}
-                  onChange={(e) => setPointsPerDollar(parseFloat(e.target.value) || 0)}
-                  helperText="Base points earned per 1 unit of currency (global)"
-                />
-                <Input
-                  label="Points Expiry Days"
-                  type="number"
-                  value={pointsExpiryDays}
-                  onChange={(e) => setPointsExpiryDays(parseInt(e.target.value) || 0)}
-                  helperText="0 = no expiry (if supported by backend)"
-                />
-              </div>
-
-              <div className="mt-4">
-                <p className="mb-2 text-sm font-medium text-slate-700">Tier Multipliers</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Basic (x)"
-                    type="number"
-                    value={pointsMultiplierByTier.BASIC}
-                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, BASIC: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                  />
-                  <Input
-                    label="Silver (x)"
-                    type="number"
-                    value={pointsMultiplierByTier.SILVER}
-                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, SILVER: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                  />
-                  <Input
-                    label="Gold (x)"
-                    type="number"
-                    value={pointsMultiplierByTier.GOLD}
-                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, GOLD: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                  />
-                  <Input
-                    label="Platinum (x)"
-                    type="number"
-                    value={pointsMultiplierByTier.PLATINUM}
-                    onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Multiplier increases earned points based on customer tier.
-                </p>
-              </div>
-            </Card>
                   Service Charge (Dine-in)
                 </label>
                 <div className="flex gap-2">
@@ -342,6 +311,7 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+
               {/* Packaging Charge */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -365,6 +335,61 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+            </div>
+          </Card>
+
+          {/* Loyalty Points Settings */}
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Loyalty Points Settings</h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Points Per Currency Unit"
+                type="number"
+                value={pointsPerDollar}
+                onChange={(e) => setPointsPerDollar(parseFloat(e.target.value) || 0)}
+                helperText="Base points earned per 1 unit of currency (global)"
+              />
+              <Input
+                label="Points Expiry Days"
+                type="number"
+                value={pointsExpiryDays}
+                onChange={(e) => setPointsExpiryDays(parseInt(e.target.value) || 0)}
+                helperText="0 = no expiry (if supported by backend)"
+              />
+            </div>
+
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-medium text-slate-700">Tier Multipliers</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Basic (x)"
+                  type="number"
+                  value={pointsMultiplierByTier.BASIC}
+                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, BASIC: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                />
+                <Input
+                  label="Silver (x)"
+                  type="number"
+                  value={pointsMultiplierByTier.SILVER}
+                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, SILVER: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                />
+                <Input
+                  label="Gold (x)"
+                  type="number"
+                  value={pointsMultiplierByTier.GOLD}
+                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, GOLD: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                />
+                <Input
+                  label="Platinum (x)"
+                  type="number"
+                  value={pointsMultiplierByTier.PLATINUM}
+                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Multiplier increases earned points based on customer tier.
+              </p>
             </div>
           </Card>
 

@@ -297,9 +297,15 @@ export default function ProductsPage() {
     if (!Array.isArray(cats)) return [];
     let result: { value: string; label: string }[] = [];
     for (const cat of cats) {
-      result.push({ value: cat._id, label: prefix + cat.name + (cat.isActive === false ? ' (Inactive)' : '') });
+      const isActive = cat.isActive !== false;
+      const childPrefix = isActive ? prefix + '  ' : prefix;
+
+      if (isActive) {
+        result.push({ value: cat._id, label: prefix + cat.name });
+      }
+
       if (cat.children?.length) {
-        result = result.concat(flattenCategories(cat.children, prefix + '  '));
+        result = result.concat(flattenCategories(cat.children, childPrefix));
       }
     }
     return result;

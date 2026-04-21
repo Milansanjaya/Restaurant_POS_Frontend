@@ -4,6 +4,7 @@ import { Button, Input, Card, Table, Badge, Modal } from '../components';
 import { shiftsApi } from '../api';
 import type { Shift } from '../types';
 import { formatMoney } from '../money';
+import toast from 'react-hot-toast';
 
 export default function ShiftsPage() {
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
@@ -119,13 +120,16 @@ export default function ShiftsPage() {
   };
 
   const handleViewShift = async (shiftId: string) => {
+    const toastId = toast.loading('Loading shift details...');
     try {
       const shift = await shiftsApi.getById(shiftId);
       setViewShift(shift);
       setViewShiftOpen(true);
+      toast.success('Shift details opened', { id: toastId });
     } catch (err: any) {
       console.error('Failed to load shift details:', err);
       setError(err?.response?.data?.message || 'Failed to load shift details');
+      toast.error(err?.response?.data?.message || 'Failed to load shift details', { id: toastId });
     }
   };
 
