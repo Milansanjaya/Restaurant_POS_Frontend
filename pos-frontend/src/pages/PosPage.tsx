@@ -64,7 +64,7 @@ export default function PosPage() {
   const [selectedTable, setSelectedTable] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [discountType, setDiscountType] = useState<ManualDiscountType>('');
-  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountValue, setDiscountValue] = useState('');
   const [couponCode, setCouponCode] = useState<string>("");
   const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'>('TAKEAWAY');
   const [serviceCharge, setServiceCharge] = useState(0);
@@ -1150,9 +1150,10 @@ export default function PosPage() {
         }
 
         // Add discount if applied
-        if (discountType && discountValue > 0) {
+        const discountAmount = Number(discountValue);
+        if (discountType && Number.isFinite(discountAmount) && discountAmount > 0) {
           payload.discountType = discountType;
-          payload.discountValue = discountValue;
+          payload.discountValue = discountAmount;
         }
 
         // Add coupon if entered
@@ -1222,7 +1223,7 @@ export default function PosPage() {
       
       clearCart();
       setDiscountType('');
-      setDiscountValue(0);
+      setDiscountValue('');
       setCouponCode('');
       setCouponValidation(null);
       setSelectedCustomerId('');
@@ -1255,11 +1256,12 @@ export default function PosPage() {
   // Calculate manual discount amount (discount base = subtotal + tax, before charges)
   const calculateManualDiscount = () => {
     const base = subtotal() + taxTotal();
-    if (!discountType || discountValue <= 0) return 0;
+    const discountAmount = Number(discountValue);
+    if (!discountType || !Number.isFinite(discountAmount) || discountAmount <= 0) return 0;
     if (discountType === 'PERCENTAGE') {
-      return Math.round(Math.min(base, (base * discountValue) / 100) * 100) / 100;
+      return Math.round(Math.min(base, (base * discountAmount) / 100) * 100) / 100;
     }
-    return Math.min(base, discountValue);
+    return Math.min(base, discountAmount);
   };
 
   // Calculate coupon discount amount
@@ -1454,9 +1456,10 @@ const handleAddToTable = async () => {
       if (selectedCustomerId) {
         payload.customerId = selectedCustomerId;
       }
-      if (discountType && discountValue > 0) {
+      const discountAmount = Number(discountValue);
+      if (discountType && Number.isFinite(discountAmount) && discountAmount > 0) {
         payload.discountType = discountType;
-        payload.discountValue = discountValue;
+        payload.discountValue = discountAmount;
       }
       if (couponCode.trim()) {
         payload.couponCode = couponCode.trim();
@@ -1538,9 +1541,10 @@ const handleCreateSale = async () => {
     }
 
     // Add discount if applied
-    if (discountType && discountValue > 0) {
+    const discountAmount = Number(discountValue);
+    if (discountType && Number.isFinite(discountAmount) && discountAmount > 0) {
       payload.discountType = discountType;
-      payload.discountValue = discountValue;
+      payload.discountValue = discountAmount;
     }
 
     // Add coupon if entered
@@ -1597,7 +1601,7 @@ const handleCreateSale = async () => {
     toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
     clearCart();
     setDiscountType('');
-    setDiscountValue(0);
+    setDiscountValue('');
     setCouponCode('');
     setCouponValidation(null);
     setSelectedCustomerId('');
@@ -2188,8 +2192,8 @@ const handleCreateSale = async () => {
                     <input
                       type="number"
                       min="0"
-                      value={discountType ? discountValue : 0}
-                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
                       placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
                       disabled={!discountType}
                       className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm disabled:bg-slate-50 disabled:opacity-60"
@@ -2673,8 +2677,8 @@ const handleCreateSale = async () => {
                 <input
                   type="number"
                   min="0"
-                  value={discountType ? discountValue : 0}
-                  onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
                   placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
                   disabled={!discountType}
                   className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm disabled:bg-slate-50 disabled:opacity-60"

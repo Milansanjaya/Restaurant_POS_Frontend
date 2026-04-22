@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, StatCard, PageLoader, Button, Table } from '../components';
-import { reportsApi } from '../api';
+import { orderReturnsApi, reportsApi } from '../api';
+import type { OrderReturn } from '../api/orderReturns.api';
 import type { DailyReport, PaymentSummary, Inventory, ProfitReport, ProfitReportDay } from '../types';
 import { formatMoney } from '../money';
 
@@ -69,6 +70,9 @@ export default function ReportsPage() {
   const [profitTo, setProfitTo] = useState(new Date().toISOString().split('T')[0]);
   const [profitOrderType, setProfitOrderType] = useState('');
 
+  const [orderReturns, setOrderReturns] = useState<OrderReturn[]>([]);
+  const [returnsLoading, setReturnsLoading] = useState(false);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -109,9 +113,144 @@ export default function ReportsPage() {
     }
   };
 
+  const isInRange = (iso: string, from: string, to: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return false;
+    const fromD = from ? new Date(`${from}T00:00:00`) : null;
+    const toD = to ? new Date(`${to}T23:59:59`) : null;
+    const ms = d.getTime();
+    if (fromD && ms < fromD.getTime()) return false;
+    if (toD && ms > toD.getTime()) return false;
+    return true;
+  };
+
+  const loadOrderReturnsForProfitRange = async () => {
+    // Load enough returns to accurately adjust the profit table (refunds + wastage)
+    setReturnsLoading(true);
+    try {
+      const from = profitFrom;
+      const to = profitTo;
+      const orderType = profitOrderType;
+      const limit = 200;
+
+      let page = 1;
+      let total = Number.POSITIVE_INFINITY;
+      const all: OrderReturn[] = [];
+
+      while (all.length < total) {
+        const res = await orderReturnsApi.getAll({ page, limit } as any);
+        const batch = res.orderReturns || [];
+        total = typeof res.total === 'number' ? res.total : all.length + batch.length;
+        all.push(...batch);
+        if (batch.length === 0) break;
+        page += 1;
+        if (page > 50) break; // safety cap
+      }
+
+      const filtered = all.filter((r) => {
+        if (!r?.createdAt) return false;
+        if (!isInRange(r.createdAt, from, to)) return false;
+
+        // If order type filter is set and return includes a populated sale reference, match it.
+        if (orderType && typeof r.sale_id === 'object' && r.sale_id?.orderType && r.sale_id.orderType !== orderType) {
+          return false;
+        }
+        return true;
+      });
+
+      setOrderReturns(filtered);
+    } catch (error) {
+      console.error('Failed to load order returns:', error);
+      setOrderReturns([]);
+    } finally {
+      setReturnsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadProfitReport();
   }, [profitFrom, profitTo, profitOrderType]);
+
+  useEffect(() => {
+    loadOrderReturnsForProfitRange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profitFrom, profitTo, profitOrderType]);
+
+  const returnsByDate = useMemo(() => {
+    const map = new Map<string, { customerRefund: number; customerCost: number; internalCost: number }>();
+    (orderReturns || []).forEach((r) => {
+      const dateKey = r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '';
+      if (!dateKey) return;
+      const entry = map.get(dateKey) || { customerRefund: 0, customerCost: 0, internalCost: 0 };
+      const refund = typeof r.refundAmount === 'number' ? r.refundAmount : 0;
+      const cost = typeof r.totalCostAmount === 'number' ? r.totalCostAmount : 0;
+
+      if (r.returnType === 'CUSTOMER') {
+        entry.customerRefund += refund;
+        entry.customerCost += cost;
+      } else {
+        entry.internalCost += cost;
+      }
+      map.set(dateKey, entry);
+    });
+    return map;
+  }, [orderReturns]);
+
+  const profitDaysAdjusted: ProfitReportDay[] = useMemo(() => {
+    const baseDays = profitReport?.days || [];
+    const dayByDate = new Map<string, ProfitReportDay>();
+    baseDays.forEach((d) => dayByDate.set(d.date, d));
+
+    const dates = new Set<string>();
+    baseDays.forEach((d) => dates.add(d.date));
+    returnsByDate.forEach((_v, k) => dates.add(k));
+
+    const sortedDates = Array.from(dates).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    return sortedDates.map((date) => {
+      const base: ProfitReportDay =
+        dayByDate.get(date) ||
+        ({
+          date,
+          totalOrders: 0,
+          grossSales: 0,
+          discount: 0,
+          netSales: 0,
+          totalCost: 0,
+          profit: 0,
+        } as ProfitReportDay);
+
+      const r = returnsByDate.get(date);
+      if (!r) return base;
+
+      const adjustedNetSales = (base.netSales || 0) - r.customerRefund;
+      const adjustedCost = (base.totalCost || 0) - r.customerCost + r.internalCost;
+      const adjustedProfit = adjustedNetSales - adjustedCost;
+
+      return {
+        ...base,
+        netSales: adjustedNetSales,
+        totalCost: adjustedCost,
+        profit: adjustedProfit,
+      };
+    });
+  }, [profitReport, returnsByDate]);
+
+  const profitTotalsAdjusted = useMemo(() => {
+    const days = profitDaysAdjusted || [];
+    return days.reduce(
+      (acc, d) => {
+        acc.totalOrders += d.totalOrders || 0;
+        acc.grossSales += d.grossSales || 0;
+        acc.discount += d.discount || 0;
+        acc.netSales += d.netSales || 0;
+        acc.totalCost += d.totalCost || 0;
+        acc.profit += d.profit || 0;
+        return acc;
+      },
+      { totalOrders: 0, grossSales: 0, discount: 0, netSales: 0, totalCost: 0, profit: 0 }
+    );
+  }, [profitDaysAdjusted]);
 
   const escapeCsv = (val: unknown) => {
     const s = String(val ?? '');
@@ -333,7 +472,7 @@ export default function ReportsPage() {
   };
 
   const exportProfitCsv = () => {
-    const days = profitReport?.days || [];
+    const days = profitDaysAdjusted || [];
     if (days.length === 0) {
       alert('No profit data to export');
       return;
@@ -367,7 +506,7 @@ export default function ReportsPage() {
   };
 
   const exportProfitPdf = () => {
-    const days = profitReport?.days || [];
+    const days = profitDaysAdjusted || [];
     if (days.length === 0) {
       alert('No profit data to export');
       return;
@@ -404,10 +543,10 @@ export default function ReportsPage() {
         <h1>${title}</h1>
         <div class="subtitle">From ${escapeHtml(profitFrom)} to ${escapeHtml(profitTo)} • Order Type: ${escapeHtml(orderTypeLabel)}</div>
         <div class="meta">
-          <div class="box"><strong>Orders:</strong> ${escapeHtml(profitReport?.totals.totalOrders || 0)}</div>
-          <div class="box"><strong>Gross Sales:</strong> ${escapeHtml(formatMoney(profitReport?.totals.grossSales))}</div>
-          <div class="box"><strong>Total Cost:</strong> ${escapeHtml(formatMoney(profitReport?.totals.totalCost))}</div>
-          <div class="box"><strong>Profit:</strong> ${escapeHtml(formatMoney(profitReport?.totals.profit))}</div>
+          <div class="box"><strong>Orders:</strong> ${escapeHtml(profitTotalsAdjusted.totalOrders || 0)}</div>
+          <div class="box"><strong>Gross Sales:</strong> ${escapeHtml(formatMoney(profitTotalsAdjusted.grossSales))}</div>
+          <div class="box"><strong>Total Cost:</strong> ${escapeHtml(formatMoney(profitTotalsAdjusted.totalCost))}</div>
+          <div class="box"><strong>Profit:</strong> ${escapeHtml(formatMoney(profitTotalsAdjusted.profit))}</div>
         </div>
 
         <table>
@@ -438,12 +577,12 @@ export default function ReportsPage() {
           <tfoot>
             <tr>
               <th>Total</th>
-              <th class="num">${escapeHtml(profitReport?.totals.totalOrders || 0)}</th>
-              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.grossSales))}</th>
-              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.discount))}</th>
-              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.netSales))}</th>
-              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.totalCost))}</th>
-              <th class="num">${escapeHtml(formatMoney(profitReport?.totals.profit))}</th>
+              <th class="num">${escapeHtml(profitTotalsAdjusted.totalOrders || 0)}</th>
+              <th class="num">${escapeHtml(formatMoney(profitTotalsAdjusted.grossSales))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitTotalsAdjusted.discount))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitTotalsAdjusted.netSales))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitTotalsAdjusted.totalCost))}</th>
+              <th class="num">${escapeHtml(formatMoney(profitTotalsAdjusted.profit))}</th>
             </tr>
           </tfoot>
         </table>
@@ -546,7 +685,7 @@ export default function ReportsPage() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Profit Report</h3>
               <p className="text-sm text-slate-600">
-                Day-by-day profit using sales price vs cost price (from-to date).
+                Day-by-day profit using sales vs cost (includes returns/refunds).
               </p>
             </div>
 
@@ -604,29 +743,29 @@ export default function ReportsPage() {
           <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
             <StatCard
               title="Orders"
-              value={profitReport?.totals.totalOrders || 0}
+              value={profitTotalsAdjusted.totalOrders || 0}
             />
             <StatCard
               title="Gross Sales"
-              value={formatMoney(profitReport?.totals.grossSales)}
+              value={formatMoney(profitTotalsAdjusted.grossSales)}
             />
             <StatCard
               title="Discount"
-              value={formatMoney(profitReport?.totals.discount)}
+              value={formatMoney(profitTotalsAdjusted.discount)}
             />
             <StatCard
               title="Net Sales"
-              value={formatMoney(profitReport?.totals.netSales)}
+              value={formatMoney(profitTotalsAdjusted.netSales)}
             />
             <StatCard
               title="Total Cost"
-              value={formatMoney(profitReport?.totals.totalCost)}
+              value={formatMoney(profitTotalsAdjusted.totalCost)}
             />
             <StatCard
               title="Profit"
-              value={formatMoney(profitReport?.totals.profit)}
+              value={formatMoney(profitTotalsAdjusted.profit)}
               className={
-                (profitReport?.totals.profit || 0) >= 0 ? 'border-green-200' : 'border-red-200'
+                (profitTotalsAdjusted.profit || 0) >= 0 ? 'border-green-200' : 'border-red-200'
               }
             />
           </div>
@@ -650,9 +789,9 @@ export default function ReportsPage() {
                 ),
               },
             ]}
-            data={profitReport?.days || []}
+            data={profitDaysAdjusted || []}
             keyExtractor={(d: ProfitReportDay) => d.date}
-            loading={profitLoading}
+            loading={profitLoading || returnsLoading}
             emptyMessage="No profit data found for selected filters"
           />
         </Card>

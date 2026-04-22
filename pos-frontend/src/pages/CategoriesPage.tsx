@@ -4,6 +4,17 @@ import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader
 import { categoriesApi } from '../api';
 import type { Category, CategoryFormData } from '../types';
 
+type Numberish = number | '';
+
+type CategoryFormState = Omit<CategoryFormData, 'displayOrder'> & {
+  displayOrder: Numberish;
+};
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -11,12 +22,12 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [formData, setFormData] = useState<CategoryFormData>({
+  const [formData, setFormData] = useState<CategoryFormState>({
     name: '',
     description: '',
     parentId: '',
     icon: '',
-    displayOrder: 0,
+    displayOrder: '',
   });
 
   const loadCategories = async () => {
@@ -98,7 +109,7 @@ export default function CategoriesPage() {
 
   const openCreateModal = (parentId?: string) => {
     setEditingCategory(null);
-    setFormData({ name: '', description: '', parentId: parentId || '', icon: '', displayOrder: 0 });
+    setFormData({ name: '', description: '', parentId: parentId || '', icon: '', displayOrder: '' });
     setModalOpen(true);
   };
 
@@ -136,7 +147,10 @@ export default function CategoriesPage() {
       }
 
       setSaving(true);
-      const data = { ...formData };
+      const data: CategoryFormData = {
+        ...formData,
+        displayOrder: toNumber(formData.displayOrder, 0),
+      };
       if (!data.parentId) delete data.parentId;
       
       if (editingCategory) {
@@ -300,7 +314,15 @@ export default function CategoriesPage() {
             label="Display Order"
             type="number"
             value={formData.displayOrder}
-            onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === '') {
+                setFormData({ ...formData, displayOrder: '' });
+                return;
+              }
+              const n = parseInt(raw, 10);
+              setFormData({ ...formData, displayOrder: Number.isFinite(n) ? n : '' });
+            }}
           />
         </div>
       </Modal>

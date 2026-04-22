@@ -3,18 +3,18 @@ import type { SystemConfig, TaxSetting } from '../types';
 
 export const configApi = {
   get: async () => {
-    const res = await api.get<{ data: SystemConfig }>('/config');
-    return res.data.data; // Backend returns { success, data: config }
+    const res = await api.get<{ success: boolean; data: SystemConfig }>('/config');
+    return res.data.data;
   },
 
   update: async (data: Partial<SystemConfig>) => {
-    const res = await api.put<{ config: SystemConfig }>('/config', data);
-    return res.data.config;
+    const res = await api.put<{ success: boolean; data: SystemConfig }>('/config', data);
+    return res.data.data;
   },
 
   updateTax: async (taxes: TaxSetting[]) => {
-    const res = await api.put<{ config: SystemConfig }>('/config/tax', { taxes });
-    return res.data.config;
+    const res = await api.put<{ success: boolean; data: TaxSetting[] }>('/config/tax', { taxes });
+    return res.data.data;
   },
 
   uploadLogo: async (logo: string) => {

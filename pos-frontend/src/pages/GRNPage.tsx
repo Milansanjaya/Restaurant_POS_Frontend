@@ -5,6 +5,9 @@ import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
 import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
 import { formatMoney } from '../money';
 
+type GRNItemForm = Omit<GRNItem, 'receivedQuantity'> & { receivedQuantity: number | '' };
+type GRNFormState = Omit<GRNFormData, 'items'> & { items: GRNItemForm[] };
+
 export default function GRNPage() {
   const [grns, setGrns] = useState<GRN[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -21,7 +24,7 @@ export default function GRNPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
 
-  const [formData, setFormData] = useState<GRNFormData>({
+  const [formData, setFormData] = useState<GRNFormState>({
     purchaseOrder_id: '',
     supplier_id: '',
     items: [],
@@ -83,7 +86,7 @@ export default function GRNPage() {
     const supplierId = typeof po.supplier_id === 'object' ? po.supplier_id._id : po.supplier_id;
     
 
-    const items: GRNItem[] = po.items.map((item) => ({
+    const items: GRNItemForm[] = po.items.map((item) => ({
       product_id: item.product_id,
       productName: item.productName,
       orderedQuantity: item.quantity,
@@ -111,7 +114,7 @@ export default function GRNPage() {
     setFormData({
       purchaseOrder_id: typeof grn.purchaseOrder_id === 'object' ? grn.purchaseOrder_id._id : grn.purchaseOrder_id,
       supplier_id: typeof grn.supplier_id === 'object' ? grn.supplier_id._id : grn.supplier_id,
-      items: grn.items,
+      items: grn.items as GRNItemForm[],
       totalAmount: grn.totalAmount,
       notes: grn.notes || '',
     });
@@ -123,7 +126,8 @@ export default function GRNPage() {
     (newItems[index] as any)[field] = value;
     
     if (field === 'receivedQuantity') {
-      newItems[index].totalPrice = value * newItems[index].unitPrice;
+      const qty = value === '' ? 0 : Number(value);
+      newItems[index].totalPrice = (Number.isFinite(qty) ? qty : 0) * newItems[index].unitPrice;
     }
     
     const total = newItems.reduce((sum, i) => sum + i.totalPrice, 0);
@@ -139,7 +143,8 @@ export default function GRNPage() {
 
     // Validate all items
     for (const item of formData.items) {
-      if (!item.receivedQuantity || item.receivedQuantity < 0) {
+      const qty = item.receivedQuantity === '' ? NaN : Number(item.receivedQuantity);
+      if (!Number.isFinite(qty) || qty < 0) {
         toast.error(`❌ Invalid received quantity for ${item.productName}`);
         return;
       }
@@ -165,13 +170,24 @@ export default function GRNPage() {
         batchNumber: item.batchNumber!,
         product_id: item.product_id,
         expiryDate: item.expiryDate!,
-        quantity: item.receivedQuantity,
+        quantity: Number(item.receivedQuantity),
         costPerUnit: item.unitPrice,
       }));
 
+    const payloadItems: GRNItem[] = formData.items.map((item) => {
+      const receivedQuantity = Number(item.receivedQuantity);
+      return {
+        ...item,
+        receivedQuantity,
+        totalPrice: receivedQuantity * item.unitPrice,
+      };
+    });
+
     // Prepare payload with explicit batches array
-    const payload = {
+    const payload: GRNFormData = {
       ...formData,
+      items: payloadItems,
+      totalAmount: payloadItems.reduce((sum, i) => sum + i.totalPrice, 0),
       batches,
     };
 
@@ -229,11 +245,13 @@ export default function GRNPage() {
       const fullGrn = await grnApi.getById(grn._id);
       setSelectedGRN(fullGrn || grn);
       setDetailModalOpen(true);
+      toast.success('📄 GRN details opened');
     } catch (error) {
       console.error('Failed to fetch GRN details:', error);
       // Fall back to using the list data
       setSelectedGRN(grn);
       setDetailModalOpen(true);
+      toast.success('📄 GRN details opened (partial data)');
     }
   };
 
@@ -525,7 +543,13 @@ export default function GRNPage() {
                       label="Received"
                       type="number"
                       value={item.receivedQuantity}
-                      onChange={(e) => updateItem(index, 'receivedQuantity', parseInt(e.target.value) || 0)}
+                      onChange={(e) =>
+                        updateItem(
+                          index,
+                          'receivedQuantity',
+                          e.target.value === '' ? '' : parseInt(e.target.value, 10)
+                        )
+                      }
                       className="w-24"
                     />
                     <div>

@@ -26,7 +26,7 @@ const SalesPage: React.FC = () => {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [refundReason, setRefundReason] = useState('');
-  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundAmount, setRefundAmount] = useState('');
 
   const loadSales = async () => {
     setLoading(true);
@@ -85,7 +85,7 @@ const SalesPage: React.FC = () => {
   const handleRefundClick = (sale: Sale) => {
     setSelectedSale(sale);
     setRefundReason('');
-    setRefundAmount(sale.paidAmount);
+    setRefundAmount(String(sale.paidAmount));
     setShowRefundModal(true);
   };
 
@@ -95,10 +95,16 @@ const SalesPage: React.FC = () => {
       return;
     }
 
+    const amount = Number(refundAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > selectedSale.paidAmount) {
+      toast.error('Please enter a valid refund amount');
+      return;
+    }
+
     try {
       await salesApi.refundSale(selectedSale._id, {
         reason: refundReason,
-        amount: refundAmount,
+        amount,
       });
       toast.success('💰 Refund processed successfully');
       setShowRefundModal(false);
@@ -821,7 +827,7 @@ const SalesPage: React.FC = () => {
                   min="0.01"
                   max={selectedSale.paidAmount}
                   value={refundAmount}
-                  onChange={(e) => setRefundAmount(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setRefundAmount(e.target.value)}
                   className="w-full border rounded px-3 py-2"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -854,7 +860,12 @@ const SalesPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleRefund}
-                  disabled={refundAmount <= 0 || refundAmount > selectedSale.paidAmount}
+                  disabled={
+                    !refundReason.trim() ||
+                    !Number.isFinite(Number(refundAmount)) ||
+                    Number(refundAmount) <= 0 ||
+                    Number(refundAmount) > selectedSale.paidAmount
+                  }
                   className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
                 >
                   Process Refund

@@ -24,6 +24,25 @@ export default function BatchesPage() {
     manufactureDate: '',
   });
 
+  const buildDashboardFromBatches = (list: Batch[]): ExpiryDashboard => {
+    const stats: ExpiryDashboard = {
+      totalBatches: list.length,
+      normalCount: 0,
+      warningCount: 0,
+      criticalCount: 0,
+      expiredCount: 0,
+    };
+
+    for (const batch of list) {
+      if (batch.alertStatus === 'NORMAL') stats.normalCount += 1;
+      else if (batch.alertStatus === 'WARNING') stats.warningCount += 1;
+      else if (batch.alertStatus === 'CRITICAL') stats.criticalCount += 1;
+      else if (batch.alertStatus === 'EXPIRED') stats.expiredCount += 1;
+    }
+
+    return stats;
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -32,8 +51,26 @@ export default function BatchesPage() {
         batchesApi.getExpiryDashboard(),
         productsApi.getAll({ limit: 1000 }),
       ]);
-      setBatches(batchRes.data || batchRes.batches || []);
-      setDashboard(dashboardData);
+
+      const batchList: Batch[] = batchRes.data || batchRes.batches || [];
+      const rawDashboard =
+        (dashboardData as any)?.data ||
+        (dashboardData as any)?.dashboard ||
+        (dashboardData as any)?.summary ||
+        dashboardData;
+
+      const normalizedDashboard: ExpiryDashboard = {
+        totalBatches: Number(rawDashboard?.totalBatches) || 0,
+        normalCount: Number(rawDashboard?.normalCount) || 0,
+        warningCount: Number(rawDashboard?.warningCount) || 0,
+        criticalCount: Number(rawDashboard?.criticalCount) || 0,
+        expiredCount: Number(rawDashboard?.expiredCount) || 0,
+      };
+
+      const shouldUseFallback = normalizedDashboard.totalBatches === 0 && batchList.length > 0;
+
+      setBatches(batchList);
+      setDashboard(shouldUseFallback ? buildDashboardFromBatches(batchList) : normalizedDashboard);
       setProducts(productsRes.products || []);
     } catch (error) {
       console.error('Failed to load data:', error);

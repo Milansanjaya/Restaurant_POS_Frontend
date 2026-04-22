@@ -5,13 +5,24 @@ import { discountsApi, productsApi } from '../api';
 import type { Discount, DiscountFormData, DiscountType, Product, ProductFormData } from '../types';
 import { formatMoney } from '../money';
 
-const initialFormData: DiscountFormData = {
+type Numberish = number | '';
+
+type DiscountFormState = Omit<DiscountFormData, 'value'> & {
+  value: Numberish;
+};
+
+const initialFormData: DiscountFormState = {
   name: '',
   discountType: 'PERCENTAGE',
-  value: 0,
+  value: '',
   validFrom: '',
   validTo: '',
   isActive: true,
+};
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
 };
 
 const formatDiscountValue = (d: Pick<Discount, 'discountType' | 'value'>) =>
@@ -28,7 +39,7 @@ export default function DiscountsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null);
-  const [formData, setFormData] = useState<DiscountFormData>(initialFormData);
+  const [formData, setFormData] = useState<DiscountFormState>(initialFormData);
   const [saving, setSaving] = useState(false);
 
   // Product assignment
@@ -237,7 +248,7 @@ export default function DiscountsPage() {
       toast.error('Please enter discount name');
       return;
     }
-    if (formData.value <= 0) {
+    if (typeof formData.value !== 'number' || formData.value <= 0) {
       toast.error('Please enter a valid discount value');
       return;
     }
@@ -247,6 +258,7 @@ export default function DiscountsPage() {
 
       const payload: DiscountFormData = {
         ...formData,
+        value: toNumber(formData.value, 0),
         validFrom: formData.validFrom ? formData.validFrom : undefined,
         validTo: formData.validTo ? formData.validTo : undefined,
       };
@@ -391,7 +403,15 @@ export default function DiscountsPage() {
               label={formData.discountType === 'FLAT' ? 'Amount (Rs.)' : 'Percentage (%)'}
               type="number"
               value={formData.value}
-              onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, value: '' });
+                  return;
+                }
+                const n = Number(raw);
+                setFormData({ ...formData, value: Number.isFinite(n) ? n : '' });
+              }}
               min={0}
               max={formData.discountType === 'PERCENTAGE' ? 100 : undefined}
             />
@@ -507,7 +527,7 @@ export default function DiscountsPage() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving || !formData.name.trim() || formData.value <= 0}
+              disabled={saving || !formData.name.trim() || typeof formData.value !== 'number' || formData.value <= 0}
             >
               {saving ? 'Saving...' : editingDiscount ? 'Update' : 'Create'}
             </Button>

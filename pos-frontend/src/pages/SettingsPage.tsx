@@ -4,11 +4,20 @@ import { configApi } from '../api';
 import toast from 'react-hot-toast';
 import type { TaxSetting } from '../types';
 
+type Numberish = number | '';
+
+type TaxFormState = Omit<TaxSetting, 'rate'> & { rate: Numberish };
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [taxes, setTaxes] = useState<TaxSetting[]>([]);
+  const [taxes, setTaxes] = useState<TaxFormState[]>([]);
   const [currency, setCurrency] = useState<{ code: string; symbol: string; position: 'BEFORE' | 'AFTER' }>({ 
     code: 'USD', 
     symbol: '$', 
@@ -17,10 +26,10 @@ export default function SettingsPage() {
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
   const [invoiceHeader, setInvoiceHeader] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
-  const [expiryAlertDays, setExpiryAlertDays] = useState(30);
-  const [serviceCharge, setServiceCharge] = useState(0);
+  const [expiryAlertDays, setExpiryAlertDays] = useState<Numberish>(30);
+  const [serviceCharge, setServiceCharge] = useState<Numberish>(0);
   const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
-  const [packagingCharge, setPackagingCharge] = useState(0);
+  const [packagingCharge, setPackagingCharge] = useState<Numberish>(0);
   const [packagingChargeType, setPackagingChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
 
   const [businessName, setBusinessName] = useState('');
@@ -31,14 +40,16 @@ export default function SettingsPage() {
 
   const [kitchenBillPrintingEnabled, setKitchenBillPrintingEnabled] = useState(true);
 
-  const [pointsPerDollar, setPointsPerDollar] = useState(0);
-  const [pointsExpiryDays, setPointsExpiryDays] = useState(0);
-  const [pointsMultiplierByTier, setPointsMultiplierByTier] = useState({
-    BASIC: 1,
-    SILVER: 1,
-    GOLD: 1,
-    PLATINUM: 1,
-  } as Record<'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM', number>);
+  const [pointsPerDollar, setPointsPerDollar] = useState<Numberish>(0);
+  const [pointsExpiryDays, setPointsExpiryDays] = useState<Numberish>(0);
+  const [pointsMultiplierByTier, setPointsMultiplierByTier] = useState(
+    {
+      BASIC: 1,
+      SILVER: 1,
+      GOLD: 1,
+      PLATINUM: 1,
+    } as Record<'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM', Numberish>
+  );
 
   const loadConfig = async () => {
     try {
@@ -48,12 +59,17 @@ export default function SettingsPage() {
         console.warn('Config API returned null/undefined');
         return;
       }
-      setTaxes(data.taxes || []);
+      setTaxes(
+        (data.taxes || []).map((t: any) => ({
+          ...t,
+          rate: typeof t.rate === 'number' ? t.rate : '',
+        }))
+      );
       setCurrency(data.currency || { code: 'USD', symbol: '$', position: 'BEFORE' as const });
       setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
       setInvoiceHeader(data.invoiceFormat?.header || '');
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
-      setExpiryAlertDays(data.expiryAlertDays || 30);
+      setExpiryAlertDays(typeof data.expiryAlertDays === 'number' ? data.expiryAlertDays : 30);
       setServiceCharge(typeof data.serviceCharge === 'number' ? data.serviceCharge : 0);
       setServiceChargeType((data.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
       setPackagingCharge(typeof data.packagingCharge === 'number' ? data.packagingCharge : 0);
@@ -94,14 +110,26 @@ export default function SettingsPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
+      const taxesPayload: TaxSetting[] = taxes.map((t) => ({
+        ...t,
+        rate: toNumber(t.rate, 0),
+      }));
+
+      const pointsMultiplierByTierPayload = {
+        BASIC: toNumber(pointsMultiplierByTier.BASIC, 1),
+        SILVER: toNumber(pointsMultiplierByTier.SILVER, 1),
+        GOLD: toNumber(pointsMultiplierByTier.GOLD, 1),
+        PLATINUM: toNumber(pointsMultiplierByTier.PLATINUM, 1),
+      };
+
       await configApi.update({
-        taxes,
+        taxes: taxesPayload,
         currency,
         logo: businessLogo || undefined,
         kitchenBillPrintingEnabled,
-        pointsPerDollar,
-        pointsExpiryDays,
-        pointsMultiplierByTier,
+        pointsPerDollar: toNumber(pointsPerDollar, 0),
+        pointsExpiryDays: toNumber(pointsExpiryDays, 0),
+        pointsMultiplierByTier: pointsMultiplierByTierPayload,
         businessDetails: {
           name: businessName,
           address: businessAddress,
@@ -115,10 +143,10 @@ export default function SettingsPage() {
           header: invoiceHeader,
           footer: invoiceFooter,
         },
-        expiryAlertDays,
-        serviceCharge,
+        expiryAlertDays: toNumber(expiryAlertDays, 30),
+        serviceCharge: toNumber(serviceCharge, 0),
         serviceChargeType,
-        packagingCharge,
+        packagingCharge: toNumber(packagingCharge, 0),
         packagingChargeType,
       });
 
@@ -153,7 +181,7 @@ export default function SettingsPage() {
   };
 
   const addTax = () => {
-    setTaxes([...taxes, { name: '', rate: 0, isDefault: false, type: 'EXCLUSIVE' }]);
+    setTaxes([...taxes, { name: '', rate: '', isDefault: false, type: 'EXCLUSIVE' }]);
   };
 
   const updateTax = (index: number, field: string, value: any) => {
@@ -256,7 +284,15 @@ export default function SettingsPage() {
                       type="number"
                       placeholder="Rate %"
                       value={tax.rate}
-                      onChange={(e) => updateTax(index, 'rate', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          updateTax(index, 'rate', '');
+                          return;
+                        }
+                        const n = Number(raw);
+                        updateTax(index, 'rate', Number.isFinite(n) ? n : '');
+                      }}
                       className="w-24"
                     />
                     <select
@@ -305,7 +341,15 @@ export default function SettingsPage() {
                   <Input
                     type="number"
                     value={serviceCharge}
-                    onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setServiceCharge('');
+                        return;
+                      }
+                      const n = Number(raw);
+                      setServiceCharge(Number.isFinite(n) ? n : '');
+                    }}
                     helperText={serviceChargeType === 'PERCENTAGE' ? 'e.g. 5 = 5% of subtotal' : 'Fixed Rs. amount'}
                     className="flex-1"
                   />
@@ -329,7 +373,15 @@ export default function SettingsPage() {
                   <Input
                     type="number"
                     value={packagingCharge}
-                    onChange={(e) => setPackagingCharge(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setPackagingCharge('');
+                        return;
+                      }
+                      const n = Number(raw);
+                      setPackagingCharge(Number.isFinite(n) ? n : '');
+                    }}
                     helperText={packagingChargeType === 'PERCENTAGE' ? 'e.g. 3 = 3% of subtotal' : 'Fixed Rs. amount'}
                     className="flex-1"
                   />
@@ -347,14 +399,30 @@ export default function SettingsPage() {
                 label="Points Per Currency Unit"
                 type="number"
                 value={pointsPerDollar}
-                onChange={(e) => setPointsPerDollar(parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setPointsPerDollar('');
+                    return;
+                  }
+                  const n = Number(raw);
+                  setPointsPerDollar(Number.isFinite(n) ? n : '');
+                }}
                 helperText="Base points earned per 1 unit of currency (global)"
               />
               <Input
                 label="Points Expiry Days"
                 type="number"
                 value={pointsExpiryDays}
-                onChange={(e) => setPointsExpiryDays(parseInt(e.target.value) || 0)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setPointsExpiryDays('');
+                    return;
+                  }
+                  const n = parseInt(raw, 10);
+                  setPointsExpiryDays(Number.isFinite(n) ? n : '');
+                }}
                 helperText="0 = no expiry (if supported by backend)"
               />
             </div>
@@ -366,25 +434,57 @@ export default function SettingsPage() {
                   label="Basic (x)"
                   type="number"
                   value={pointsMultiplierByTier.BASIC}
-                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, BASIC: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setPointsMultiplierByTier((p) => ({ ...p, BASIC: '' }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setPointsMultiplierByTier((p) => ({ ...p, BASIC: Number.isFinite(n) ? Math.max(0, n) : '' }));
+                  }}
                 />
                 <Input
                   label="Silver (x)"
                   type="number"
                   value={pointsMultiplierByTier.SILVER}
-                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, SILVER: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setPointsMultiplierByTier((p) => ({ ...p, SILVER: '' }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setPointsMultiplierByTier((p) => ({ ...p, SILVER: Number.isFinite(n) ? Math.max(0, n) : '' }));
+                  }}
                 />
                 <Input
                   label="Gold (x)"
                   type="number"
                   value={pointsMultiplierByTier.GOLD}
-                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, GOLD: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setPointsMultiplierByTier((p) => ({ ...p, GOLD: '' }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setPointsMultiplierByTier((p) => ({ ...p, GOLD: Number.isFinite(n) ? Math.max(0, n) : '' }));
+                  }}
                 />
                 <Input
                   label="Platinum (x)"
                   type="number"
                   value={pointsMultiplierByTier.PLATINUM}
-                  onChange={(e) => setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: '' }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setPointsMultiplierByTier((p) => ({ ...p, PLATINUM: Number.isFinite(n) ? Math.max(0, n) : '' }));
+                  }}
                 />
               </div>
               <p className="mt-2 text-xs text-slate-500">
@@ -480,7 +580,15 @@ export default function SettingsPage() {
               label="Expiry Alert Days"
               type="number"
               value={expiryAlertDays}
-              onChange={(e) => setExpiryAlertDays(parseInt(e.target.value) || 30)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setExpiryAlertDays('');
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                setExpiryAlertDays(Number.isFinite(n) ? n : '');
+              }}
               helperText="Days before expiry to show warning alerts"
             />
           </Card>

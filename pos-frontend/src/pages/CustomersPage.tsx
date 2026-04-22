@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, ConfirmDialog } from '../components';
 import { customersApi } from '../api';
 import type { Customer, CustomerFormData } from '../types';
 import { formatMoney } from '../money';
+import toast from 'react-hot-toast';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchReadOnly, setSearchReadOnly] = useState(true);
+  const [searchFieldName] = useState(
+    () => `q-customer-lookup-${Math.random().toString(36).slice(2, 10)}`
+  );
   const [tierFilter, setTierFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -35,6 +40,8 @@ export default function CustomersPage() {
   const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyData, setHistoryData] = useState<any>(null);
+  const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [formData, setFormData] = useState<CustomerFormData>({
     name: '',
@@ -48,6 +55,7 @@ export default function CustomersPage() {
       setLoading(true);
       const res = await customersApi.getAll({ 
         search,
+        status: 'ACTIVE',
         tier: tierFilter as any || undefined,
       });
       setCustomers(res.customers || []);
@@ -64,7 +72,7 @@ export default function CustomersPage() {
 
   const openCreateModal = () => {
     setEditingCustomer(null);
-    setFormData({ name: '', phone: '', email: '', address: '', dob: '', anniversary: '', notes: '', tier: 'BASIC' });
+    setFormData({ name: '', phone: '', email: '', address: '', dob: '', notes: '', tier: 'BASIC' });
     setModalOpen(true);
   };
 
@@ -76,7 +84,6 @@ export default function CustomersPage() {
       email: customer.email || '',
       address: customer.address || '',
       dob: customer.dob ? customer.dob.split('T')[0] : '',
-      anniversary: customer.anniversary ? customer.anniversary.split('T')[0] : '',
       notes: customer.notes || '',
       tier: customer.tier || 'BASIC',
     });
@@ -93,9 +100,39 @@ export default function CustomersPage() {
       setHistoryData(data);
     } catch (error) {
       console.error('Failed to load customer history:', error);
-      alert('Failed to load customer history');
+      toast.error('Failed to load customer history');
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const openDeleteDialog = (customer: Customer) => {
+    setDeleteCustomer(customer);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setDeleteCustomer(null);
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!deleteCustomer) return;
+
+    try {
+      setDeleting(true);
+      const deletingId = deleteCustomer._id;
+      const response = await customersApi.delete(deletingId);
+      const backendMessage = String((response as { message?: string })?.message || '');
+
+      await loadCustomers();
+      setCustomers((prev) => prev.filter((customer) => customer._id !== deletingId));
+
+      toast.success(`✅ ${backendMessage || 'Customer deleted successfully'}`);
+      setDeleteCustomer(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Failed to delete customer');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -105,23 +142,18 @@ export default function CustomersPage() {
       const normalizedPhone = normalizePhoneInput(formData.phone || '');
 
       if (!name || !normalizedPhone) {
-        alert('Name and phone are required');
+        toast.error('Name and phone are required');
         return;
       }
 
       const digits = phoneDigits(normalizedPhone);
       if (digits.length < 10 || digits.length > 15) {
-        alert('Phone number must be 10 to 15 digits');
+        toast.error('Phone number must be 10 to 15 digits');
         return;
       }
 
       if (!isValidYmd(formData.dob || '')) {
-        alert('Date of Birth must be in YYYY-MM-DD format');
-        return;
-      }
-
-      if (!isValidYmd(formData.anniversary || '')) {
-        alert('Anniversary must be in YYYY-MM-DD format');
+        toast.error('Date of Birth must be in YYYY-MM-DD format');
         return;
       }
 
@@ -133,17 +165,18 @@ export default function CustomersPage() {
       };
 
       if (!payload.dob) delete payload.dob;
-      if (!payload.anniversary) delete payload.anniversary;
 
       if (editingCustomer) {
         await customersApi.update(editingCustomer._id, payload);
+        toast.success('✅ Customer updated successfully');
       } else {
         await customersApi.create(payload);
+        toast.success('✅ Customer created successfully');
       }
       setModalOpen(false);
       loadCustomers();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save customer');
+      toast.error(error?.response?.data?.message || 'Failed to save customer');
     } finally {
       setSaving(false);
     }
@@ -199,6 +232,9 @@ export default function CustomersPage() {
           <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
             Edit
           </Button>
+          <Button size="sm" variant="danger" onClick={() => openDeleteDialog(item)}>
+            Delete
+          </Button>
         </div>
       ),
     },
@@ -217,6 +253,13 @@ export default function CustomersPage() {
             placeholder="Search by name, phone, or code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            name={searchFieldName}
+            autoComplete="off"
+            readOnly={searchReadOnly}
+            onFocus={() => setSearchReadOnly(false)}
+            onBlur={() => setSearchReadOnly(true)}
+            type="search"
+            spellCheck={false}
             className="max-w-md"
           />
           <select
@@ -257,16 +300,40 @@ export default function CustomersPage() {
         }
       >
         <div className="space-y-4">
+          {/* Decoy fields reduce aggressive browser/profile autofill on real inputs */}
+          <input
+            type="text"
+            name="fake-username"
+            autoComplete="username"
+            tabIndex={-1}
+            className="hidden"
+            aria-hidden="true"
+          />
+          <input
+            type="password"
+            name="fake-password"
+            autoComplete="new-password"
+            tabIndex={-1}
+            className="hidden"
+            aria-hidden="true"
+          />
+
           <Input
             label="Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            name="cf-name"
+            autoComplete="new-password"
+            data-lpignore="true"
             required
           />
           <Input
             label="Phone"
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: normalizePhoneInput(e.target.value) })}
+            name="cf-phone"
+            autoComplete="new-password"
+            data-lpignore="true"
             inputMode="tel"
             helperText="Digits only (10–15). Use + for country code if needed."
             required
@@ -276,30 +343,27 @@ export default function CustomersPage() {
             type="email"
             value={formData.email || ''}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            name="cf-email"
+            autoComplete="new-password"
+            data-lpignore="true"
           />
           <Input
             label="Address"
             value={formData.address || ''}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            name="cf-address"
+            autoComplete="new-password"
+            data-lpignore="true"
           />
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Date of Birth"
-              type="text"
-              value={formData.dob || ''}
-              onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-              placeholder="YYYY-MM-DD"
-              helperText="Type as YYYY-MM-DD"
-            />
-            <Input
-              label="Anniversary"
-              type="text"
-              value={formData.anniversary || ''}
-              onChange={(e) => setFormData({ ...formData, anniversary: e.target.value })}
-              placeholder="YYYY-MM-DD"
-              helperText="Type as YYYY-MM-DD"
-            />
-          </div>
+          <Input
+            label="Date of Birth"
+            type="date"
+            value={formData.dob || ''}
+            onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+            name="cf-dob"
+            autoComplete="new-password"
+            data-lpignore="true"
+          />
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">
               Tier
@@ -322,6 +386,9 @@ export default function CustomersPage() {
             <textarea
               value={formData.notes || ''}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              name="cf-notes"
+              autoComplete="new-password"
+              data-lpignore="true"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               rows={3}
             />
@@ -393,6 +460,17 @@ export default function CustomersPage() {
           <div className="p-4 text-sm text-slate-600">No data</div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteCustomer}
+        onClose={closeDeleteDialog}
+        onConfirm={handleDeleteCustomer}
+        title="Delete Customer"
+        message={deleteCustomer ? `Delete ${deleteCustomer.name}? This action permanently removes the customer record.` : 'Delete this customer? This action permanently removes the customer record.'}
+        confirmText="Delete"
+        variant="danger"
+        loading={deleting}
+      />
     </Layout>
   );
 }

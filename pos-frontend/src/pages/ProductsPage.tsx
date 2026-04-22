@@ -1,9 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal, ConfirmDialog } from '../components';
 import { productsApi, categoriesApi, unitsApi, discountsApi } from '../api';
 import type { Product, Category, ProductFormData, Unit, Discount } from '../types';
 import toast from 'react-hot-toast';
 import { formatMoney } from '../money';
+
+type Numberish = number | '';
+
+type ProductFormState = Omit<
+  ProductFormData,
+  'price' | 'cost' | 'taxRate' | 'lowStockThreshold' | 'preparationTime'
+> & {
+  price: Numberish;
+  cost: Numberish;
+  taxRate: Numberish;
+  lowStockThreshold: Numberish;
+  preparationTime: Numberish;
+};
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
+
+const toOptionalNumber = (v: Numberish, min?: number) => {
+  if (v === '') return undefined;
+  if (!Number.isFinite(v)) return undefined;
+  if (typeof min === 'number' && v < min) return min;
+  return v;
+};
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -17,24 +42,30 @@ export default function ProductsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   // Unit creation modal
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
   const [newUnitSymbol, setNewUnitSymbol] = useState('');
 
-  const [formData, setFormData] = useState<ProductFormData>({
+  const [formData, setFormData] = useState<ProductFormState>({
     name: '',
     sku: '',
     barcode: '',
     category: '',
     discount: '',
-    price: 0,
-    cost: 0,
-    taxRate: 0,
+    price: '',
+    cost: '',
+    taxRate: '',
     trackStock: false,
     lowStockThreshold: 5,
-    preparationTime: undefined,
+    preparationTime: '',
     unit: '',
   });
 
@@ -192,12 +223,12 @@ export default function ProductsPage() {
       barcode: '', 
       category: '', 
       discount: '',
-      price: 0, 
-      cost: 0, 
-      taxRate: 0,
+      price: '', 
+      cost: '', 
+      taxRate: '',
       trackStock: false,
       lowStockThreshold: 5,
-      preparationTime: undefined,
+      preparationTime: '',
       unit: '',
     });
     setModalOpen(true);
@@ -218,13 +249,17 @@ export default function ProductsPage() {
       discount: discountId,
       price: product.price,
       cost: product.cost,
-      taxRate: product.taxRate || 0,
+      taxRate: typeof product.taxRate === 'number' ? product.taxRate : 0,
       trackStock: product.trackStock || false,
       lowStockThreshold: product.lowStockThreshold || 5,
-      preparationTime: product.preparationTime,
+      preparationTime: typeof product.preparationTime === 'number' ? product.preparationTime : '',
       unit: typeof product.unit === 'string' ? product.unit : product.unit?._id || '',
     });
     setModalOpen(true);
+  };
+
+  const openViewModal = (product: Product) => {
+    setViewingProduct(product);
   };
 
   const handleSave = async () => {
@@ -241,11 +276,11 @@ export default function ProductsPage() {
       toast.error('Please select a category');
       return;
     }
-    if (formData.price === undefined || formData.price < 0) {
+    if (typeof formData.price !== 'number' || formData.price < 0) {
       toast.error('Please enter a valid price');
       return;
     }
-    if (formData.cost === undefined || formData.cost < 0) {
+    if (typeof formData.cost !== 'number' || formData.cost < 0) {
       toast.error('Please enter a valid cost');
       return;
     }
@@ -254,6 +289,11 @@ export default function ProductsPage() {
       setSaving(true);
       const payload: ProductFormData = {
         ...formData,
+        price: toNumber(formData.price, 0),
+        cost: toNumber(formData.cost, 0),
+        taxRate: toNumber(formData.taxRate, 0),
+        lowStockThreshold: toNumber(formData.lowStockThreshold, 5),
+        preparationTime: toOptionalNumber(formData.preparationTime),
         discount: formData.discount ? formData.discount : undefined,
       };
       if (editingProduct) {
@@ -272,14 +312,24 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+  const requestDelete = (product: Product) => {
+    setDeletingProduct(product);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingProduct?._id) return;
     try {
-      await productsApi.delete(id);
+      setDeleting(true);
+      await productsApi.delete(deletingProduct._id);
       toast.success('🗑️ Product deleted successfully');
+      setDeleteConfirmOpen(false);
+      setDeletingProduct(null);
       loadProducts();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to delete product');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -398,10 +448,13 @@ export default function ProductsPage() {
       header: 'Actions',
       render: (item: Product) => (
         <div className="flex gap-2">
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
+            View
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
             Edit
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)}>
             Delete
           </Button>
         </div>
@@ -550,21 +603,45 @@ export default function ProductsPage() {
               label="Price"
               type="number"
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  setFormData({ ...formData, price: '' });
+                  return;
+                }
+                const n = Number(value);
+                setFormData({ ...formData, price: Number.isFinite(n) ? n : '' });
+              }}
               required
             />
             <Input
               label="Cost"
               type="number"
               value={formData.cost}
-              onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  setFormData({ ...formData, cost: '' });
+                  return;
+                }
+                const n = Number(value);
+                setFormData({ ...formData, cost: Number.isFinite(n) ? n : '' });
+              }}
               required
             />
             <Input
               label="Tax Rate (%)"
               type="number"
               value={formData.taxRate}
-              onChange={(e) => setFormData({ ...formData, taxRate: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  setFormData({ ...formData, taxRate: '' });
+                  return;
+                }
+                const n = Number(value);
+                setFormData({ ...formData, taxRate: Number.isFinite(n) ? n : '' });
+              }}
             />
           </div>
           <div className="grid grid-cols-3 gap-4 items-end">
@@ -583,20 +660,140 @@ export default function ProductsPage() {
             <Input
               label="Low Stock Threshold"
               type="number"
-              value={formData.lowStockThreshold || 5}
-              onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value) || 5 })}
+              value={formData.lowStockThreshold}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, lowStockThreshold: '' });
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                setFormData({ ...formData, lowStockThreshold: Number.isFinite(n) ? n : '' });
+              }}
               disabled={!formData.trackStock}
             />
             <Input
               label="Prep Time (min)"
               type="number"
-              value={formData.preparationTime || ''}
-              onChange={(e) => setFormData({ ...formData, preparationTime: parseInt(e.target.value) || undefined })}
+              value={formData.preparationTime}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, preparationTime: '' });
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                setFormData({ ...formData, preparationTime: Number.isFinite(n) ? n : '' });
+              }}
               placeholder="Optional"
             />
           </div>
         </div>
       </Modal>
+
+      <Modal
+        isOpen={!!viewingProduct}
+        onClose={() => setViewingProduct(null)}
+        title="View Product"
+        size="lg"
+        footer={
+          <Button variant="outline" onClick={() => setViewingProduct(null)}>
+            Close
+          </Button>
+        }
+      >
+        {viewingProduct && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Name" value={viewingProduct.name} disabled />
+              <Input label="SKU" value={viewingProduct.sku} disabled />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Barcode" value={viewingProduct.barcode || ''} disabled />
+              <Input
+                label="Category"
+                value={
+                  (typeof viewingProduct.category === 'object'
+                    ? viewingProduct.category?.name
+                    : categoryById.get(viewingProduct.category)?.name) ||
+                  ''
+                }
+                disabled
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Price" value={formatMoney(viewingProduct.price)} disabled />
+              <Input label="Cost" value={formatMoney(viewingProduct.cost)} disabled />
+              <Input label="Tax Rate (%)" value={`${viewingProduct.taxRate || 0}%`} disabled />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <Input
+                label="Discount"
+                value={
+                  viewingProduct.discount
+                    ? typeof viewingProduct.discount === 'object'
+                      ? viewingProduct.discount?.name || ''
+                      : discounts.find((d) => d._id === viewingProduct.discount)?.name || ''
+                    : ''
+                }
+                disabled
+              />
+              <Input
+                label="Unit"
+                value={
+                  viewingProduct.unit
+                    ? typeof viewingProduct.unit === 'object'
+                      ? viewingProduct.unit?.name || ''
+                      : units.find((u) => u._id === viewingProduct.unit)?.name || ''
+                    : ''
+                }
+                disabled
+              />
+              <Input
+                label="Status"
+                value={viewingProduct.isActive ? 'Active' : 'Inactive'}
+                disabled
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <Input
+                label="Stock Tracking"
+                value={viewingProduct.trackStock ? 'Enabled' : 'Disabled'}
+                disabled
+              />
+              <Input
+                label="Low Stock Threshold"
+                value={`${viewingProduct.lowStockThreshold || 5}`}
+                disabled
+              />
+              <Input
+                label="Prep Time (min)"
+                value={viewingProduct.preparationTime ? `${viewingProduct.preparationTime}` : ''}
+                disabled
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingProduct(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Product"
+        message={`Delete ${deletingProduct?.name || 'this product'}? This action permanently removes the product record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
 
       {/* Create Unit Modal */}
       <Modal

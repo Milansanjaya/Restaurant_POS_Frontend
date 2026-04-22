@@ -7,6 +7,12 @@ import type {
   CustomerStatus,
 } from '../types';
 
+type DeleteCustomerResponse = {
+  success?: boolean;
+  message?: string;
+  data?: unknown;
+};
+
 export const customersApi = {
   getAll: async (
     params?: PaginationParams & { status?: CustomerStatus; tier?: CustomerTier }
@@ -41,9 +47,17 @@ export const customersApi = {
     return res.data.data;
   },
 
-  delete: async (id: string) => {
-    const res = await api.delete(`/customers/${id}`);
-    return res.data;
+  delete: async (id: string, permanent = true) => {
+    const res = await api.delete<DeleteCustomerResponse>(`/customers/${id}`, {
+      params: permanent ? { permanent: true } : undefined,
+    });
+    const payload = res.data;
+
+    if (payload?.success === false) {
+      throw new Error(payload.message || 'Failed to delete customer');
+    }
+
+    return payload;
   },
 
   getHistory: async (id: string, params?: { page?: number; limit?: number }) => {

@@ -3,6 +3,19 @@ import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } f
 import { suppliersApi } from '../api';
 import type { Supplier, SupplierFormData, SupplierTransaction } from '../types';
 import { formatMoney } from '../money';
+import toast from 'react-hot-toast';
+
+type Numberish = number | '';
+
+type SupplierFormState = Omit<SupplierFormData, 'creditLimit' | 'paymentTerms'> & {
+  creditLimit: Numberish;
+  paymentTerms: Numberish;
+};
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -20,17 +33,17 @@ export default function SuppliersPage() {
   const [ledgerData, setLedgerData] = useState<SupplierTransaction[]>([]);
   
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentAmount, setPaymentAmount] = useState<Numberish>('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
 
-  const [formData, setFormData] = useState<SupplierFormData>({
+  const [formData, setFormData] = useState<SupplierFormState>({
     code: '',
     name: '',
     contactPerson: '',
     phone: '',
     email: '',
     address: '',
-    creditLimit: 0,
+    creditLimit: '',
     paymentTerms: 30,
     gstNumber: '',
     panNumber: '',
@@ -61,7 +74,7 @@ export default function SuppliersPage() {
       phone: '',
       email: '',
       address: '',
-      creditLimit: 0,
+      creditLimit: '',
       paymentTerms: 30,
       gstNumber: '',
       panNumber: '',
@@ -94,15 +107,22 @@ export default function SuppliersPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
+      const payload: SupplierFormData = {
+        ...formData,
+        creditLimit: toNumber(formData.creditLimit, 0),
+        paymentTerms: toNumber(formData.paymentTerms, 30),
+      };
       if (editingSupplier) {
-        await suppliersApi.update(editingSupplier._id, formData);
+        await suppliersApi.update(editingSupplier._id, payload);
+        toast.success('✅ Supplier updated successfully');
       } else {
-        await suppliersApi.create(formData);
+        await suppliersApi.create(payload);
+        toast.success('✅ Supplier created successfully');
       }
       setModalOpen(false);
       loadSuppliers();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save supplier');
+      toast.error(error?.response?.data?.message || 'Failed to save supplier');
     } finally {
       setSaving(false);
     }
@@ -121,13 +141,13 @@ export default function SuppliersPage() {
 
   const openPayment = (supplier: Supplier) => {
     setLedgerSupplier(supplier);
-    setPaymentAmount(0);
+    setPaymentAmount('');
     setPaymentMethod('CASH');
     setPaymentOpen(true);
   };
 
   const handlePayment = async () => {
-    if (!ledgerSupplier || paymentAmount <= 0) return;
+    if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) return;
     try {
       await suppliersApi.recordPayment(ledgerSupplier._id, {
         amount: paymentAmount,
@@ -135,8 +155,21 @@ export default function SuppliersPage() {
       });
       setPaymentOpen(false);
       loadSuppliers();
+      toast.success('✅ Payment recorded successfully');
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to record payment');
+      toast.error(error?.response?.data?.message || 'Failed to record payment');
+    }
+  };
+
+  const handleDelete = async (supplier: Supplier) => {
+    if (!confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) return;
+
+    try {
+      await suppliersApi.delete(supplier._id);
+      toast.success('🗑️ Supplier deleted successfully');
+      loadSuppliers();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to delete supplier');
     }
   };
 
@@ -179,6 +212,9 @@ export default function SuppliersPage() {
           </Button>
           <Button size="sm" variant="ghost" onClick={() => openPayment(item)}>
             Pay
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handleDelete(item)}>
+            Delete
           </Button>
         </div>
       ),
@@ -268,14 +304,30 @@ export default function SuppliersPage() {
               label="Credit Limit"
               type="number"
               value={formData.creditLimit}
-              onChange={(e) => setFormData({ ...formData, creditLimit: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, creditLimit: '' });
+                  return;
+                }
+                const n = Number(raw);
+                setFormData({ ...formData, creditLimit: Number.isFinite(n) ? n : '' });
+              }}
               required
             />
             <Input
               label="Payment Terms (days)"
               type="number"
               value={formData.paymentTerms}
-              onChange={(e) => setFormData({ ...formData, paymentTerms: parseInt(e.target.value) || 30 })}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, paymentTerms: '' });
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                setFormData({ ...formData, paymentTerms: Number.isFinite(n) ? n : '' });
+              }}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -424,7 +476,15 @@ export default function SuppliersPage() {
             label="Amount"
             type="number"
             value={paymentAmount}
-            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === '') {
+                setPaymentAmount('');
+                return;
+              }
+              const n = Number(raw);
+              setPaymentAmount(Number.isFinite(n) ? n : '');
+            }}
           />
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Method</label>

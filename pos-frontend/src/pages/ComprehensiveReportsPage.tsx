@@ -10,8 +10,10 @@ import {
   batchesApi,
   tablesApi,
   reservationsApi,
-  reportsApi
+  reportsApi,
+  orderReturnsApi
 } from '../api';
+import type { OrderReturn } from '../api/orderReturns.api';
 import type { 
   Product, 
   Sale, 
@@ -60,6 +62,8 @@ export default function ComprehensiveReportsPage() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [profitReport, setProfitReport] = useState<ProfitReport | null>(null);
+  const [orderReturns, setOrderReturns] = useState<OrderReturn[]>([]);
+  const [returnsLoading, setReturnsLoading] = useState(false);
 
   const parseDateValue = (value: string | Date | null | undefined): Date | null => {
     if (!value) return null;
@@ -129,8 +133,67 @@ export default function ComprehensiveReportsPage() {
     return filterByDateRange(days, (d) => d.date);
   }, [profitReport, filterFrom, filterTo]);
 
+  const returnsByDate = useMemo(() => {
+    const map = new Map<string, { customerRefund: number; customerCost: number; internalCost: number }>();
+    (orderReturns || []).forEach((r) => {
+      const dateKey = r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '';
+      if (!dateKey) return;
+      const entry = map.get(dateKey) || { customerRefund: 0, customerCost: 0, internalCost: 0 };
+      const refund = typeof r.refundAmount === 'number' ? r.refundAmount : 0;
+      const cost = typeof r.totalCostAmount === 'number' ? r.totalCostAmount : 0;
+      if (r.returnType === 'CUSTOMER') {
+        entry.customerRefund += refund;
+        entry.customerCost += cost;
+      } else {
+        entry.internalCost += cost;
+      }
+      map.set(dateKey, entry);
+    });
+    return map;
+  }, [orderReturns]);
+
+  const filteredProfitDaysAdjusted: ProfitReportDay[] = useMemo(() => {
+    const baseDays = filteredProfitDays || [];
+    const dayByDate = new Map<string, ProfitReportDay>();
+    baseDays.forEach((d) => dayByDate.set(d.date, d));
+
+    const dates = new Set<string>();
+    baseDays.forEach((d) => dates.add(d.date));
+    returnsByDate.forEach((_v, k) => dates.add(k));
+
+    const sortedDates = Array.from(dates).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    return sortedDates.map((date) => {
+      const base: ProfitReportDay =
+        dayByDate.get(date) ||
+        ({
+          date,
+          totalOrders: 0,
+          grossSales: 0,
+          discount: 0,
+          netSales: 0,
+          totalCost: 0,
+          profit: 0,
+        } as ProfitReportDay);
+
+      const r = returnsByDate.get(date);
+      if (!r) return base;
+
+      const adjustedNetSales = (base.netSales || 0) - r.customerRefund;
+      const adjustedCost = (base.totalCost || 0) - r.customerCost + r.internalCost;
+      const adjustedProfit = adjustedNetSales - adjustedCost;
+
+      return {
+        ...base,
+        netSales: adjustedNetSales,
+        totalCost: adjustedCost,
+        profit: adjustedProfit,
+      };
+    });
+  }, [filteredProfitDays, returnsByDate]);
+
   const profitTotals = useMemo(() => {
-    return filteredProfitDays.reduce(
+    return filteredProfitDaysAdjusted.reduce(
       (acc, d) => {
         acc.totalOrders += d.totalOrders || 0;
         acc.grossSales += d.grossSales || 0;
@@ -149,7 +212,78 @@ export default function ComprehensiveReportsPage() {
         profit: 0,
       }
     );
-  }, [filteredProfitDays]);
+  }, [filteredProfitDaysAdjusted]);
+
+  const returnsTotals = useMemo(() => {
+    return (orderReturns || []).reduce(
+      (acc, r) => {
+        const refund = typeof r.refundAmount === 'number' ? r.refundAmount : 0;
+        const cost = typeof r.totalCostAmount === 'number' ? r.totalCostAmount : 0;
+        const net = typeof r.netPnlImpact === 'number'
+          ? r.netPnlImpact
+          : (r.returnType === 'CUSTOMER' ? -Math.max(0, refund - cost) : -cost);
+
+        if (r.returnType === 'CUSTOMER') {
+          acc.customerRefund += refund;
+          acc.customerCostRecovered += cost;
+        } else {
+          acc.internalCostWastage += cost;
+        }
+
+        acc.netReturnImpact += net;
+        acc.count += 1;
+        return acc;
+      },
+      {
+        count: 0,
+        customerRefund: 0,
+        customerCostRecovered: 0,
+        internalCostWastage: 0,
+        netReturnImpact: 0,
+      }
+    );
+  }, [orderReturns]);
+
+  const isInRange = (iso: string, from: string, to: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return false;
+    const fromD = from ? new Date(`${from}T00:00:00`) : null;
+    const toD = to ? new Date(`${to}T23:59:59`) : null;
+    const ms = d.getTime();
+    if (fromD && ms < fromD.getTime()) return false;
+    if (toD && ms > toD.getTime()) return false;
+    return true;
+  };
+
+  const loadOrderReturnsForRange = async () => {
+    setReturnsLoading(true);
+    try {
+      const from = filterFrom;
+      const to = filterTo;
+      const limit = 200;
+      let page = 1;
+      let total = Number.POSITIVE_INFINITY;
+      const all: OrderReturn[] = [];
+      while (all.length < total) {
+        const res = await orderReturnsApi.getAll({ page, limit } as any);
+        const batch = res.orderReturns || [];
+        total = typeof res.total === 'number' ? res.total : all.length + batch.length;
+        all.push(...batch);
+        if (batch.length === 0) break;
+        page += 1;
+        if (page > 50) break;
+      }
+
+      // If no filters are set, keep all returns; otherwise, filter by range
+      const filtered = !from && !to ? all : all.filter((r) => r?.createdAt && isInRange(r.createdAt, from, to));
+      setOrderReturns(filtered);
+    } catch (error) {
+      console.error('Failed to load order returns:', error);
+      setOrderReturns([]);
+    } finally {
+      setReturnsLoading(false);
+    }
+  };
 
   const loadSectionData = async (section: ReportSection) => {
     setLoading(true);
@@ -171,6 +305,7 @@ export default function ComprehensiveReportsPage() {
             to: filterTo || undefined,
           });
           setProfitReport(profitData || null);
+          await loadOrderReturnsForRange();
           break;
         case 'customers':
           const customersData = await customersApi.getAll();
@@ -272,7 +407,7 @@ export default function ComprehensiveReportsPage() {
       switch (activeSection) {
         case 'products': return { title: 'Products Report', data: filteredProducts, columns: ['Name', 'SKU', 'Price', 'Cost', 'Category', 'Unit', 'Status'] };
         case 'sales': return { title: 'Sales Report', data: filteredSales, columns: ['Invoice', 'Customer', 'Total', 'Profit', 'Payment', 'Status', 'Date'] };
-        case 'profit': return { title: 'Profit Report', data: filteredProfitDays, columns: ['Date', 'Orders', 'Gross Sales', 'Discount', 'Net Sales', 'Cost', 'Profit'] };
+        case 'profit': return { title: 'Profit Report', data: filteredProfitDaysAdjusted, columns: ['Date', 'Orders', 'Gross Sales', 'Discount', 'Net Sales', 'Cost', 'Profit'] };
         case 'customers': return { title: 'Customers Report', data: filteredCustomers, columns: ['Name', 'Phone', 'Email', 'Address', 'Loyalty Points'] };
         case 'suppliers': return { title: 'Suppliers Report', data: filteredSuppliers, columns: ['Name', 'Contact', 'Email', 'Phone', 'Address'] };
         case 'purchase-orders': return { title: 'Purchase Orders Report', data: filteredPurchaseOrders, columns: ['PO Number', 'Supplier', 'Total', 'Status', 'Date'] };
@@ -504,7 +639,7 @@ export default function ComprehensiveReportsPage() {
 
   const sections = [
     { id: 'sales' as ReportSection, label: '💰 Sales', count: filteredSales.length },
-    { id: 'profit' as ReportSection, label: '📈 Profit', count: filteredProfitDays.length },
+    { id: 'profit' as ReportSection, label: '📈 Profit', count: filteredProfitDaysAdjusted.length },
     { id: 'products' as ReportSection, label: '📦 Products', count: filteredProducts.length },
     { id: 'customers' as ReportSection, label: '👥 Customers', count: filteredCustomers.length },
     { id: 'suppliers' as ReportSection, label: '🏭 Suppliers', count: filteredSuppliers.length },
@@ -664,7 +799,7 @@ export default function ComprehensiveReportsPage() {
                     const dataMap: Record<string, any[]> = { 
                       products: filteredProducts,
                       sales: filteredSales,
-                      profit: filteredProfitDays,
+                      profit: filteredProfitDaysAdjusted,
                       customers: filteredCustomers,
                       suppliers: filteredSuppliers,
                       'purchase-orders': filteredPurchaseOrders,
@@ -808,6 +943,37 @@ export default function ComprehensiveReportsPage() {
                   </div>
                 </div>
 
+                <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Customer Refunds</p>
+                    <p className="mt-1 text-xl font-semibold text-red-700">
+                      {formatMoney(returnsTotals.customerRefund)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{returnsTotals.count} return(s)</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">COGS Recovered</p>
+                    <p className="mt-1 text-xl font-semibold text-emerald-700">
+                      {formatMoney(returnsTotals.customerCostRecovered)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">Restocked items cost</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Wastage Cost</p>
+                    <p className="mt-1 text-xl font-semibold text-red-700">
+                      {formatMoney(returnsTotals.internalCostWastage)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">Internal returns</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-600">Net Return Impact</p>
+                    <p className="mt-1 text-xl font-semibold text-red-700">
+                      − {formatMoney(Math.abs(returnsTotals.netReturnImpact))}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">P&amp;L loss from returns</p>
+                  </div>
+                </div>
+
                 <Table
                   columns={[
                     { key: 'date', header: 'Date', render: (d: ProfitReportDay) => d.date },
@@ -852,8 +1018,9 @@ export default function ComprehensiveReportsPage() {
                       ),
                     },
                   ]}
-                  data={filteredProfitDays}
+                  data={filteredProfitDaysAdjusted}
                   keyExtractor={(d: ProfitReportDay) => d.date}
+                  loading={loading || returnsLoading}
                   emptyMessage="No profit data found"
                 />
               </div>

@@ -10,7 +10,7 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Inventory | null>(null);
-  const [adjustmentQty, setAdjustmentQty] = useState(0);
+  const [adjustmentQty, setAdjustmentQty] = useState('');
   const [adjustmentType, setAdjustmentType] = useState<'PURCHASE' | 'ADJUSTMENT' | 'RETURN'>('ADJUSTMENT');
   const [activeTab, setActiveTab] = useState<'tracked' | 'restaurant'>('tracked');
 
@@ -53,13 +53,14 @@ export default function InventoryPage() {
       return;
     }
     setSelectedItem(item);
-    setAdjustmentQty(0);
+    setAdjustmentQty('');
     setAdjustmentType('ADJUSTMENT');
     setAdjustModalOpen(true);
   };
 
   const handleAdjust = async () => {
-    if (!selectedItem || adjustmentQty === 0) {
+    const qty = parseInt(adjustmentQty, 10);
+    if (!selectedItem || !Number.isFinite(qty) || qty === 0) {
       toast.error('❌ Please enter a quantity to adjust');
       return;
     }
@@ -70,10 +71,10 @@ export default function InventoryPage() {
     try {
       await inventoryApi.adjust({
         productId,
-        quantityChange: adjustmentQty,
+        quantityChange: qty,
         type: adjustmentType,
       });
-      toast.success(`✅ Inventory adjusted by ${adjustmentQty > 0 ? '+' : ''}${adjustmentQty}`);
+      toast.success(`✅ Inventory adjusted by ${qty > 0 ? '+' : ''}${qty}`);
       setAdjustModalOpen(false);
       loadInventory();
     } catch (error: any) {
@@ -338,13 +339,13 @@ export default function InventoryPage() {
             label="Quantity Change"
             type="number"
             value={adjustmentQty}
-            onChange={(e) => setAdjustmentQty(parseInt(e.target.value) || 0)}
+            onChange={(e) => setAdjustmentQty(e.target.value)}
             helperText="Use positive to add, negative to remove"
           />
 
           <p className="text-sm text-slate-600">
             New Stock: <span className="font-medium">
-              {(selectedItem?.stockQuantity || 0) + adjustmentQty}
+              {(selectedItem?.stockQuantity || 0) + (parseInt(adjustmentQty, 10) || 0)}
             </span>
           </p>
         </div>

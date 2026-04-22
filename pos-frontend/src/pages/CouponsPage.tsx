@@ -5,16 +5,35 @@ import { couponsApi } from '../api/coupons.api';
 import type { Coupon, CouponFormData, DiscountType } from '../types';
 import { formatMoney } from '../money';
 
-const initialFormData: CouponFormData = {
+type Numberish = number | '';
+
+type CouponFormState = Omit<CouponFormData, 'value' | 'minOrderValue' | 'maxDiscount' | 'usageLimit'> & {
+  value: Numberish;
+  minOrderValue: Numberish;
+  maxDiscount?: Numberish;
+  usageLimit?: Numberish;
+};
+
+const initialFormData: CouponFormState = {
   code: '',
   discountType: 'FLAT',
-  value: 0,
+  value: '',
   expiryDate: '',
-  minOrderValue: 0,
-  maxDiscount: undefined,
+  minOrderValue: '',
+  maxDiscount: '',
   validFrom: '',
   validTo: '',
-  usageLimit: undefined,
+  usageLimit: '',
+};
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
+
+const toOptionalNumber = (v: Numberish | undefined) => {
+  if (v === '' || v === undefined) return undefined;
+  return Number.isFinite(v) ? v : undefined;
 };
 
 export default function CouponsPage() {
@@ -22,7 +41,7 @@ export default function CouponsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [formData, setFormData] = useState<CouponFormData>(initialFormData);
+  const [formData, setFormData] = useState<CouponFormState>(initialFormData);
   const [saving, setSaving] = useState(false);
 
   const loadCoupons = async () => {
@@ -54,21 +73,48 @@ export default function CouponsPage() {
       value: coupon.value,
       expiryDate: coupon.expiryDate.split('T')[0],
       minOrderValue: coupon.minOrderValue,
-      maxDiscount: coupon.maxDiscount,
+      maxDiscount: coupon.maxDiscount ?? '',
       validFrom: coupon.validFrom ? coupon.validFrom.split('T')[0] : '',
       validTo: coupon.validTo ? coupon.validTo.split('T')[0] : '',
-      usageLimit: coupon.usageLimit,
+      usageLimit: coupon.usageLimit ?? '',
     });
     setShowModal(true);
   };
 
   const handleSave = async () => {
+    const valueNum = toNumber(formData.value, 0);
+    if (!formData.code.trim()) {
+      alert('Coupon code is required');
+      return;
+    }
+    if (!formData.expiryDate) {
+      alert('Expiry date is required');
+      return;
+    }
+    if (!(typeof formData.value === 'number') || valueNum <= 0) {
+      alert('Please enter a valid discount amount');
+      return;
+    }
+    if (formData.discountType === 'PERCENTAGE' && valueNum > 100) {
+      alert('Percentage discount cannot exceed 100');
+      return;
+    }
+
     try {
       setSaving(true);
+      const payload: CouponFormData = {
+        ...formData,
+        code: formData.code.trim(),
+        value: valueNum,
+        minOrderValue: toNumber(formData.minOrderValue, 0),
+        maxDiscount: toOptionalNumber(formData.maxDiscount),
+        usageLimit: toOptionalNumber(formData.usageLimit),
+      };
+
       if (editingCoupon) {
-        await couponsApi.update(editingCoupon._id, formData);
+        await couponsApi.update(editingCoupon._id, payload);
       } else {
-        await couponsApi.create(formData);
+        await couponsApi.create(payload);
       }
       setShowModal(false);
       loadCoupons();
@@ -198,7 +244,15 @@ export default function CouponsPage() {
               label={formData.discountType === 'FLAT' ? 'Discount Amount (Rs.)' : 'Discount (%)'}
               type="number"
               value={formData.value}
-              onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, value: '' });
+                  return;
+                }
+                const n = Number(raw);
+                setFormData({ ...formData, value: Number.isFinite(n) ? n : '' });
+              }}
               min={0}
               max={formData.discountType === 'PERCENTAGE' ? 100 : undefined}
             />
@@ -207,16 +261,32 @@ export default function CouponsPage() {
             <Input
               label="Min Order Value"
               type="number"
-              value={formData.minOrderValue || 0}
-              onChange={(e) => setFormData({ ...formData, minOrderValue: parseFloat(e.target.value) || 0 })}
+              value={formData.minOrderValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  setFormData({ ...formData, minOrderValue: '' });
+                  return;
+                }
+                const n = Number(raw);
+                setFormData({ ...formData, minOrderValue: Number.isFinite(n) ? n : '' });
+              }}
               min={0}
             />
             {formData.discountType === 'PERCENTAGE' && (
               <Input
                 label="Max Discount (Rs.)"
                 type="number"
-                value={formData.maxDiscount || ''}
-                onChange={(e) => setFormData({ ...formData, maxDiscount: parseFloat(e.target.value) || undefined })}
+                value={formData.maxDiscount ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setFormData({ ...formData, maxDiscount: '' });
+                    return;
+                  }
+                  const n = Number(raw);
+                  setFormData({ ...formData, maxDiscount: Number.isFinite(n) ? n : '' });
+                }}
                 placeholder="No limit"
                 min={0}
               />
@@ -245,8 +315,16 @@ export default function CouponsPage() {
           <Input
             label="Usage Limit (Optional)"
             type="number"
-            value={formData.usageLimit || ''}
-            onChange={(e) => setFormData({ ...formData, usageLimit: parseInt(e.target.value) || undefined })}
+            value={formData.usageLimit ?? ''}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === '') {
+                setFormData({ ...formData, usageLimit: '' });
+                return;
+              }
+              const n = parseInt(raw, 10);
+              setFormData({ ...formData, usageLimit: Number.isFinite(n) ? n : '' });
+            }}
             placeholder="Unlimited"
             min={1}
           />
@@ -256,7 +334,7 @@ export default function CouponsPage() {
             </Button>
             <Button 
               onClick={handleSave} 
-              disabled={saving || !formData.code || !formData.expiryDate || formData.value <= 0}
+              disabled={saving || !formData.code || !formData.expiryDate || typeof formData.value !== 'number' || formData.value <= 0}
             >
               {saving ? 'Saving...' : editingCoupon ? 'Update' : 'Create'}
             </Button>

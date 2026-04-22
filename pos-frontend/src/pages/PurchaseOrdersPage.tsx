@@ -3,6 +3,7 @@ import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatus
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
 import { formatMoney } from '../money';
+import toast from 'react-hot-toast';
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -26,10 +27,14 @@ export default function PurchaseOrdersPage() {
     notes: '',
   });
 
-  const [newItem, setNewItem] = useState({
+  const [newItem, setNewItem] = useState<{
+    product_id: string;
+    quantity: number | '';
+    unitPrice: number | '';
+  }>({
     product_id: '',
     quantity: 1,
-    unitPrice: 0,
+    unitPrice: '',
   });
 
   const loadData = async () => {
@@ -63,6 +68,7 @@ export default function PurchaseOrdersPage() {
       deliveryDate: '',
       notes: '',
     });
+    setNewItem({ product_id: '', quantity: 1, unitPrice: '' });
     setModalOpen(true);
   };
 
@@ -85,9 +91,10 @@ export default function PurchaseOrdersPage() {
       setViewOrder(null);
       const po = await purchaseOrdersApi.getById(id);
       setViewOrder(po);
+      toast.success('📄 Purchase order details opened');
     } catch (error) {
       console.error('Failed to load PO:', error);
-      alert('Failed to load purchase order');
+      toast.error('Failed to load purchase order');
       setViewOpen(false);
     } finally {
       setViewLoading(false);
@@ -205,7 +212,7 @@ export default function PurchaseOrdersPage() {
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups to print.');
+      toast.error('Pop-up blocked. Please allow pop-ups to print.');
       return;
     }
     printWindow.document.write(printContent);
@@ -218,28 +225,47 @@ export default function PurchaseOrdersPage() {
       printPurchaseOrder(po);
     } catch (error) {
       console.error('Failed to load PO for print:', error);
-      alert('Failed to print purchase order');
+      toast.error('Failed to print purchase order');
     }
   };
 
   const addItem = () => {
-    if (!newItem.product_id || newItem.quantity <= 0) return;
+    if (!newItem.product_id) {
+      toast.error('Please select a product');
+      return;
+    }
     const product = products.find((p) => p._id === newItem.product_id);
-    if (!product) return;
+    if (!product) {
+      toast.error('Product not found');
+      return;
+    }
+
+    const quantity = newItem.quantity === '' ? NaN : Number(newItem.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Please enter a valid quantity');
+      return;
+    }
+
+    const fallbackCost = typeof product.cost === 'number' ? product.cost : 0;
+    const unitPrice = newItem.unitPrice === '' ? fallbackCost : Number(newItem.unitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      toast.error('Please enter a valid unit price');
+      return;
+    }
 
     const item: PurchaseOrderItem = {
       product_id: newItem.product_id,
       productName: product.name,
-      quantity: newItem.quantity,
-      unitPrice: newItem.unitPrice || product.cost,
-      totalPrice: newItem.quantity * (newItem.unitPrice || product.cost),
+      quantity,
+      unitPrice,
+      totalPrice: quantity * unitPrice,
     };
 
     const newItems = [...formData.items, item];
     const total = newItems.reduce((sum, i) => sum + i.totalPrice, 0);
     
     setFormData({ ...formData, items: newItems, totalAmount: total });
-    setNewItem({ product_id: '', quantity: 1, unitPrice: 0 });
+    setNewItem({ product_id: '', quantity: 1, unitPrice: '' });
   };
 
   const removeItem = (index: number) => {
@@ -249,17 +275,29 @@ export default function PurchaseOrdersPage() {
   };
 
   const handleSave = async () => {
+    if (!formData.supplier_id) {
+      toast.error('Please select a supplier');
+      return;
+    }
+
+    if (formData.items.length === 0) {
+      toast.error('Please add at least one item');
+      return;
+    }
+
     try {
       setSaving(true);
       if (editingId) {
         await purchaseOrdersApi.update(editingId, formData);
+        toast.success('✅ Purchase order updated successfully');
       } else {
         await purchaseOrdersApi.create(formData);
+        toast.success('✅ Purchase order created successfully');
       }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to save PO');
+      toast.error(error?.response?.data?.message || 'Failed to save PO');
     } finally {
       setSaving(false);
     }
@@ -269,9 +307,10 @@ export default function PurchaseOrdersPage() {
     if (!confirm('Are you sure you want to approve this PO?')) return;
     try {
       await purchaseOrdersApi.approve(id);
+      toast.success('✅ Purchase order approved');
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to approve PO');
+      toast.error(error?.response?.data?.message || 'Failed to approve PO');
     }
   };
 
@@ -279,9 +318,10 @@ export default function PurchaseOrdersPage() {
     if (!confirm('Are you sure you want to cancel this PO?')) return;
     try {
       await purchaseOrdersApi.cancel(id);
+      toast.success('✅ Purchase order cancelled');
       loadData();
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to cancel PO');
+      toast.error(error?.response?.data?.message || 'Failed to cancel PO');
     }
   };
 
@@ -386,7 +426,7 @@ export default function PurchaseOrdersPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} loading={saving} disabled={formData.items.length === 0}>
+            <Button onClick={handleSave} loading={saving} disabled={!formData.supplier_id || formData.items.length === 0}>
               {editingId ? "Update PO" : "Create PO"}
             </Button>
           </>
@@ -418,37 +458,48 @@ export default function PurchaseOrdersPage() {
           {/* Add Item */}
           <Card padding="sm">
             <h4 className="mb-3 font-medium">Add Item</h4>
-            <div className="flex gap-2">
-              <select
-                value={newItem.product_id}
-                onChange={(e) => {
-                  const product = products.find((p) => p._id === e.target.value);
-                  setNewItem({
-                    ...newItem,
-                    product_id: e.target.value,
-                    unitPrice: product?.cost || 0,
-                  });
-                }}
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">Select Product</option>
-                {products.map((p) => (
-                  <option key={p._id} value={p._id}>{p.name} ({p.sku})</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_180px_auto] md:items-end">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Product</label>
+                <select
+                  value={newItem.product_id}
+                  onChange={(e) => {
+                    const product = products.find((p) => p._id === e.target.value);
+                    setNewItem({
+                      ...newItem,
+                      product_id: e.target.value,
+                      unitPrice: typeof product?.cost === 'number' ? product.cost : '',
+                    });
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Select Product</option>
+                  {products.map((p) => (
+                    <option key={p._id} value={p._id}>{p.name} ({p.sku})</option>
+                  ))}
+                </select>
+              </div>
               <Input
-                placeholder="Qty"
+                label="Quantity"
                 type="number"
                 value={newItem.quantity}
-                onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 1 })}
-                className="w-20"
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    quantity: e.target.value === '' ? '' : parseInt(e.target.value, 10),
+                  })
+                }
               />
               <Input
-                placeholder="Price"
+                label="Unit Price"
                 type="number"
                 value={newItem.unitPrice}
-                onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })}
-                className="w-24"
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    unitPrice: e.target.value === '' ? '' : parseFloat(e.target.value),
+                  })
+                }
               />
               <Button onClick={addItem}>Add</Button>
             </div>
