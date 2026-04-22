@@ -32,7 +32,7 @@ type Product = {
   outOfStock?: boolean;
 };
 
-type PaymentMethod = 'CASH' | 'CARD' | 'UPI' | 'WALLET' | 'SPLIT';
+type PaymentMethod = 'CASH' | 'CARD' | 'BANK' | 'UPI' | 'WALLET' | 'SPLIT';
 type ManualDiscountType = 'PERCENTAGE' | 'FLAT' | '';  // Changed FIXED to FLAT to match backend
 
 type CustomerOption = {
@@ -1758,7 +1758,7 @@ const handleCreateSale = async () => {
   );
 
   return (
-    <div className="min-h-screen h-[100dvh] bg-slate-100 flex flex-col overflow-hidden">
+    <div className="min-h-screen h-dvh bg-slate-100 flex flex-col overflow-hidden">
       {/* Main Header */}
       <header className="grid grid-cols-[1fr_auto_1fr] items-center h-16 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-50 sticky top-0">
         <div className="min-w-0 justify-self-start">
@@ -1782,11 +1782,11 @@ const handleCreateSale = async () => {
             )}
           </div>
         </div>
-        {!isLgLayout && (
-          <div className="flex items-center gap-2 sm:gap-4 justify-self-end col-start-3">
+        <div className="justify-self-end col-start-3">
+          <div className="flex items-center gap-2 sm:gap-4 rounded-2xl bg-slate-100/80 p-2">
             {headerActions}
           </div>
-        )}
+        </div>
 
         {/* center column spacer */}
         <div className="col-start-2" />
@@ -1839,9 +1839,6 @@ const handleCreateSale = async () => {
               <div className="flex items-center gap-4">
                 <div className="flex-1 min-w-0">
                   {quickNavContent}
-                </div>
-                <div className="shrink-0 flex items-center gap-2 sm:gap-4">
-                  {headerActions}
                 </div>
               </div>
             </nav>
@@ -2413,16 +2410,31 @@ const handleCreateSale = async () => {
                 <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">
                   Payment Method
                 </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="touch-manipulation w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold"
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="WALLET">Wallet</option>
-                </select>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'CASH', label: 'CASH', icon: '💵' },
+                    { value: 'CARD', label: 'CARD', icon: '💳' },
+                    { value: 'BANK', label: 'BANK', icon: '🏦' },
+                  ] as const).map((opt) => {
+                    const selected = paymentMethod === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(opt.value)}
+                        className={
+                          "touch-manipulation rounded-xl border px-3 py-3 text-center text-sm font-extrabold transition active:scale-[0.99] " +
+                          (selected
+                            ? "border-indigo-600 bg-white text-indigo-700"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100")
+                        }
+                      >
+                        <div className="text-lg leading-none">{opt.icon}</div>
+                        <div className="mt-1 text-[11px] tracking-widest">{opt.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -3880,22 +3892,30 @@ const handleCreateSale = async () => {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Payment Method
                 </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(['CASH', 'CARD', 'UPI', 'WALLET'] as const).map((method) => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                        paymentMethod === method
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {method === 'CASH' && '💵'} {method === 'CARD' && '💳'} 
-                      {method === 'UPI' && '📱'} {method === 'WALLET' && '👛'}
-                      {method}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'CASH', label: 'CASH', icon: '💵' },
+                    { value: 'CARD', label: 'CARD', icon: '💳' },
+                    { value: 'BANK', label: 'BANK', icon: '🏦' },
+                  ] as const).map((opt) => {
+                    const selected = paymentMethod === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(opt.value)}
+                        className={
+                          "rounded-xl border px-4 py-3 text-center text-sm font-extrabold transition active:scale-[0.99] " +
+                          (selected
+                            ? "border-indigo-600 bg-white text-indigo-700"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100")
+                        }
+                      >
+                        <div className="text-lg leading-none">{opt.icon}</div>
+                        <div className="mt-1 text-[11px] tracking-widest">{opt.label}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
