@@ -103,6 +103,7 @@ export default function PosPage() {
     items: Array<{ _id: string; name: string; price: number; taxRate?: number; quantity: number }>;
   };
   const [tableOrders, setTableOrders] = useState<TableOrder[]>([]);
+  const [tableSaleIdByTable, setTableSaleIdByTable] = useState<Record<string, string>>({});
   
   // Table bill/payment modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -588,10 +589,6 @@ export default function PosPage() {
     }
   };
 
-  const scrollToCart = () => {
-    cartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const openQuickView = (title: string, path: string) => {
     setQuickView({ title, path });
   };
@@ -718,8 +715,8 @@ export default function PosPage() {
       // If action is 'pay', open the payment modal for this table
       if (state.action === 'pay') {
         const table = tables.find(t => t._id === state.tableId);
-        if (table && table.currentSale) {
-          // Trigger payment modal for this table
+        if (table) {
+          // Trigger payment flow for this table
           handleOpenTableBill(table);
         }
       }
@@ -988,35 +985,90 @@ export default function PosPage() {
     setCouponValidation(null);
   };
 
+  const loadCartFromLines = (
+    lines: Array<{ _id: string; name: string; price: number; taxRate?: number; quantity: number }>
+  ) => {
+    const normalized = (lines || [])
+      .map((li) => ({
+        _id: String(li?._id || ''),
+        name: String(li?.name || 'Item'),
+        price: Number(li?.price || 0),
+        taxRate: typeof li?.taxRate === 'number' ? li.taxRate : Number(li?.taxRate || 0),
+        quantity: Math.max(0, Math.floor(Number(li?.quantity || 0)))
+      }))
+      .filter((li) => li._id && li.quantity > 0);
+
+    if (normalized.length === 0) return false;
+
+    // Aggregate duplicates by product id
+    const byId = new Map<string, { _id: string; name: string; price: number; taxRate?: number; quantity: number }>();
+    for (const li of normalized) {
+      const existing = byId.get(li._id);
+      if (existing) existing.quantity += li.quantity;
+      else byId.set(li._id, { ...li });
+    }
+
+    clearCart();
+    for (const li of byId.values()) {
+      addItem({ _id: li._id, name: li.name, price: li.price, taxRate: li.taxRate });
+      setQty(li._id, li.quantity);
+    }
+    return true;
+  };
+
   // Handle opening table bill for payment
   const handleOpenTableBill = async (table: RestaurantTable) => {
-    // First check if there's a sale on this table (from database)
-    if (table.currentSale) {
-      try {
-        const saleId = typeof table.currentSale === 'string' ? table.currentSale : table.currentSale._id;
-        const sale = await getSaleById(saleId);
-        if (sale && sale.items && sale.items.length > 0) {
-          clearCart();
-          sale.items.forEach((item) => {
-            const product =
-              typeof item.product === 'object' && item.product ? item.product : null;
-            const productId = product ? product._id : String(item.product);
-            const productName = product?.name || 'Item';
-            for (let i = 0; i < item.quantity; i++) {
-              addItem({
-                _id: productId,
-                name: productName,
-                price: item.price,
-                taxRate: item.taxRate || 0
-              });
-            }
-          });
+    // Load the table bill into the cart (no popup)
+    setOrderType('DINE_IN');
+    setSelectedTable(table._id);
+    setSelectedTableForPayment(table);
+    setShowPaymentModal(false);
 
-          setOrderType('DINE_IN');
-          setSelectedTable(table._id);
-          setSelectedTableForPayment(table);
-          setShowPaymentModal(false);
-          scrollToCart();
+    // Prefer backend sale if present; fall back to locally-tracked saleId (newly created OPEN sale)
+    let saleId: string | null = null;
+    if (table.currentSale) {
+      saleId = typeof table.currentSale === 'string' ? table.currentSale : table.currentSale._id;
+    } else if (tableSaleIdByTable[table._id]) {
+      saleId = tableSaleIdByTable[table._id];
+    } else {
+      // Try refetching the table to see if backend has attached currentSale
+      try {
+        const fresh = await tablesApi.getById(table._id);
+        if (fresh?.currentSale) {
+          saleId = typeof fresh.currentSale === 'string' ? fresh.currentSale : fresh.currentSale._id;
+          setTableSaleIdByTable((prev) => ({ ...prev, [table._id]: saleId! }));
+        }
+      } catch {
+        // ignore and try local order fallback
+      }
+    }
+
+    if (saleId) {
+      try {
+        const sale = await getSaleById(saleId);
+
+        const rawItems: any[] = Array.isArray((sale as any)?.items)
+          ? (sale as any).items
+          : (Array.isArray((sale as any)?.sale?.items) ? (sale as any).sale.items : []);
+
+        const saleLines = rawItems.map((item: any) => {
+          const productObj = typeof item?.product === 'object' && item.product ? item.product : null;
+          const productId = productObj?._id || item?.productId || item?.product_id || item?.product || '';
+          const quantity = item?.quantity ?? item?.qty ?? item?.count ?? 0;
+          const price = item?.price ?? item?.unitPrice ?? item?.sellingPrice ?? 0;
+          const taxRate = item?.taxRate ?? item?.tax ?? 0;
+          const productName = productObj?.name || item?.productName || item?.name || 'Item';
+          return {
+            _id: String(productId),
+            name: String(productName),
+            price: Number(price || 0),
+            taxRate: Number(taxRate || 0),
+            quantity: Number(quantity || 0)
+          };
+        });
+
+        if (loadCartFromLines(saleLines)) {
+          setSelectedTableForPayment({ ...table, currentSale: table.currentSale ?? saleId } as any);
           return;
         }
       } catch (error) {
@@ -1029,27 +1081,21 @@ export default function PosPage() {
     
     if (!tableOrder || tableOrder.items.length === 0) {
       toast.error("No items in this table order");
+
+      setShowPaymentModal(false);
+      setSelectedTableForPayment(null);
       return;
     }
 
     // Load items into the cart for this table
-    clearCart();
-    tableOrder.items.forEach(item => {
-      for (let i = 0; i < item.quantity; i++) {
-        addItem({
-          _id: item._id,
-          name: item.name,
-          price: item.price,
-          taxRate: item.taxRate
-        });
-      }
-    });
+    if (!loadCartFromLines(tableOrder.items as any)) {
+      toast.error("No items in this table order");
 
-    setOrderType('DINE_IN');
-    setSelectedTable(table._id);
-    setSelectedTableForPayment(table);
-    setShowPaymentModal(false);
-    scrollToCart();
+      setShowPaymentModal(false);
+      setSelectedTableForPayment(null);
+      return;
+    }
+    setSelectedTableForPayment({ ...table, currentSale: table.currentSale ?? saleId } as any);
   };
 
   // Handle payment for table
@@ -1068,17 +1114,22 @@ export default function PosPage() {
     try {
       let sale: Sale;
 
-      if (selectedTableForPayment.currentSale) {
-        const saleId =
-          typeof selectedTableForPayment.currentSale === 'string'
-            ? selectedTableForPayment.currentSale
-            : selectedTableForPayment.currentSale._id;
+      const saleIdFromTable = selectedTableForPayment.currentSale
+        ? (typeof selectedTableForPayment.currentSale === 'string'
+          ? selectedTableForPayment.currentSale
+          : selectedTableForPayment.currentSale._id)
+        : null;
+      const saleId = saleIdFromTable || tableSaleIdByTable[selectedTableForPayment._id] || null;
 
+      if (saleId) {
         const existing = await getSaleById(saleId);
+        const cartTotal = finalTotal();
         const amountToPay =
-          typeof existing?.balanceAmount === 'number'
+          (typeof existing?.balanceAmount === 'number' && existing.balanceAmount > 0)
             ? existing.balanceAmount
-            : (typeof existing?.grandTotal === 'number' ? existing.grandTotal : finalTotal());
+            : ((typeof existing?.grandTotal === 'number' && existing.grandTotal > 0)
+              ? existing.grandTotal
+              : cartTotal);
 
         sale = await paySale(saleId, { amount: amountToPay, paymentMethod });
       } else {
@@ -1177,6 +1228,14 @@ export default function PosPage() {
       setSelectedCustomerId('');
       setSelectedCustomerLoyalty(null);
       setShowPaymentModal(false);
+
+      // Clear locally-tracked sale id for this table
+      setTableSaleIdByTable((prev) => {
+        const copy = { ...prev };
+        delete copy[selectedTableForPayment._id];
+        return copy;
+      });
+
       setSelectedTableForPayment(null);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Payment failed");
@@ -1410,10 +1469,23 @@ const handleAddToTable = async () => {
       }
 
       // Important: omit paymentMethod to keep it as an OPEN sale
-      await createSale(payload);
+      const openSale = (await createSale(payload)) as Sale;
 
-      // Backend is now source-of-truth for this table order
-      setTableOrders((prev) => prev.filter((o) => o.tableId !== selectedTable));
+      const openSaleId = (openSale as any)?._id as string | undefined;
+      if (openSaleId) {
+        setTableSaleIdByTable((prev) => ({ ...prev, [selectedTable]: openSaleId }));
+        // Ensure the table can be viewed/paid immediately even if /tables doesn't populate currentSale
+        setTables((prev) =>
+          prev.map((t) =>
+            t._id === selectedTable
+              ? ({ ...t, status: 'OCCUPIED', currentSale: t.currentSale ?? openSaleId } as any)
+              : t
+          )
+        );
+      }
+
+      // Keep local tableOrders as a fallback until we can successfully load the backend sale.
+      // It will be cleared after payment.
     } catch (saleErr: any) {
       console.warn('Kitchen sync failed (open table sale):', saleErr?.response?.data || saleErr);
     }
@@ -2404,8 +2476,8 @@ const handleCreateSale = async () => {
               <span>{formatMoney(finalTotal())}</span>
             </div>
 
-            {/* Payment Method (for immediate pay only) */}
-            {!postPaymentSale && !isPayingTable && !(orderType === 'DINE_IN' && selectedTable) && (
+            {/* Payment Method (immediate pay + table bill pay) */}
+            {!postPaymentSale && (isPayingTable || !(orderType === 'DINE_IN' && selectedTable)) && (
               <div className="pt-2">
                 <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">
                   Payment Method
@@ -3293,9 +3365,10 @@ const handleCreateSale = async () => {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {occupiedTables.map((t) => {
-                      const saleId = t.currentSale
+                      const saleIdFromTable = t.currentSale
                         ? (typeof t.currentSale === 'string' ? t.currentSale : (t.currentSale as any)._id)
                         : null;
+                      const saleId = saleIdFromTable || tableSaleIdByTable[t._id] || null;
                       return (
                         <div
                           key={t._id}
@@ -3326,9 +3399,27 @@ const handleCreateSale = async () => {
                                     let items: any[] = [];
                                     let total = 0;
 
-                                    if (saleId) {
+                                    let effectiveSaleId: string | null = saleId;
+                                    if (!effectiveSaleId) {
                                       try {
-                                        const sale = await getSaleById(saleId);
+                                        const fresh = await tablesApi.getById(t._id);
+                                        if (fresh?.currentSale) {
+                                          effectiveSaleId =
+                                            typeof fresh.currentSale === 'string'
+                                              ? fresh.currentSale
+                                              : (fresh.currentSale as any)._id;
+                                          if (effectiveSaleId) {
+                                            setTableSaleIdByTable((prev) => ({ ...prev, [t._id]: effectiveSaleId! }));
+                                          }
+                                        }
+                                      } catch {
+                                        // ignore
+                                      }
+                                    }
+
+                                    if (effectiveSaleId) {
+                                      try {
+                                        const sale = await getSaleById(effectiveSaleId);
                                         items = (sale?.items || []).map((si: any) => ({
                                           name: typeof si.product === 'object' && si.product
                                             ? (si.product.name || si.product.sku || 'Item')
@@ -3460,6 +3551,13 @@ const handleCreateSale = async () => {
                               if (!window.confirm(`Release Table ${t.tableNumber}?\nConfirm physical cleaning is complete.`)) return;
                               try {
                                 await tablesApi.updateStatus(t._id, 'AVAILABLE');
+
+                                setTableSaleIdByTable((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy[t._id];
+                                  return copy;
+                                });
+
                                 const refreshed = await tablesApi.getAll();
                                 setTables(refreshed);
                                 toast.success(`✅ Table ${t.tableNumber} is ready`);
