@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, Button, Input, Select, Modal, Badge, Table } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
 import { discountsApi, productsApi } from '../api';
 import type { Discount, DiscountFormData, DiscountType, Product, ProductFormData } from '../types';
 import { formatMoney } from '../money';
@@ -41,6 +41,10 @@ export default function DiscountsPage() {
   const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null);
   const [formData, setFormData] = useState<DiscountFormState>(initialFormData);
   const [saving, setSaving] = useState(false);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingDiscount, setDeletingDiscount] = useState<Discount | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Product assignment
   const [knownProducts, setKnownProducts] = useState<Product[]>([]);
@@ -295,14 +299,24 @@ export default function DiscountsPage() {
     }
   };
 
-  const handleDelete = async (discount: Discount) => {
-    if (!confirm(`Delete discount "${discount.name}"?`)) return;
+  const requestDelete = (discount: Discount) => {
+    setDeletingDiscount(discount);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingDiscount?._id) return;
     try {
-      await discountsApi.delete(discount._id);
+      setDeleting(true);
+      await discountsApi.delete(deletingDiscount._id);
       toast.success('🗑️ Discount deleted');
+      setDeleteConfirmOpen(false);
+      setDeletingDiscount(null);
       loadDiscounts();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to delete discount');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -351,7 +365,7 @@ export default function DiscountsPage() {
         <Button size="sm" variant="ghost" onClick={() => openEditModal(d)}>
           Edit
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => handleDelete(d)}>
+        <Button size="sm" variant="ghost" onClick={() => requestDelete(d)}>
           Delete
         </Button>
       </div>
@@ -595,6 +609,22 @@ export default function DiscountsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingDiscount(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Discount"
+        message={`Delete ${deletingDiscount?.name || 'this discount'}? This action permanently removes the discount record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </Layout>
   );
 }

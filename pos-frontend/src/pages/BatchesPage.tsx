@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader } from '../components';
+import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader, ConfirmDialog } from '../components';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
 import type { CreateBatchData } from '../api/batches.api';
@@ -14,6 +14,10 @@ export default function BatchesPage() {
   const [alertFilter, setAlertFilter] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState<Batch | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   const [formData, setFormData] = useState<CreateBatchData>({
     batchNumber: '',
@@ -94,14 +98,24 @@ export default function BatchesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this batch? This cannot be undone.')) return;
+  const requestDelete = (batch: Batch) => {
+    setDeletingBatch(batch);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingBatch?._id) return;
     try {
-      await batchesApi.delete(id);
+      setDeleting(true);
+      await batchesApi.delete(deletingBatch._id);
       toast.success('✅ Batch deleted');
+      setDeleteConfirmOpen(false);
+      setDeletingBatch(null);
       loadData();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to delete batch');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -222,7 +236,7 @@ export default function BatchesPage() {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => handleDelete(item._id)}
+              onClick={() => requestDelete(item)}
             >
               🗑️
             </Button>
@@ -350,6 +364,22 @@ export default function BatchesPage() {
             </div>
           </div>
         </Modal>
+
+        <ConfirmDialog
+          isOpen={deleteConfirmOpen}
+          onClose={() => {
+            if (deleting) return;
+            setDeleteConfirmOpen(false);
+            setDeletingBatch(null);
+          }}
+          onConfirm={handleConfirmDelete}
+          title="Delete Batch"
+          message={`Delete ${deletingBatch?.batchNumber || 'this batch'}? This action permanently removes the batch record.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+          loading={deleting}
+        />
       </PageContent>
     </Layout>
   );

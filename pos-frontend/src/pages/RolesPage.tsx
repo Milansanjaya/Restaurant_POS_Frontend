@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Layout, PageHeader, PageContent, Button } from '../components';
+import { Layout, PageHeader, PageContent, Button, ConfirmDialog } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { rolesApi } from '../api';
@@ -12,6 +12,9 @@ const RolesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingRole, setDeletingRole] = useState<Role | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -85,14 +88,23 @@ const RolesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this role?')) return;
-    
+  const requestDelete = (role: Role) => {
+    setDeletingRole(role);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingRole?._id) return;
     try {
-      await rolesApi.delete(id);
+      setDeleting(true);
+      await rolesApi.delete(deletingRole._id);
       await loadRoles();
+      setDeleteConfirmOpen(false);
+      setDeletingRole(null);
     } catch (error: any) {
       alert(error.response?.data?.message || 'Failed to delete role');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -158,7 +170,7 @@ const RolesPage: React.FC = () => {
           <Button 
             size="sm" 
             variant="ghost" 
-            onClick={() => handleDelete(role._id)}
+            onClick={() => requestDelete(role)}
             disabled={role.name === 'SUPER_ADMIN' || role.name === 'ADMIN'}
           >
             Delete
@@ -289,6 +301,22 @@ const RolesPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingRole(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Role"
+        message={`Delete ${deletingRole?.name || 'this role'}? This action permanently removes the role record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </PageContent>
   </Layout>
 );

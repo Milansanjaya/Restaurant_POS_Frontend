@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
-import { Button, Input, Select, Modal, Badge, Table } from '../components';
+import { Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
 import { couponsApi } from '../api/coupons.api';
 import type { Coupon, CouponFormData, DiscountType } from '../types';
 import { formatMoney } from '../money';
@@ -43,6 +43,10 @@ export default function CouponsPage() {
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [formData, setFormData] = useState<CouponFormState>(initialFormData);
   const [saving, setSaving] = useState(false);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingCoupon, setDeletingCoupon] = useState<Coupon | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadCoupons = async () => {
     try {
@@ -134,13 +138,23 @@ export default function CouponsPage() {
     }
   };
 
-  const handleDelete = async (coupon: Coupon) => {
-    if (!confirm(`Delete coupon "${coupon.code}"?`)) return;
+  const requestDelete = (coupon: Coupon) => {
+    setDeletingCoupon(coupon);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingCoupon?._id) return;
     try {
-      await couponsApi.delete(coupon._id);
+      setDeleting(true);
+      await couponsApi.delete(deletingCoupon._id);
+      setDeleteConfirmOpen(false);
+      setDeletingCoupon(null);
       loadCoupons();
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Failed to delete coupon');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -187,7 +201,7 @@ export default function CouponsPage() {
         <Button size="sm" variant="ghost" onClick={() => openEditModal(c)}>
           Edit
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => handleDelete(c)}>
+        <Button size="sm" variant="ghost" onClick={() => requestDelete(c)}>
           Delete
         </Button>
       </div>
@@ -341,6 +355,22 @@ export default function CouponsPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingCoupon(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Coupon"
+        message={`Delete ${deletingCoupon?.code || 'this coupon'}? This action permanently removes the coupon record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </Layout>
   );
 }

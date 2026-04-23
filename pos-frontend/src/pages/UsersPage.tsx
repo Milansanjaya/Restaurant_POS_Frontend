@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
+import { Layout, PageHeader, PageContent, Button, Badge, ConfirmDialog } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { usersApi, rolesApi } from '../api';
@@ -13,6 +13,9 @@ const UsersPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -107,14 +110,23 @@ const UsersPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
+  const requestDelete = (user: User) => {
+    setDeletingUser(user);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser?._id) return;
     try {
-      await usersApi.delete(id);
+      setDeleting(true);
+      await usersApi.delete(deletingUser._id);
       await loadUsers();
+      setDeleteConfirmOpen(false);
+      setDeletingUser(null);
     } catch (error: any) {
       alert(error.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -163,7 +175,7 @@ const UsersPage: React.FC = () => {
           <Button size="sm" variant="ghost" onClick={() => handleOpenModal(user)}>
             Edit
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handleDelete(user._id)}>
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(user)}>
             Delete
           </Button>
         </div>
@@ -292,6 +304,22 @@ const UsersPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingUser(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete User"
+        message={`Delete ${deletingUser?.name || deletingUser?.email || 'this user'}? This action permanently removes the user record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </PageContent>
   </Layout>
 );

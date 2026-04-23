@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
+import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, ConfirmDialog } from '../components';
 import { suppliersApi } from '../api';
 import type { Supplier, SupplierFormData, SupplierTransaction } from '../types';
 import { formatMoney } from '../money';
@@ -24,6 +24,10 @@ export default function SuppliersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
@@ -161,15 +165,24 @@ export default function SuppliersPage() {
     }
   };
 
-  const handleDelete = async (supplier: Supplier) => {
-    if (!confirm(`Are you sure you want to delete supplier "${supplier.name}"?`)) return;
+  const requestDelete = (supplier: Supplier) => {
+    setDeletingSupplier(supplier);
+    setDeleteConfirmOpen(true);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!deletingSupplier?._id) return;
     try {
-      await suppliersApi.delete(supplier._id);
+      setDeleting(true);
+      await suppliersApi.delete(deletingSupplier._id);
       toast.success('🗑️ Supplier deleted successfully');
+      setDeleteConfirmOpen(false);
+      setDeletingSupplier(null);
       loadSuppliers();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to delete supplier');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -213,7 +226,7 @@ export default function SuppliersPage() {
           <Button size="sm" variant="ghost" onClick={() => openPayment(item)}>
             Pay
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handleDelete(item)}>
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)}>
             Delete
           </Button>
         </div>
@@ -500,6 +513,22 @@ export default function SuppliersPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteConfirmOpen(false);
+          setDeletingSupplier(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Supplier"
+        message={`Delete ${deletingSupplier?.name || 'this supplier'}? This action permanently removes the supplier record.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </Layout>
   );
 }
