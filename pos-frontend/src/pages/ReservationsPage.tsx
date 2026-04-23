@@ -49,6 +49,24 @@ export default function ReservationsPage() {
     notes: '',
   });
 
+  const getCurrentDateTimeLocal = () => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
+  const hasValidPhone = (phone: string) => {
+    const digits = phone.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15;
+  };
+
+  const hasValidFutureDateTime = (dateTime: string) => {
+    if (!dateTime) return false;
+    const selected = new Date(dateTime);
+    if (Number.isNaN(selected.getTime())) return false;
+    return selected.getTime() >= Date.now();
+  };
+
   const loadData = async () => {
     try {
       const [reservationsData, tablesData] = await Promise.all([
@@ -72,6 +90,16 @@ export default function ReservationsPage() {
   }, [filterStatus, filterDate]);
 
   const handleCreate = async () => {
+    if (!hasValidPhone(formData.customerPhone)) {
+      toast.error('Enter a valid phone number (7 to 15 digits)');
+      return;
+    }
+
+    if (!hasValidFutureDateTime(formData.reservationDateTime)) {
+      toast.error('Reservation date/time cannot be in the past');
+      return;
+    }
+
     try {
       await reservationsApi.create(formData);
       toast.success('📅 Reservation created successfully');
@@ -264,9 +292,19 @@ export default function ReservationsPage() {
             label="Phone Number"
             value={formData.customerPhone}
             onChange={(e) =>
-              setFormData({ ...formData, customerPhone: e.target.value })
+              setFormData({
+                ...formData,
+                customerPhone: e.target.value.replace(/\D/g, '').slice(0, 15),
+              })
             }
             placeholder="Enter phone number"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            error={
+              formData.customerPhone && !hasValidPhone(formData.customerPhone)
+                ? 'Enter 7 to 15 digits'
+                : undefined
+            }
           />
           <Select
             label="Table"
@@ -301,6 +339,12 @@ export default function ReservationsPage() {
             onChange={(e) =>
               setFormData({ ...formData, reservationDateTime: e.target.value })
             }
+            min={getCurrentDateTimeLocal()}
+            error={
+              formData.reservationDateTime && !hasValidFutureDateTime(formData.reservationDateTime)
+                ? 'Past date/time is not allowed'
+                : undefined
+            }
           />
           <Input
             label="Notes (Optional)"
@@ -318,7 +362,9 @@ export default function ReservationsPage() {
                 !formData.customerName ||
                 !formData.customerPhone ||
                 !formData.tableId ||
-                !formData.reservationDateTime
+                !formData.reservationDateTime ||
+                !hasValidPhone(formData.customerPhone) ||
+                !hasValidFutureDateTime(formData.reservationDateTime)
               }
             >
               Create Reservation

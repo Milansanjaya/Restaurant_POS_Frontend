@@ -107,6 +107,7 @@ export default function PosPage() {
   
   // Table bill/payment modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [selectedTableForPayment, setSelectedTableForPayment] = useState<RestaurantTable | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [quickView, setQuickView] = useState<{ title: string; path: string } | null>(null);
@@ -769,6 +770,12 @@ export default function PosPage() {
       const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
       switch (e.key) {
+        case 'Escape':
+          if (showCartDrawer) {
+            e.preventDefault();
+            setShowCartDrawer(false);
+          }
+          break;
         case 'F1':
           e.preventDefault();
           searchInputRef.current?.focus();
@@ -804,7 +811,7 @@ export default function PosPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [items, currentShift, selectedTableForPayment, orderType, selectedTable]);
+  }, [items, currentShift, selectedTableForPayment, orderType, selectedTable, showCartDrawer]);
 
   const handleOpenShift = async () => {
     const openingCashNumber = openingCash === "" ? 0 : Number(openingCash);
@@ -1875,7 +1882,7 @@ const handleCreateSale = async () => {
         </nav>
       )}
 
-      <main className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
+      <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
         <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
@@ -1909,7 +1916,7 @@ const handleCreateSale = async () => {
           </div>
         </aside>
 
-        <section className="flex-1 p-4 sm:p-6 overflow-visible lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden">
+        <section className="flex-1 p-4 sm:p-6 overflow-visible md:flex md:flex-col md:min-h-0 md:overflow-hidden">
           {isLgLayout && (
             <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-3">
               <div className="flex items-center gap-4">
@@ -1919,7 +1926,7 @@ const handleCreateSale = async () => {
               </div>
             </nav>
           )}
-          <div className="lg:flex-1 lg:min-h-0 lg:overflow-auto">
+          <div className="md:flex-1 md:min-h-0 md:overflow-auto">
           {/* Mobile/Tablet Category scroller */}
           <div className="mb-4 lg:hidden">
             <div className="flex gap-2 overflow-x-auto pb-1">
@@ -2292,6 +2299,18 @@ const handleCreateSale = async () => {
                 </button>
 
                 <button
+                  onClick={() => setShowCartDrawer(true)}
+                  className="md:hidden touch-manipulation rounded-xl bg-slate-900 px-5 py-3 text-base font-semibold text-white hover:bg-slate-800 active:scale-[0.99]"
+                >
+                  Cart
+                  {items.length > 0 && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-white/15 px-2 py-0.5 text-sm font-semibold">
+                      {items.reduce((s, i) => s + i.quantity, 0)} · {formatMoney(finalTotal())}
+                    </span>
+                  )}
+                </button>
+
+                <button
                   onClick={() => {
                     clearCart();
                     setSelectedTableForPayment(null);
@@ -2308,17 +2327,39 @@ const handleCreateSale = async () => {
           )}
         </section>
 
+        {showCartDrawer && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 md:hidden"
+            onClick={() => setShowCartDrawer(false)}
+            aria-hidden="true"
+          />
+        )}
+
         <aside
           ref={cartSectionRef}
-          className="w-full border-t border-slate-200 bg-white flex flex-col lg:w-130 lg:h-full lg:border-t-0 lg:border-l lg:border-slate-200 min-h-0 overflow-hidden"
+          className={`bg-white flex flex-col min-h-0 overflow-hidden border-slate-200 ${
+            showCartDrawer
+              ? 'fixed inset-x-0 bottom-0 z-60 max-h-[90vh] w-full rounded-t-2xl border-t'
+              : 'hidden'
+          } md:static md:z-auto md:flex md:w-[380px] md:max-w-[420px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[420px] xl:w-[480px]`}
         >
           {/* Cart Header — fixed */}
           <div className="px-4 py-3 sm:px-5 shrink-0">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-800">Cart</h2>
-              {items.length > 0 && (
-                <span className="text-xs font-medium bg-slate-900 text-white px-2 py-0.5 rounded-full">{items.reduce((s, i) => s + i.quantity, 0)}</span>
-              )}
+              <div className="flex items-center gap-2">
+                {items.length > 0 && (
+                  <span className="text-xs font-medium bg-slate-900 text-white px-2 py-0.5 rounded-full">{items.reduce((s, i) => s + i.quantity, 0)}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowCartDrawer(false)}
+                  className="md:hidden touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.99]"
+                  aria-label="Close cart"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             {orderType === 'DINE_IN' && selectedTable && (
               <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
@@ -2384,7 +2425,7 @@ const handleCreateSale = async () => {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => decreaseQty(item._id)}
-                        className="touch-manipulation h-7 w-7 rounded-lg border border-slate-300 bg-white text-sm font-bold hover:bg-slate-50 active:scale-[0.97]"
+                        className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
                         aria-label="Decrease quantity"
                       >
                         −
@@ -2399,12 +2440,12 @@ const handleCreateSale = async () => {
                           const next = raw === '' ? 1 : parseInt(raw, 10);
                           setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
                         }}
-                        className="w-10 h-7 rounded-lg border border-slate-300 text-center text-sm"
+                        className="w-14 h-11 rounded-xl border border-slate-300 text-center text-base md:w-12 md:h-9 md:rounded-lg md:text-sm"
                         aria-label="Quantity"
                       />
                       <button
                         onClick={() => increaseQty(item._id)}
-                        className="touch-manipulation h-7 w-7 rounded-lg border border-slate-300 bg-white text-sm font-bold hover:bg-slate-50 active:scale-[0.97]"
+                        className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
                         aria-label="Increase quantity"
                       >
                         +
@@ -2419,11 +2460,11 @@ const handleCreateSale = async () => {
                     {/* Trash icon */}
                     <button
                       onClick={() => removeItem(item._id)}
-                      className="touch-manipulation w-8 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0"
+                      className="touch-manipulation w-11 h-11 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0 md:w-9 md:h-9 md:rounded-lg"
                       aria-label="Remove item"
                       title="Remove"
                     >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
