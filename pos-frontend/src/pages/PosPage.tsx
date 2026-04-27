@@ -435,6 +435,8 @@ export default function PosPage() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const customerSearchRef = useRef<HTMLInputElement | null>(null);
   const [isLgLayout, setIsLgLayout] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  const [mobileTab, setMobileTab] = useState<'products' | 'cart' | 'tables' | 'orders'>('products');
+  const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
 
   const kitchenDailySequenceMap = useMemo(() => buildDailyKitchenSequenceMap(kitchenOrders), [kitchenOrders]);
 
@@ -1641,7 +1643,7 @@ const handleCreateSale = async () => {
         <button
           type="button"
           onClick={() => setShowShiftModal(true)}
-          className="touch-manipulation rounded-2xl bg-yellow-500 text-white px-4 py-2 text-sm font-extrabold hover:bg-yellow-600 active:scale-95 shadow-sm"
+          className="touch-manipulation rounded-xl sm:rounded-2xl bg-yellow-500 text-white px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-extrabold hover:bg-yellow-600 active:scale-95 shadow-sm"
         >
           Open Shift
         </button>
@@ -1654,7 +1656,7 @@ const handleCreateSale = async () => {
             setClosingCash("");
             setShowCloseShiftModal(true);
           }}
-          className="touch-manipulation rounded-2xl bg-emerald-600 text-white px-4 py-2 text-sm font-extrabold hover:bg-emerald-700 active:scale-95 shadow-sm"
+          className="touch-manipulation rounded-xl sm:rounded-2xl bg-emerald-600 text-white px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-extrabold hover:bg-emerald-700 active:scale-95 shadow-sm"
         >
           Close Shift
         </button>
@@ -1700,12 +1702,12 @@ const handleCreateSale = async () => {
 
       <button
         onClick={() => setShowLogoutConfirm(true)}
-        className="touch-manipulation flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95 shadow-md shadow-slate-200"
+        className="touch-manipulation flex items-center gap-1 sm:gap-2 rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white hover:bg-slate-800 transition-all hover-lift active:scale-95 shadow-md shadow-slate-200"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
         </svg>
-        Logout
+        <span className="hidden sm:inline">Logout</span>
       </button>
     </>
   );
@@ -1719,7 +1721,7 @@ const handleCreateSale = async () => {
           e.stopPropagation();
           openQuickView("Sale Summary", "/dashboard");
         }}
-        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
       >
         📊 Summary
       </button>
@@ -1730,7 +1732,7 @@ const handleCreateSale = async () => {
           e.stopPropagation();
           openQuickView("Sales", "/sales");
         }}
-        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
       >
         🧻 Sales
       </button>
@@ -1742,7 +1744,7 @@ const handleCreateSale = async () => {
             e.stopPropagation();
             openQuickView("Discounts", "/discounts");
           }}
-          className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+          className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
         >
           🏷️ Discounts
         </button>
@@ -1754,7 +1756,7 @@ const handleCreateSale = async () => {
           e.stopPropagation();
           openQuickView("Stocks", "/inventory");
         }}
-        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
       >
         📦 Stocks
       </button>
@@ -1765,7 +1767,7 @@ const handleCreateSale = async () => {
           e.stopPropagation();
           openQuickView("Returns", "/returns");
         }}
-        className="touch-manipulation shrink-0 whitespace-nowrap rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+        className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
       >
         ↩️ Returns
       </button>
@@ -1783,7 +1785,7 @@ const handleCreateSale = async () => {
             setTablesTab('available');
             setShowTablesModal(true);
           }}
-          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
         >
           🍽️ Tables
           {(occupiedTables.length + cleaningTables.length) > 0 && (
@@ -1811,7 +1813,7 @@ const handleCreateSale = async () => {
               setLoadingReservationsViewer(false);
             }
           }}
-          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
         >
           📅 Reservations
         </button>
@@ -1832,7 +1834,7 @@ const handleCreateSale = async () => {
               setLoadingKitchen(false);
             }
           }}
-          className="touch-manipulation shrink-0 flex items-center gap-2 whitespace-nowrap rounded-2xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all hover-lift active:scale-95"
+          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
         >
           👨‍🍳 Kitchen
         </button>
@@ -1843,30 +1845,31 @@ const handleCreateSale = async () => {
   return (
     <div className="min-h-screen h-dvh bg-slate-100 flex flex-col overflow-hidden">
       {/* Main Header */}
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center h-16 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-50 sticky top-0">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center h-14 sm:h-16 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 sm:px-8 z-50 sticky top-0">
         <div className="min-w-0 justify-self-start">
-          <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">
             POS <span className="text-indigo-600">Terminal</span>
           </h1>
           <div className="flex items-center gap-2 min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 truncate">
+            <p className="hidden sm:block text-[11px] font-bold uppercase tracking-widest text-slate-400 truncate">
               Restaurant Management System
             </p>
             {!loading && !currentShift && (
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
+              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
                 ⚠️ NO SHIFT
               </span>
             )}
             {currentShift && (
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-extrabold tracking-wide">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
-                ACTIVE SHIFT
+                <span className="hidden sm:inline">ACTIVE SHIFT</span>
+                <span className="sm:hidden">OPEN</span>
               </span>
             )}
           </div>
         </div>
         <div className="justify-self-end col-start-3">
-          <div className="flex items-center gap-2 sm:gap-4 rounded-2xl bg-slate-100/80 p-2">
+          <div className="flex items-center gap-1 sm:gap-2 md:gap-4 rounded-2xl bg-slate-100/80 p-1.5 sm:p-2">
             {headerActions}
           </div>
         </div>
@@ -1875,12 +1878,8 @@ const handleCreateSale = async () => {
         <div className="col-start-2" />
       </header>
 
-      {/* Quick Navigation Bar */}
-      {!isLgLayout && (
-        <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm px-4 py-3 sm:px-8">
-          {quickNavContent}
-        </nav>
-      )}
+      {/* Quick Navigation Bar — desktop only (lg+), mobile now uses 'More' sheet */}
+      {false && !isLgLayout && null}
 
       <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
         <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
@@ -1916,7 +1915,9 @@ const handleCreateSale = async () => {
           </div>
         </aside>
 
-        <section className="flex-1 p-4 sm:p-6 overflow-visible md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <section className={`flex-1 p-4 sm:p-6 overflow-visible md:flex md:flex-col md:min-h-0 md:overflow-hidden ${
+          !isLgLayout && mobileTab === 'cart' ? 'hidden' : ''
+        } md:flex`}>
           {isLgLayout && (
             <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-3">
               <div className="flex items-center gap-4">
@@ -2327,20 +2328,11 @@ const handleCreateSale = async () => {
           )}
         </section>
 
-        {showCartDrawer && (
-          <div
-            className="fixed inset-0 z-50 bg-black/50 md:hidden"
-            onClick={() => setShowCartDrawer(false)}
-            aria-hidden="true"
-          />
-        )}
-
+        {/* Cart aside — full tab on mobile, sidebar on md+ */}
         <aside
           ref={cartSectionRef}
           className={`bg-white flex flex-col min-h-0 overflow-hidden border-slate-200 ${
-            showCartDrawer
-              ? 'fixed inset-x-0 bottom-0 z-60 max-h-[90vh] w-full rounded-t-2xl border-t'
-              : 'hidden'
+            !isLgLayout && mobileTab !== 'cart' ? 'hidden' : ''
           } md:static md:z-auto md:flex md:w-[380px] md:max-w-[420px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[420px] xl:w-[480px]`}
         >
           {/* Cart Header — fixed */}
@@ -2351,14 +2343,6 @@ const handleCreateSale = async () => {
                 {items.length > 0 && (
                   <span className="text-xs font-medium bg-slate-900 text-white px-2 py-0.5 rounded-full">{items.reduce((s, i) => s + i.quantity, 0)}</span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowCartDrawer(false)}
-                  className="md:hidden touch-manipulation rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.99]"
-                  aria-label="Close cart"
-                >
-                  ✕
-                </button>
               </div>
             </div>
             {orderType === 'DINE_IN' && selectedTable && (
@@ -2474,6 +2458,167 @@ const handleCreateSale = async () => {
             )}
           </div>
 
+          {/* Mobile-only: Order Options (shown inside Cart tab on mobile) */}
+          {!isLgLayout && (
+            <div className="shrink-0 px-4 py-3 border-t border-slate-100 bg-slate-50 space-y-3">
+              {/* Order Type */}
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Order Type</label>
+                <div className="flex rounded-xl bg-white border border-slate-200 p-1 gap-1">
+                  {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => { setOrderType(type); if (type !== 'DINE_IN') setSelectedTable(''); }}
+                      className={`touch-manipulation flex-1 rounded-lg py-2.5 text-sm font-semibold transition active:scale-[0.99] ${
+                        orderType === type
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                    </button>
+                  ))}
+                </div>
+                {orderType === 'DINE_IN' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTablesModal(true)}
+                    className="mt-2 w-full touch-manipulation rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99] text-left"
+                  >
+                    🍽️ {selectedTable ? `Table #${tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}` : 'Select Table…'}
+                  </button>
+                )}
+              </div>
+
+              {/* Customer */}
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Customer</label>
+                {selectedCustomerId ? (
+                  <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-blue-900">{selectedCustomer?.name}</div>
+                      <div className="truncate text-xs text-blue-700">{selectedCustomer?.phone}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCustomerId(''); setSelectedCustomerLoyalty(null); setUsePoints(false); setPointsToUse(0); }}
+                      className="touch-manipulation ml-2 shrink-0 rounded-lg bg-white/70 px-3 py-1.5 text-xs font-extrabold text-blue-800 hover:bg-white"
+                    >✕</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerSearch(true); }}
+                        onFocus={() => setShowCustomerSearch(true)}
+                        placeholder="Search customer…"
+                        className="touch-manipulation w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                      />
+                      {showCustomerSearch && customerSearch && (
+                        <div className="absolute bottom-full mb-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-52 overflow-y-auto z-60">
+                          {filteredCustomers.length === 0 ? (
+                            <div className="p-3 text-sm text-slate-500 text-center">No customers found</div>
+                          ) : (
+                            filteredCustomers.slice(0, 8).map((c) => (
+                              <button
+                                key={c._id}
+                                type="button"
+                                onClick={() => { setSelectedCustomerId(c._id); setCustomerSearch(''); setShowCustomerSearch(false); }}
+                                className="touch-manipulation w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 border-b last:border-b-0"
+                              >
+                                <div className="font-bold text-slate-900">{c.name}</div>
+                                <div className="text-xs text-slate-500">{c.phone} · {c.tier}</div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCustomerModal(true)}
+                      className="touch-manipulation h-11 w-11 shrink-0 flex items-center justify-center rounded-xl bg-green-500 text-white text-xl font-black hover:bg-green-600 active:scale-[0.99]"
+                      title="Add Customer"
+                      aria-label="Add Customer"
+                    >+</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Discount */}
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Discount</label>
+                <div className="flex gap-2">
+                  <select
+                    value={discountType}
+                    onChange={(e) => setDiscountType(e.target.value as ManualDiscountType)}
+                    className="touch-manipulation w-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                  >
+                    <option value="">None</option>
+                    <option value="PERCENTAGE">%</option>
+                    <option value="FLAT">Rs.</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    placeholder={discountType === 'PERCENTAGE' ? '%' : 'Amount'}
+                    disabled={!discountType}
+                    className="touch-manipulation w-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Coupon */}
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">Coupon</label>
+                {couponValidation?.success ? (
+                  <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black text-green-800">{couponCode}</div>
+                      <div className="text-xs text-green-700">
+                        {couponValidation.coupon?.discountType === 'PERCENTAGE' ? `${couponValidation.coupon?.value}% off` : `${formatMoney(couponValidation.coupon?.value)} off`}
+                      </div>
+                    </div>
+                    <button type="button" onClick={handleClearCoupon} className="touch-manipulation ml-2 shrink-0 rounded-lg bg-white/70 px-3 py-1.5 text-xs font-extrabold text-green-800 hover:bg-white">✕</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponValidation(null); }}
+                      placeholder="Enter code"
+                      className={`touch-manipulation flex-1 min-w-0 rounded-xl border px-3 py-2.5 text-sm ${couponValidation?.success === false ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white'}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleValidateCoupon}
+                      disabled={!couponCode.trim() || validatingCoupon}
+                      className="touch-manipulation shrink-0 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-blue-600 disabled:opacity-50"
+                    >{validatingCoupon ? '…' : 'Apply'}</button>
+                  </div>
+                )}
+                {couponValidation?.success === false && (
+                  <p className="text-xs font-semibold text-red-500 mt-1">{couponValidation.message}</p>
+                )}
+              </div>
+
+              {/* Clear Cart */}
+              <button
+                type="button"
+                onClick={() => { clearCart(); setSelectedTableForPayment(null); setShowPaymentModal(false); toast.success('Cart cleared'); }}
+                className="touch-manipulation w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.99]"
+              >
+                🗑️ Clear Cart
+              </button>
+            </div>
+          )}
+
           {/* Totals — ALWAYS VISIBLE at bottom of cart */}
           <div className="shrink-0 px-4 sm:px-5 pb-3 pt-2 border-t border-slate-200 bg-white space-y-1.5">
             <div className="flex items-center justify-between text-sm text-slate-600">
@@ -2556,23 +2701,23 @@ const handleCreateSale = async () => {
             )}
 
             {/* Cart Action Buttons */}
-            <div className="pt-3 flex items-center justify-end gap-2">
+            <div className="pt-3 flex items-center gap-2">
               {postPaymentSale ? (
                 <>
                   <button
                     type="button"
                     onClick={handlePrintReceipt}
                     disabled={printingReceipt}
-                    className="touch-manipulation w-full sm:w-auto rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                    className="touch-manipulation flex-1 rounded-2xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
                   >
-                    {printingReceipt ? 'Printing…' : 'Print'}
+                    {printingReceipt ? 'Printing…' : '🖨️ Print'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setPostPaymentSale(null)}
-                    className="touch-manipulation w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
+                    className="touch-manipulation flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
                   >
-                    Next
+                    Next →
                   </button>
                 </>
               ) : (
@@ -2588,13 +2733,16 @@ const handleCreateSale = async () => {
                     (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
                     isProcessing
                   }
-                  className="touch-manipulation w-full sm:w-auto rounded-xl bg-slate-900 px-8 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                  className="touch-manipulation w-full rounded-2xl bg-slate-900 px-8 py-4 text-base font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] flex items-center justify-center gap-2"
                 >
-                  {isPayingTable
-                    ? (processingPayment ? 'Processing…' : 'Pay Bill')
-                    : (orderType === 'DINE_IN' && selectedTable
-                      ? (addingToTable ? 'Adding…' : 'Add to Table')
-                      : (creatingSale ? 'Processing…' : 'Pay'))}
+                  <span>
+                    {isPayingTable
+                      ? (processingPayment ? 'Processing…' : 'Pay Bill')
+                      : (orderType === 'DINE_IN' && selectedTable
+                        ? (addingToTable ? 'Adding…' : 'Add to Table')
+                        : (creatingSale ? 'Processing…' : `Pay ${formatMoney(finalTotal())}`))}
+                  </span>
+                  {!isProcessing && <span>→</span>}
                 </button>
               )}
             </div>
@@ -2602,236 +2750,271 @@ const handleCreateSale = async () => {
         </aside>
       </main>
 
-      {/* Bottom Touch Action Bar */}
+      {/* ── Mobile Bottom Navigation Bar ── */}
+      {/* ── Mobile Bottom Navigation Bar (5 tabs) ── */}
       {!isLgLayout && (
-      <div className="shrink-0 border-t border-slate-200 bg-white z-30 shadow-[0_-8px_20px_-16px_rgba(0,0,0,0.35)]">
-        <div className="px-3 py-3 sm:px-6">
-          {/* Bottom Bar Inputs (Customer / Discount / Coupon) */}
-          <div className="grid w-full gap-3 lg:grid-cols-12">
-            {/* Customer */}
-            <div className="lg:col-span-5">
-              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Customer</label>
+        <nav
+          id="mobile-bottom-nav"
+          className="shrink-0 bg-white border-t border-slate-200 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.10)]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="flex items-stretch">
+
+            {/* PRODUCTS */}
+            <button
+              id="mobile-tab-products"
+              type="button"
+              onClick={() => setMobileTab('products')}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-colors relative ${
+                mobileTab === 'products' ? 'text-indigo-600' : 'text-slate-400'
+              }`}
+            >
+              {mobileTab === 'products' && <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-indigo-600" />}
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mobileTab === 'products' ? 2.5 : 1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              <span className="text-[10px] font-bold tracking-wide">PRODUCTS</span>
+            </button>
+
+            {/* CART */}
+            <button
+              id="mobile-tab-cart"
+              type="button"
+              onClick={() => setMobileTab('cart')}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 relative transition-colors ${
+                mobileTab === 'cart' ? 'text-indigo-600' : 'text-slate-400'
+              }`}
+            >
+              {mobileTab === 'cart' && <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-indigo-600" />}
               <div className="relative">
-                {selectedCustomerId ? (
-                  <div className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-blue-900">{selectedCustomer?.name}</div>
-                      <div className="truncate text-xs font-semibold text-blue-700">{selectedCustomer?.phone}</div>
-                      {selectedCustomerActiveReservation && (
-                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-amber-800">
-                          📅 Active booking
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomerDetailsModal(true)}
-                        className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
-                      >
-                        Details
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCustomerId('');
-                          setSelectedCustomerLoyalty(null);
-                          setUsePoints(false);
-                          setPointsToUse(0);
-                        }}
-                        className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-blue-800 hover:bg-white active:scale-[0.99]"
-                        aria-label="Clear customer"
-                        title="Clear"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        ref={customerSearchRef}
-                        type="text"
-                        value={customerSearch}
-                        onChange={(e) => {
-                          setCustomerSearch(e.target.value);
-                          setShowCustomerSearch(true);
-                        }}
-                        onFocus={() => setShowCustomerSearch(true)}
-                        placeholder="Search customer... (F5)"
-                        className="touch-manipulation w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
-                      />
-
-                      {showCustomerSearch && customerSearch && (
-                        <div className="absolute bottom-full mb-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto z-60">
-                          {filteredCustomers.length === 0 ? (
-                            <div className="p-4 text-sm text-slate-500 text-center">No customers found</div>
-                          ) : (
-                            filteredCustomers.slice(0, 10).map((customer) => (
-                              <button
-                                key={customer._id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomerId(customer._id);
-                                  setCustomerSearch('');
-                                  setShowCustomerSearch(false);
-                                }}
-                                className="touch-manipulation w-full text-left px-4 py-3 text-sm hover:bg-slate-50 border-b last:border-b-0"
-                              >
-                                <div className="font-bold text-slate-900">{customer.name}</div>
-                                <div className="text-xs font-semibold text-slate-500">{customer.phone} • {customer.tier}</div>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowNewCustomerModal(true)}
-                      className="touch-manipulation w-12 h-12 flex items-center justify-center rounded-2xl bg-green-500 text-white text-2xl font-black hover:bg-green-600 active:scale-[0.99]"
-                      title="Add New Customer"
-                      aria-label="Add New Customer"
-                    >
-                      +
-                    </button>
-                  </div>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mobileTab === 'cart' ? 2.5 : 1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {items.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[9px] font-black text-white">
+                    {items.reduce((s, i) => s + i.quantity, 0)}
+                  </span>
                 )}
               </div>
-            </div>
+              <span className="text-[10px] font-bold tracking-wide">CART</span>
+            </button>
 
-            {/* Discount */}
-            <div className="lg:col-span-3">
-              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Discount</label>
-              <div className="flex gap-2">
-                <select
-                  value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value as ManualDiscountType)}
-                  className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm"
-                >
-                  <option value="">None</option>
-                  <option value="PERCENTAGE">%</option>
-                  <option value="FLAT">Rs</option>
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(e.target.value)}
-                  placeholder={discountType === 'PERCENTAGE' ? '%' : 'Rs.'}
-                  disabled={!discountType}
-                  className="touch-manipulation w-1/2 rounded-2xl border border-slate-300 px-3 py-3 text-sm disabled:bg-slate-50 disabled:opacity-60"
-                />
+            {/* TABLES */}
+            <button
+              id="mobile-tab-tables"
+              type="button"
+              onClick={() => { setMobileTab('tables'); setTablesTab('available'); setShowTablesModal(true); }}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 relative transition-colors ${
+                mobileTab === 'tables' ? 'text-indigo-600' : 'text-slate-400'
+              }`}
+            >
+              {mobileTab === 'tables' && <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-indigo-600" />}
+              <div className="relative">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mobileTab === 'tables' ? 2.5 : 1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 6h18M3 14h6m-6 4h6m5-4h7m-7 4h7" />
+                </svg>
+                {(occupiedTables.length + cleaningTables.length) > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-black text-white">
+                    {occupiedTables.length + cleaningTables.length}
+                  </span>
+                )}
               </div>
-            </div>
+              <span className="text-[10px] font-bold tracking-wide">TABLES</span>
+            </button>
 
-            {/* Coupon */}
-            <div className="lg:col-span-4">
-              <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">Coupon</label>
-              {couponValidation?.success ? (
-                <div className="flex items-center justify-between rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-black text-green-800">{couponCode}</div>
-                    <div className="truncate text-xs font-semibold text-green-700">
-                      {couponValidation.coupon?.discountType === 'PERCENTAGE'
-                        ? `${couponValidation.coupon?.value}% off`
-                        : `${formatMoney(couponValidation.coupon?.value)} off`}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleClearCoupon}
-                    className="touch-manipulation rounded-xl bg-white/70 px-3 py-2 text-xs font-extrabold text-green-800 hover:bg-white active:scale-[0.99]"
-                    aria-label="Clear coupon"
-                    title="Clear"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={couponCode}
-                    onChange={(e) => {
-                      setCouponCode(e.target.value.toUpperCase());
-                      setCouponValidation(null);
-                    }}
-                    placeholder="Enter code"
-                    className={`touch-manipulation flex-1 rounded-2xl border px-3 py-3 text-sm ${
-                      couponValidation?.success === false
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-slate-300'
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleValidateCoupon}
-                    disabled={!couponCode.trim() || validatingCoupon}
-                    className="touch-manipulation rounded-2xl bg-blue-500 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {validatingCoupon ? '...' : 'Apply'}
-                  </button>
-                </div>
-              )}
+            {/* ORDERS */}
+            <button
+              id="mobile-tab-orders"
+              type="button"
+              onClick={() => { setMobileTab('orders'); openQuickView('Sales', '/sales'); }}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 relative transition-colors ${
+                mobileTab === 'orders' ? 'text-indigo-600' : 'text-slate-400'
+              }`}
+            >
+              {mobileTab === 'orders' && <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-indigo-600" />}
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={mobileTab === 'orders' ? 2.5 : 1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span className="text-[10px] font-bold tracking-wide">ORDERS</span>
+            </button>
 
-              {couponValidation?.success === false && (
-                <p className="text-xs font-semibold text-red-500 mt-1">{couponValidation.message}</p>
-              )}
-            </div>
+            {/* MORE */}
+            <button
+              id="mobile-tab-more"
+              type="button"
+              onClick={() => setShowMobileMoreMenu(true)}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 relative transition-colors ${
+                showMobileMoreMenu ? 'text-indigo-600' : 'text-slate-400'
+              }`}
+            >
+              {showMobileMoreMenu && <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-indigo-600" />}
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={showMobileMoreMenu ? 2.5 : 1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h.01M12 12h.01M19 12h.01" />
+              </svg>
+              <span className="text-[10px] font-bold tracking-wide">MORE</span>
+            </button>
+
           </div>
+        </nav>
+      )}
 
-          {/* Action Buttons (Order Type / Tables / Clear) */}
-          <div className="mt-3 flex items-stretch gap-2 flex-wrap">
-            {/* Order Type */}
-            <div className="flex rounded-xl bg-slate-100 p-1">
-              {(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => (
+      {/* ── Mobile "More" Bottom Sheet ── */}
+      {!isLgLayout && showMobileMoreMenu && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowMobileMoreMenu(false)}
+            aria-hidden="true"
+          />
+          {/* Sheet */}
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-white shadow-2xl">
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="h-1 w-10 rounded-full bg-slate-300" />
+            </div>
+            <div className="px-5 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-2 gap-3">
+
+                {/* Summary */}
                 <button
-                  key={type}
-                  onClick={() => {
-                    setOrderType(type);
-                    if (type !== 'DINE_IN') setSelectedTable('');
-                  }}
-                  className={`touch-manipulation rounded-lg px-5 py-3 text-base font-semibold transition active:scale-[0.99] ${
-                    orderType === type
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-700 hover:bg-slate-200'
-                  }`}
+                  type="button"
+                  onClick={() => { openQuickView('Sale Summary', '/dashboard'); setShowMobileMoreMenu(false); }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
                 >
-                  {type === 'DINE_IN' ? 'Dine-in' : type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                  <span className="text-2xl">📊</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Summary</div>
+                    <div className="text-[11px] text-slate-500">Sales overview</div>
+                  </div>
                 </button>
-              ))}
+
+                {/* Sales */}
+                <button
+                  type="button"
+                  onClick={() => { openQuickView('Sales', '/sales'); setShowMobileMoreMenu(false); }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">🧾</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Sales</div>
+                    <div className="text-[11px] text-slate-500">Transaction history</div>
+                  </div>
+                </button>
+
+                {/* Discounts */}
+                {hasPermission(PERMISSIONS.VIEW_DISCOUNTS) && (
+                  <button
+                    type="button"
+                    onClick={() => { openQuickView('Discounts', '/discounts'); setShowMobileMoreMenu(false); }}
+                    className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                  >
+                    <span className="text-2xl">🏷️</span>
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">Discounts</div>
+                      <div className="text-[11px] text-slate-500">Manage offers</div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Stocks */}
+                <button
+                  type="button"
+                  onClick={() => { openQuickView('Stocks', '/inventory'); setShowMobileMoreMenu(false); }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">📦</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Stocks</div>
+                    <div className="text-[11px] text-slate-500">Inventory levels</div>
+                  </div>
+                </button>
+
+                {/* Returns */}
+                <button
+                  type="button"
+                  onClick={() => { openQuickView('Returns', '/returns'); setShowMobileMoreMenu(false); }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">↩️</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Returns</div>
+                    <div className="text-[11px] text-slate-500">Process refunds</div>
+                  </div>
+                </button>
+
+                {/* Reservations */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowMobileMoreMenu(false);
+                    setShowReservationsViewer(true);
+                    setLoadingReservationsViewer(true);
+                    try {
+                      const res = await reservationsApi.getAll().catch(() => []);
+                      setReservationsViewer(res || []);
+                      setReservations((res || []).filter((r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'));
+                    } finally { setLoadingReservationsViewer(false); }
+                  }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">📅</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Reservations</div>
+                    <div className="text-[11px] text-slate-500">Bookings</div>
+                  </div>
+                </button>
+
+                {/* Kitchen */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowMobileMoreMenu(false);
+                    setShowKitchenViewer(true);
+                    setLoadingKitchen(true);
+                    try {
+                      const orders = await kitchenApi.getQueue();
+                      setKitchenOrders(orders);
+                    } catch { setKitchenOrders([]); } finally { setLoadingKitchen(false); }
+                  }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">👨‍🍳</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Kitchen</div>
+                    <div className="text-[11px] text-slate-500">Live queue</div>
+                  </div>
+                </button>
+
+                {/* Dashboard */}
+                <button
+                  type="button"
+                  onClick={() => { setShowMobileMoreMenu(false); navigate('/dashboard'); }}
+                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-2xl">🏠</span>
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-900">Dashboard</div>
+                    <div className="text-[11px] text-slate-500">Main menu</div>
+                  </div>
+                </button>
+
+              </div>
+
+              {/* Close button */}
+              <button
+                type="button"
+                onClick={() => setShowMobileMoreMenu(false)}
+                className="mt-4 w-full touch-manipulation rounded-2xl border border-slate-200 bg-slate-100 py-3.5 text-sm font-bold text-slate-700 hover:bg-slate-200 active:scale-[0.99]"
+              >
+                Close
+              </button>
             </div>
-
-            <button
-              onClick={() => setShowTablesModal(true)}
-              disabled={orderType !== 'DINE_IN'}
-              className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
-            >
-              Tables
-              {orderType === 'DINE_IN' && selectedTable && (
-                <span className="ml-2 text-sm font-medium text-slate-500">
-                  #{tables.find(t => t._id === selectedTable)?.tableNumber ?? ''}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => {
-                clearCart();
-                setSelectedTableForPayment(null);
-                setShowPaymentModal(false);
-                toast.success('Cart cleared');
-              }}
-              className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
-            >
-              Clear all
-            </button>
+            {/* safe area spacer */}
+            <div style={{ height: 'env(safe-area-inset-bottom)' }} />
           </div>
-        </div>
-      </div>
+        </>
       )}
 
       {/* Quick View Modal */}
