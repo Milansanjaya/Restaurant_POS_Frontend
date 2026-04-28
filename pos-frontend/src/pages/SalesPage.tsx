@@ -207,6 +207,70 @@ const SalesPage: React.FC = () => {
     }
   };
 
+  // ── Download Invoice (saves as HTML file) ────────────────────────────────
+  const handleDownloadInvoice = async (sale: Sale) => {
+    const toastId = toast.loading('Preparing download...');
+    try {
+      const [invoice, config] = await Promise.all([
+        salesApi.getInvoice(sale._id).catch(() => null as Invoice | null),
+        configApi.get().catch(() => null),
+      ]);
+
+      let localPrintSettings: any = null;
+      try {
+        const raw = localStorage.getItem('pos_print_settings');
+        localPrintSettings = raw ? JSON.parse(raw) : null;
+      } catch {
+        localPrintSettings = null;
+      }
+
+      const businessDetails = config?.businessDetails || localPrintSettings?.businessDetails;
+      const invoiceFormat   = config?.invoiceFormat   || localPrintSettings?.invoiceFormat;
+
+      const configCompany = businessDetails
+        ? {
+            name:    businessDetails.name    || '',
+            address: businessDetails.address || '',
+            phone:   businessDetails.phone   || '',
+            email:   businessDetails.email   || '',
+            logo:
+              businessDetails.logo ||
+              (businessDetails as any).logoUrl ||
+              config?.logo ||
+              localPrintSettings?.logo ||
+              undefined,
+          }
+        : null;
+
+      const company    = configCompany || invoice?.company;
+      const headerText = invoiceFormat?.header || '';
+      const footerText = invoiceFormat?.footer || '';
+
+      const html = generateThermalReceiptHtml(
+        invoice?.sale ?? sale,
+        company || undefined,
+        headerText,
+        footerText,
+      );
+
+      // Create a Blob and trigger a browser download
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `Invoice-${sale.invoiceNumber}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Invoice downloaded!', { id: toastId });
+    } catch (error) {
+      console.error('Download invoice failed:', error);
+      toast.error('Failed to download invoice', { id: toastId });
+    }
+  };
+
   const generateThermalReceiptHtml = (sale: Sale, company?: Invoice['company'], headerText?: string, footerText?: string) => {
     const orderType = (sale.orderType || (sale as any).saleType) as OrderType | undefined;
     const orderTypeLabel = orderType ? orderType.replaceAll('_', ' ') : 'POS';
@@ -478,8 +542,9 @@ const SalesPage: React.FC = () => {
       key: 'actions',
       header: 'Actions',
       render: (sale: Sale) => (
-        <div className="flex items-center gap-1">
-          {/* View icon button */}
+        <div className="flex items-center gap-0.5">
+
+          {/* 👁️ View Details */}
           <button
             type="button"
             title="View Details"
@@ -491,7 +556,20 @@ const SalesPage: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
-          {/* Invoice icon button */}
+
+          {/* ⬇️ Download Invoice (saves HTML file) */}
+          <button
+            type="button"
+            title="Download Invoice"
+            onClick={() => handleDownloadInvoice(sale)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+
+          {/* 🖨️ Print Invoice */}
           <button
             type="button"
             title="Print Invoice"
@@ -502,25 +580,16 @@ const SalesPage: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
           </button>
-          {sale.status !== 'VOIDED' && (
-            <>
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                onClick={() => handleVoidClick(sale)}
-              >
-                Void
-              </Button>
-              {sale.status === 'COMPLETED' && (
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => handleRefundClick(sale)}
-                >
-                  Refund
-                </Button>
-              )}
-            </>
+
+          {/* Refund — only for completed sales */}
+          {sale.status === 'COMPLETED' && (
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={() => handleRefundClick(sale)}
+            >
+              Refund
+            </Button>
           )}
         </div>
       ),
@@ -533,10 +602,10 @@ const SalesPage: React.FC = () => {
         title="Sales History"
         subtitle="View and manage all sales transactions"
       />
-      
+
       <PageContent>
         {/* Filters */}
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <input
             type="text"
             value={invoiceSearch}

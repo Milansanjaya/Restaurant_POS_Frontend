@@ -1718,7 +1718,7 @@ const handleCreateSale = async () => {
   );
 
   const quickNavContent = (
-    <div className="flex w-full gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+    <div className="flex w-full flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
       <button
         type="button"
         onClick={(e) => {
@@ -1780,8 +1780,7 @@ const handleCreateSale = async () => {
       {/* Divider */}
       <div className="shrink-0 w-px bg-slate-200 my-2 mx-1"></div>
 
-      {/* Live Actions Group */}
-      <div className="flex gap-2">
+      {/* Live Actions Group — inline, no wrapper div */}
         <button
           type="button"
           onClick={(e) => {
@@ -1843,7 +1842,6 @@ const handleCreateSale = async () => {
         >
           👨‍🍳 Kitchen
         </button>
-      </div>
     </div>
   );
 
@@ -1924,9 +1922,9 @@ const handleCreateSale = async () => {
           !isLgLayout && mobileTab === 'cart' ? 'hidden' : ''
         } md:flex`}>
           {isLgLayout && (
-            <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-3">
-              <div className="flex items-center gap-4">
-                <div className="flex-1 min-w-0">
+            <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-2 overflow-hidden">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
                   {quickNavContent}
                 </div>
               </div>
