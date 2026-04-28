@@ -1776,72 +1776,6 @@ const handleCreateSale = async () => {
       >
         ↩️ Returns
       </button>
-
-      {/* Divider */}
-      <div className="shrink-0 w-px bg-slate-200 my-2 mx-1"></div>
-
-      {/* Live Actions Group — inline, no wrapper div */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setTablesTab('available');
-            setShowTablesModal(true);
-          }}
-          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
-        >
-          🍽️ Tables
-          {(occupiedTables.length + cleaningTables.length) > 0 && (
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-900 premium-shadow">
-              {occupiedTables.length + cleaningTables.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowReservationsViewer(true);
-            setLoadingReservationsViewer(true);
-            try {
-              const reservationsRes = await reservationsApi.getAll().catch(() => []);
-              setReservationsViewer(reservationsRes || []);
-              const activeReservations = (reservationsRes || []).filter(
-                (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
-              );
-              setReservations(activeReservations);
-            } finally {
-              setLoadingReservationsViewer(false);
-            }
-          }}
-          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
-        >
-          📅 Reservations
-        </button>
-
-        <button
-          type="button"
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setShowKitchenViewer(true);
-            setLoadingKitchen(true);
-            try {
-              const orders = await kitchenApi.getQueue();
-              setKitchenOrders(orders);
-            } catch {
-              setKitchenOrders([]);
-            } finally {
-              setLoadingKitchen(false);
-            }
-          }}
-          className="touch-manipulation shrink-0 flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
-        >
-          👨‍🍳 Kitchen
-        </button>
     </div>
   );
 
@@ -1885,12 +1819,12 @@ const handleCreateSale = async () => {
       {false && !isLgLayout && null}
 
       <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
-        <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 overflow-y-auto lg:block">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col lg:min-h-0">
+          <h2 className="mb-4 shrink-0 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
           </h2>
 
-          <div className="space-y-2">
+          <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
             <button
               onClick={() => setSelectedCategory("")}
               className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
@@ -1915,6 +1849,64 @@ const handleCreateSale = async () => {
                 {cat.name}
               </button>
             ))}
+          </div>
+
+          <div className="mt-auto shrink-0 space-y-2 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setTablesTab('available');
+                setShowTablesModal(true);
+              }}
+              className="touch-manipulation flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 transition-all active:scale-95"
+            >
+              🍽️ Tables
+              {(occupiedTables.length + cleaningTables.length) > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-black text-slate-900">
+                  {occupiedTables.length + cleaningTables.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setShowReservationsViewer(true);
+                setLoadingReservationsViewer(true);
+                try {
+                  const reservationsRes = await reservationsApi.getAll().catch(() => []);
+                  setReservationsViewer(reservationsRes || []);
+                  const activeReservations = (reservationsRes || []).filter(
+                    (r: Reservation) => r.status === 'CONFIRMED' || r.status === 'SEATED'
+                  );
+                  setReservations(activeReservations);
+                } finally {
+                  setLoadingReservationsViewer(false);
+                }
+              }}
+              className="touch-manipulation w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 transition-all active:scale-95"
+            >
+              📅 Reservations
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setShowKitchenViewer(true);
+                setLoadingKitchen(true);
+                try {
+                  const orders = await kitchenApi.getQueue();
+                  setKitchenOrders(orders);
+                } catch {
+                  setKitchenOrders([]);
+                } finally {
+                  setLoadingKitchen(false);
+                }
+              }}
+              className="touch-manipulation w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 transition-all active:scale-95"
+            >
+              👨‍🍳 Kitchen
+            </button>
           </div>
         </aside>
 
