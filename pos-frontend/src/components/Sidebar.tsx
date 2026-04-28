@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
 import { PERMISSIONS } from '../types';
 
@@ -260,6 +260,7 @@ export default function Sidebar({
 }: {
   onNavigate?: () => void;
 }) {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -363,7 +364,7 @@ export default function Sidebar({
                 Cancel
               </button>
               <button
-                onClick={() => { setShowLogoutConfirm(false); logout(); }}
+                onClick={() => { setShowLogoutConfirm(false); logout(); navigate('/'); }}
                 className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 transition"
               >
                 Log out

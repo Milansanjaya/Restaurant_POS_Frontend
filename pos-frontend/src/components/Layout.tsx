@@ -29,10 +29,7 @@ export function Layout({ children }: LayoutProps) {
     new URLSearchParams(location.search).get('embedded') === '1' ||
     (typeof window !== 'undefined' && window.self !== window.top);
 
-  if (!token) {
-    return <Navigate to="/" replace />;
-  }
-
+  // ⚠️ useMemo MUST be called before any early return (Rules of Hooks)
   const layoutContextValue = useMemo<LayoutContextValue>(() => {
     const hasSidebar = !isEmbedded;
     return {
@@ -43,6 +40,11 @@ export function Layout({ children }: LayoutProps) {
       toggleMobileSidebar: () => setIsMobileSidebarOpen((open) => !open),
     };
   }, [isEmbedded, isMobileSidebarOpen]);
+
+  // Guard: redirect to login if not authenticated
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
 
   if (isEmbedded) {
     return (

@@ -21,7 +21,9 @@ export default function LoginPage() {
       
       // Login with token and user info including permissions
       login(data.token, data.user);
-      navigate("/dashboard");
+      // Cashiers go straight to the POS; everyone else lands on the dashboard
+      const roleName = data.user?.role?.name;
+      navigate(roleName === "CASHIER" ? "/pos" : "/dashboard");
     } catch (error: any) {
       setError(error?.response?.data?.message || "Login failed");
     } finally {
