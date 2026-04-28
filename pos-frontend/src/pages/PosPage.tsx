@@ -1718,7 +1718,7 @@ const handleCreateSale = async () => {
   );
 
   const quickNavContent = (
-    <div className="flex w-full flex-nowrap gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+    <div className="flex w-full flex-wrap gap-2 pb-1 2xl:flex-nowrap 2xl:overflow-x-auto no-scrollbar scroll-smooth">
       <button
         type="button"
         onClick={(e) => {
@@ -1922,9 +1922,9 @@ const handleCreateSale = async () => {
           !isLgLayout && mobileTab === 'cart' ? 'hidden' : ''
         } md:flex`}>
           {isLgLayout && (
-            <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-2 overflow-hidden">
+            <nav className="shrink-0 border-b border-slate-200 bg-white/50 backdrop-blur-sm py-2">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
+                <div className="flex-1 min-w-0">
                   {quickNavContent}
                 </div>
               </div>
@@ -1976,7 +1976,7 @@ const handleCreateSale = async () => {
           {loading ? (
             <p className="text-slate-500">Loading products...</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {filteredProducts.map((product) => {
                 const isOutOfStock =
                   product.outOfStock === true ||

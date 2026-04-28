@@ -39,6 +39,7 @@ export default function SuppliersPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<Numberish>('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const currentOutstanding = ledgerSupplier?.outstandingBalance || 0;
 
   const [formData, setFormData] = useState<SupplierFormState>({
     code: '',
@@ -145,13 +146,27 @@ export default function SuppliersPage() {
 
   const openPayment = (supplier: Supplier) => {
     setLedgerSupplier(supplier);
-    setPaymentAmount('');
+    setPaymentAmount(supplier.outstandingBalance > 0 ? supplier.outstandingBalance : '');
     setPaymentMethod('CASH');
     setPaymentOpen(true);
   };
 
   const handlePayment = async () => {
-    if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) return;
+    if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) {
+      toast.error('Enter a valid payment amount');
+      return;
+    }
+
+    if (ledgerSupplier.outstandingBalance <= 0) {
+      toast.error('No outstanding balance to pay');
+      return;
+    }
+
+    if (paymentAmount > ledgerSupplier.outstandingBalance) {
+      toast.error('Payment amount cannot exceed outstanding balance');
+      return;
+    }
+
     try {
       await suppliersApi.recordPayment(ledgerSupplier._id, {
         amount: paymentAmount,
@@ -221,7 +236,7 @@ export default function SuppliersPage() {
             Edit
           </Button>
           <Button size="sm" variant="ghost" onClick={() => openLedger(item)}>
-            Ledger
+            Payment History
           </Button>
           <Button size="sm" variant="ghost" onClick={() => openPayment(item)}>
             Pay
@@ -445,23 +460,23 @@ export default function SuppliersPage() {
       <Modal
         isOpen={ledgerOpen}
         onClose={() => setLedgerOpen(false)}
-        title={`Ledger: ${ledgerSupplier?.name || ''}`}
+        title={`Payment History: ${ledgerSupplier?.name || ''}`}
         size="lg"
       >
         <div className="space-y-2">
-          {ledgerData.length === 0 ? (
-            <p className="text-slate-500">No transactions yet</p>
+          {ledgerData.filter((txn) => txn.transactionType === 'PAYMENT').length === 0 ? (
+            <p className="text-slate-500">No payment history yet</p>
           ) : (
-            ledgerData.map((txn) => (
+            ledgerData.filter((txn) => txn.transactionType === 'PAYMENT').map((txn) => (
               <div key={txn._id} className="flex justify-between rounded-lg border p-3">
                 <div>
-                  <p className="font-medium">{txn.transactionType}</p>
+                  <p className="font-medium">Payment</p>
                   <p className="text-sm text-slate-500">
                     {new Date(txn.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <span className={txn.transactionType === 'PAYMENT' ? 'text-green-600' : 'text-red-600'}>
-                  {txn.transactionType === 'PAYMENT' ? '-' : '+'}{formatMoney(txn.amount)}
+                <span className="text-green-600">
+                  -{formatMoney(txn.amount)}
                 </span>
               </div>
             ))
@@ -477,7 +492,17 @@ export default function SuppliersPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setPaymentOpen(false)}>Cancel</Button>
-            <Button onClick={handlePayment}>Record Payment</Button>
+            <Button
+              onClick={handlePayment}
+              disabled={
+                typeof paymentAmount !== 'number' ||
+                paymentAmount <= 0 ||
+                paymentAmount > currentOutstanding ||
+                currentOutstanding <= 0
+              }
+            >
+              Record Payment
+            </Button>
           </>
         }
       >
@@ -496,8 +521,19 @@ export default function SuppliersPage() {
                 return;
               }
               const n = Number(raw);
-              setPaymentAmount(Number.isFinite(n) ? n : '');
+              if (!Number.isFinite(n)) {
+                setPaymentAmount('');
+                return;
+              }
+              if (n < 0) {
+                setPaymentAmount(0);
+                return;
+              }
+              setPaymentAmount(Math.min(n, currentOutstanding));
             }}
+            min={0}
+            max={currentOutstanding}
+            helperText={`Maximum payable: ${formatMoney(currentOutstanding)}`}
           />
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Method</label>
