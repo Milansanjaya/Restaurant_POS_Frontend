@@ -366,8 +366,8 @@ const SalesPage: React.FC = () => {
 
             <div class="totals">
               <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
-              <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
-              <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(serviceChargeValue))}</span></div>
+              ${(sale.taxTotal || 0) > 0 ? `<div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>` : ''}
+              ${serviceChargeValue > 0 ? `<div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(serviceChargeValue))}</span></div>` : ''}
               ${showPackagingCharge ? `<div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>` : ''}
               ${discountHtml}
               <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
@@ -437,15 +437,37 @@ const SalesPage: React.FC = () => {
       header: 'Total',
       render: (sale: Sale) => formatMoney(sale.grandTotal)
     },
+    {
+      // Subtotal = items total BEFORE any discount (subtotal + productDiscount + manualDiscount)
+      key: 'subtotal', 
+      header: 'Subtotal',
+      render: (sale: Sale) => {
+        const productDisc = (sale as any).productDiscount || 0;
+        const origSubtotal = sale.subtotal + productDisc + (sale.discount || 0);
+        return formatMoney(origSubtotal);
+      }
+    },
+    { 
+      key: 'discount', 
+      header: 'Discount',
+      render: (sale: Sale) => {
+        const productDisc = (sale as any).productDiscount || 0;
+        const manualDisc = sale.discount || 0;
+        const total = productDisc + manualDisc;
+        if (total <= 0) return <span className="text-slate-400">—</span>;
+        return (
+          <div className="text-emerald-600 font-semibold text-xs leading-tight">
+            <div>-{formatMoney(total)}</div>
+            {productDisc > 0 && <div className="text-[10px] text-slate-400">prod: -{formatMoney(productDisc)}</div>}
+            {manualDisc > 0 && <div className="text-[10px] text-slate-400">manual: -{formatMoney(manualDisc)}</div>}
+          </div>
+        );
+      }
+    },
     { 
       key: 'paidAmount', 
       header: 'Paid',
       render: (sale: Sale) => formatMoney(sale.paidAmount)
-    },
-    { 
-      key: 'balanceAmount', 
-      header: 'Balance',
-      render: (sale: Sale) => formatMoney(sale.balanceAmount)
     },
     { 
       key: 'status', 
@@ -456,21 +478,30 @@ const SalesPage: React.FC = () => {
       key: 'actions',
       header: 'Actions',
       render: (sale: Sale) => (
-        <div className="flex gap-2">
-          <Button 
-            size="sm" 
-            variant="ghost" 
+        <div className="flex items-center gap-1">
+          {/* View icon button */}
+          <button
+            type="button"
+            title="View Details"
             onClick={() => handleViewDetails(sale)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
           >
-            View
-          </Button>
-          <Button 
-            size="sm" 
-            variant="ghost" 
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          </button>
+          {/* Invoice icon button */}
+          <button
+            type="button"
+            title="Print Invoice"
             onClick={() => handlePrintInvoice(sale)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
           >
-            Invoice
-          </Button>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+          </button>
           {sale.status !== 'VOIDED' && (
             <>
               <Button 
@@ -505,19 +536,19 @@ const SalesPage: React.FC = () => {
       
       <PageContent>
         {/* Filters */}
-        <div className="mb-4 flex flex-wrap gap-4">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <input
             type="text"
             value={invoiceSearch}
             onChange={(e) => setInvoiceSearch(e.target.value)}
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm"
             placeholder="Search Invoice #"
           />
 
           <select
             value={filters.status || ''}
             onChange={(e) => setFilters({ ...filters, status: e.target.value as any, page: 1 })}
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm"
           >
             <option value="">All Status</option>
             <option value="OPEN">Open</option>
@@ -529,7 +560,7 @@ const SalesPage: React.FC = () => {
           <select
             value={filters.orderType || ''}
             onChange={(e) => setFilters({ ...filters, orderType: (e.target.value || undefined) as any, page: 1 })}
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm"
           >
             <option value="">All Order Types</option>
             <option value="DINE_IN">Dine In</option>
@@ -541,7 +572,7 @@ const SalesPage: React.FC = () => {
             type="date"
             value={filters.from || ''}
             onChange={(e) => setFilters({ ...filters, from: e.target.value, page: 1 })}
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm"
             placeholder="From Date"
           />
 
@@ -549,19 +580,22 @@ const SalesPage: React.FC = () => {
             type="date"
             value={filters.to || ''}
             onChange={(e) => setFilters({ ...filters, to: e.target.value, page: 1 })}
-            className="border rounded px-3 py-2"
+            className="border rounded px-3 py-2 text-sm"
             placeholder="To Date"
           />
 
-          <Button 
-            onClick={() => {
-              setInvoiceSearch('');
-              setFilters({ page: 1, limit: 20 });
-            }}
-            variant="ghost"
-          >
-            Clear Filters
-          </Button>
+          {/* Clear Filters pushed to the right */}
+          <div className="ml-auto">
+            <Button 
+              onClick={() => {
+                setInvoiceSearch('');
+                setFilters({ page: 1, limit: 20 });
+              }}
+              variant="ghost"
+            >
+              Clear Filters
+            </Button>
+          </div>
         </div>
 
         <Table
@@ -725,24 +759,48 @@ const SalesPage: React.FC = () => {
 
               {/* Totals */}
               <div className="border-t pt-4 space-y-1 text-sm">
+                {/* Subtotal = original price before any discount */}
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>{formatMoney(selectedSale.subtotal)}</span>
+                  <span>{formatMoney(
+                    selectedSale.subtotal +
+                    ((selectedSale as any).productDiscount || 0) +
+                    (selectedSale.discount || 0)
+                  )}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Service Charge:</span>
-                  <span>{formatMoney(selectedSale.serviceCharge || 0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Packaging Charge:</span>
-                  <span>{formatMoney(selectedSale.packagingCharge || 0)}</span>
-                </div>
-                {selectedSale.discount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount:</span>
+
+                {/* Product-level discounts (from backend productDiscount field) */}
+                {((selectedSale as any).productDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Product Discount:</span>
+                    <span>- {formatMoney((selectedSale as any).productDiscount)}</span>
+                  </div>
+                )}
+
+                {/* Manual / coupon discount */}
+                {(selectedSale.discount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Manual Discount:</span>
                     <span>- {formatMoney(selectedSale.discount)}</span>
                   </div>
                 )}
+
+                {/* Service Charge — only show if > 0 */}
+                {(selectedSale.serviceCharge || 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Service Charge:</span>
+                    <span>{formatMoney(selectedSale.serviceCharge || 0)}</span>
+                  </div>
+                )}
+
+                {/* Packaging Charge — only show if > 0 */}
+                {(selectedSale.packagingCharge || 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Packaging Charge:</span>
+                    <span>{formatMoney(selectedSale.packagingCharge || 0)}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>Grand Total:</span>
                   <span>{formatMoney(selectedSale.grandTotal)}</span>

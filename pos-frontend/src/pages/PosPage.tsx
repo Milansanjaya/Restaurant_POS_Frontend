@@ -133,6 +133,8 @@ export default function PosPage() {
   // Post-payment actions (no auto-print)
   const [postPaymentSale, setPostPaymentSale] = useState<Sale | null>(null);
   const [printingReceipt, setPrintingReceipt] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printingKitchen, setPrintingKitchen] = useState(false);
 
   const escapeHtml = (value: unknown) => {
     const str = String(value ?? '');
@@ -319,8 +321,8 @@ export default function PosPage() {
             <div class="divider"></div>
             <div class="totals">
               <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
-              <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>
-              <div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</span></div>
+              ${(sale.taxTotal || 0) > 0 ? `<div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>` : ''}
+              ${(sale.serviceCharge || 0) > 0 ? `<div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</span></div>` : ''}
               ${showPackagingCharge ? `<div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>` : ''}
               ${sale.discount > 0 ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>` : ''}
               <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
@@ -605,6 +607,7 @@ export default function PosPage() {
   const clearCart = useCartStore((s) => s.clearCart);
   const subtotal = useCartStore((s) => s.subtotal);
   const taxTotal = useCartStore((s) => s.taxTotal);
+  const productDiscountTotal = useCartStore((s) => s.productDiscountTotal);
 
   useEffect(() => {
     if (!token) {
@@ -1181,6 +1184,7 @@ export default function PosPage() {
         sale = (await createSale(payload)) as Sale;
       }
       setPostPaymentSale(sale);
+      setShowPrintModal(true);
 
       // Earn loyalty points for customer if selected
       if (selectedCustomerId && sale.grandTotal > 0) {
@@ -1571,6 +1575,7 @@ const handleCreateSale = async () => {
 
     const sale = (await createSale(payload)) as Sale;
     setPostPaymentSale(sale);
+    setShowPrintModal(true);
 
     // Redeem loyalty points if used
     if (selectedCustomerId && usePoints && pointsToUse > 0) {
@@ -2007,6 +2012,7 @@ const handleCreateSale = async () => {
                               _id: product._id,
                               name: product.name,
                               price: discountedPrice,
+                              originalPrice: activeDiscount ? product.price : undefined,
                               taxRate: product.taxRate || 0,
                             })
                     }
@@ -2020,6 +2026,7 @@ const handleCreateSale = async () => {
                                 _id: product._id,
                                 name: product.name,
                                 price: discountedPrice,
+                                originalPrice: activeDiscount ? product.price : undefined,
                                 taxRate: product.taxRate || 0,
                               });
                             }
@@ -2390,70 +2397,99 @@ const handleCreateSale = async () => {
                   <span className="w-16 text-right">Total</span>
                   <span className="w-8"></span>
                 </div>
-                {items.map((item) => (
-                  <div
-                    key={item._id}
-                    className="flex items-center gap-2 py-2 border-b border-slate-50 group"
-                  >
-                    {/* Product name */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-slate-800 truncate">{item.name}</h3>
+                {items.map((item) => {
+                  const hasDiscount = item.originalPrice != null && item.originalPrice > item.price;
+                  const origPrice   = hasDiscount ? item.originalPrice! : item.price;
+                  const discAmt     = hasDiscount ? item.originalPrice! - item.price : 0;
+
+                  return (
+                  <div key={item._id} className="border-b border-slate-50">
+                    {/* ── Main item row ── */}
+                    <div className="flex items-center gap-2 py-2 group">
+                      {/* Name */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-slate-800 truncate">{item.name}</h3>
+                      </div>
+
+                      {/* Original unit price */}
+                      <span className="w-16 text-right text-xs font-semibold text-slate-800 shrink-0">
+                        {formatMoney(origPrice)}
+                      </span>
+
+                      {/* Qty controls */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => decreaseQty(item._id)}
+                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
+                          aria-label="Decrease quantity"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const next = raw === '' ? 1 : parseInt(raw, 10);
+                            setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
+                          }}
+                          className="w-14 h-11 rounded-xl border border-slate-300 text-center text-base md:w-12 md:h-9 md:rounded-lg md:text-sm"
+                          aria-label="Quantity"
+                        />
+                        <button
+                          onClick={() => increaseQty(item._id)}
+                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Original line total */}
+                      <span className="w-16 text-right text-sm font-semibold text-slate-800 shrink-0">
+                        {formatMoney(origPrice * item.quantity)}
+                      </span>
+
+                      {/* Trash */}
+                      <button
+                        onClick={() => removeItem(item._id)}
+                        className="touch-manipulation w-11 h-11 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0 md:w-9 md:h-9 md:rounded-lg"
+                        aria-label="Remove item"
+                        title="Remove"
+                      >
+                        <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
 
-                    {/* Unit price */}
-                    <span className="w-16 text-right text-xs text-slate-500 shrink-0">
-                      {formatMoney(item.price)}
-                    </span>
-
-                    {/* Qty controls */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => decreaseQty(item._id)}
-                        className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
-                        aria-label="Decrease quantity"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const next = raw === '' ? 1 : parseInt(raw, 10);
-                          setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
-                        }}
-                        className="w-14 h-11 rounded-xl border border-slate-300 text-center text-base md:w-12 md:h-9 md:rounded-lg md:text-sm"
-                        aria-label="Quantity"
-                      />
-                      <button
-                        onClick={() => increaseQty(item._id)}
-                        className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
-
-                    {/* Subtotal */}
-                    <span className="w-16 text-right text-sm font-semibold text-slate-800 shrink-0">
-                      {formatMoney(item.price * item.quantity)}
-                    </span>
-
-                    {/* Trash icon */}
-                    <button
-                      onClick={() => removeItem(item._id)}
-                      className="touch-manipulation w-11 h-11 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0 md:w-9 md:h-9 md:rounded-lg"
-                      aria-label="Remove item"
-                      title="Remove"
-                    >
-                      <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {/* ── Discount sub-row (matches receipt: "  discount   60") ── */}
+                    {hasDiscount && (
+                      <div className="flex items-center gap-2 pb-2 -mt-1">
+                        {/* "discount" label indented */}
+                        <span className="flex-1 pl-3 text-xs font-semibold text-emerald-600">
+                          discount
+                        </span>
+                        {/* per-unit discount */}
+                        <span className="w-16 text-right text-xs font-semibold text-emerald-600 shrink-0">
+                          -{formatMoney(discAmt)}
+                        </span>
+                        {/* spacer for qty column */}
+                        <div className="w-28 shrink-0" />
+                        {/* total line discount */}
+                        <span className="w-16 text-right text-xs font-bold text-emerald-600 shrink-0">
+                          -{formatMoney(discAmt * item.quantity)}
+                        </span>
+                        {/* spacer for trash */}
+                        <div className="w-11 md:w-9 shrink-0" />
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
+
               </div>
             )}
           </div>
@@ -2621,10 +2657,18 @@ const handleCreateSale = async () => {
 
           {/* Totals — ALWAYS VISIBLE at bottom of cart */}
           <div className="shrink-0 px-4 sm:px-5 pb-3 pt-2 border-t border-slate-200 bg-white space-y-1.5">
+            {/* Subtotal — original price before any product discounts (matches receipt) */}
             <div className="flex items-center justify-between text-sm text-slate-600">
               <span>Subtotal</span>
-              <span>{formatMoney(subtotal())}</span>
+              <span>{formatMoney(subtotal() + productDiscountTotal())}</span>
             </div>
+
+            {productDiscountTotal() > 0 && (
+              <div className="flex items-center justify-between text-sm text-emerald-600 font-semibold">
+                <span>discount</span>
+                <span>-{formatMoney(productDiscountTotal())}</span>
+              </div>
+            )}
 
             {getServiceCharge() > 0 && (
               <div className="flex items-center justify-between text-sm text-slate-600">
@@ -2706,15 +2750,14 @@ const handleCreateSale = async () => {
                 <>
                   <button
                     type="button"
-                    onClick={handlePrintReceipt}
-                    disabled={printingReceipt}
-                    className="touch-manipulation flex-1 rounded-2xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                    onClick={() => setShowPrintModal(true)}
+                    className="touch-manipulation flex-1 rounded-2xl bg-emerald-600 px-6 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 active:scale-[0.99]"
                   >
-                    {printingReceipt ? 'Printing…' : '🖨️ Print'}
+                    🖨️ Print Bill
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPostPaymentSale(null)}
+                    onClick={() => { setPostPaymentSale(null); setShowPrintModal(false); }}
                     className="touch-manipulation flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
                   >
                     Next →
@@ -4425,6 +4468,99 @@ const handleCreateSale = async () => {
           </div>
         </div>
       )}
+
+      {/* ── Print Bill Modal (shown after payment) ── */}
+      {showPrintModal && postPaymentSale && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            {/* Header */}
+            <div className="bg-slate-900 px-6 py-5 text-center">
+              <div className="text-3xl mb-2">🧾</div>
+              <h2 className="text-lg font-extrabold text-white tracking-tight">Print Bill</h2>
+              <p className="text-xs text-slate-400 mt-1">Invoice #{postPaymentSale.invoiceNumber}</p>
+            </div>
+
+            {/* Print Options */}
+            <div className="p-6 space-y-3">
+              {/* Customer Bill */}
+              <button
+                type="button"
+                disabled={printingReceipt}
+                onClick={handlePrintReceipt}
+                className="touch-manipulation w-full flex items-center gap-4 rounded-2xl border-2 border-slate-200 bg-slate-50 px-5 py-4 text-left hover:border-slate-900 hover:bg-slate-100 transition-all active:scale-[0.99] disabled:opacity-60"
+              >
+                <span className="text-3xl shrink-0">🧾</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-extrabold text-slate-900">
+                    {printingReceipt ? 'Printing…' : 'Customer Bill'}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">Thermal receipt for customer</div>
+                </div>
+                <svg className="ml-auto h-5 w-5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </button>
+
+              {/* Kitchen Bill */}
+              <button
+                type="button"
+                disabled={printingKitchen}
+                onClick={async () => {
+                  if (!postPaymentSale) return;
+                  setPrintingKitchen(true);
+                  try {
+                    const kitchenOrder: any = {
+                      _id: postPaymentSale._id,
+                      // Use invoice-derived short number so kitchen ticket always has the right #
+                      orderNumber: deriveOrderNumber(postPaymentSale.invoiceNumber),
+                      sale: postPaymentSale,
+                      status: 'READY',
+                      createdAt: postPaymentSale.createdAt,
+                      tableNumber: typeof postPaymentSale.table === 'object'
+                        ? (postPaymentSale.table as any)?.tableNumber
+                        : undefined,
+                      section: typeof postPaymentSale.table === 'object'
+                        ? (postPaymentSale.table as any)?.section
+                        : undefined,
+                      items: (postPaymentSale.items || []).map((it: any) => ({
+                        name: typeof it.product === 'object' ? it.product?.name : 'Item',
+                        quantity: it.quantity,
+                      })),
+                    };
+                    await handlePrintKitchenOrder(kitchenOrder);
+                  } finally {
+                    setPrintingKitchen(false);
+                  }
+                }}
+                className="touch-manipulation w-full flex items-center gap-4 rounded-2xl border-2 border-slate-200 bg-slate-50 px-5 py-4 text-left hover:border-orange-500 hover:bg-orange-50 transition-all active:scale-[0.99] disabled:opacity-60"
+              >
+                <span className="text-3xl shrink-0">👨‍🍳</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-extrabold text-slate-900">
+                    {printingKitchen ? 'Printing…' : 'Kitchen Bill'}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">Kitchen copy for preparation</div>
+                </div>
+                <svg className="ml-auto h-5 w-5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Done */}
+            <div className="px-6 pb-6">
+              <button
+                type="button"
+                onClick={() => { setShowPrintModal(false); setPostPaymentSale(null); }}
+                className="touch-manipulation w-full rounded-2xl bg-slate-900 px-6 py-4 text-sm font-extrabold text-white hover:bg-slate-800 active:scale-[0.99] transition-all"
+              >
+                ✓ Done — Next Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

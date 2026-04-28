@@ -3,7 +3,10 @@ import { create } from "zustand";
 type CartItem = {
   _id: string;
   name: string;
+  /** Effective (post-discount) unit price used for totals */
   price: number;
+  /** Original price before any product-level discount; equals price when no discount */
+  originalPrice?: number;
   taxRate?: number;
   quantity: number;
 };
@@ -19,6 +22,8 @@ interface CartState {
   subtotal: () => number;
   taxTotal: () => number;
   grandTotal: () => number;
+  /** Total product-level discount saved (originalPrice - price) across all items */
+  productDiscountTotal: () => number;
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -88,5 +93,11 @@ export const useCartStore = create<CartState>((set, get) => ({
       return sum + tax;
     }, 0),
 
-  grandTotal: () => get().subtotal() + get().taxTotal()
+  grandTotal: () => get().subtotal() + get().taxTotal(),
+
+  productDiscountTotal: () =>
+    get().items.reduce((sum, item) => {
+      const orig = item.originalPrice ?? item.price;
+      return sum + (orig - item.price) * item.quantity;
+    }, 0),
 }));

@@ -177,8 +177,9 @@ export default function ShiftsPage() {
       header: 'Difference',
       className: 'text-right',
       render: (shift: Shift) => {
-        const diff = shift.cashDifference;
-        if (diff === undefined) return '-';
+        if (shift.closingCash === undefined || shift.status !== 'CLOSED') return '-';
+        // Net cash collected = closingCash - openingCash
+        const diff = (shift.closingCash ?? 0) - (shift.openingCash ?? 0);
         const isPositive = diff >= 0;
         return (
           <span className={`inline-flex items-center gap-1 font-semibold ${
