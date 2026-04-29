@@ -31,6 +31,7 @@ export default function TablesPage() {
     capacity: 2,
     section: '',
   });
+  const [activeSection, setActiveSection] = useState<string>('__all__');
 
   const loadTables = async () => {
     try {
@@ -124,6 +125,12 @@ export default function TablesPage() {
     return acc;
   }, {} as Record<string, RestaurantTable[]>);
 
+  const sectionKeys = Object.keys(tablesBySection);
+  const displayedTables =
+    activeSection === '__all__'
+      ? tables
+      : (tablesBySection[activeSection] ?? []);
+
   return (
     <Layout>
       <PageHeader
@@ -137,81 +144,121 @@ export default function TablesPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
           </div>
         ) : (
-          <div className="space-y-8">
-            {Object.entries(tablesBySection).map(([section, sectionTables]) => (
-              <div key={section}>
-                <h2 className="mb-4 text-lg font-semibold text-slate-900">{section} Section</h2>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                  {sectionTables.map((table) => (
-                    <Card key={table._id} className="p-4 text-center relative">
-                      {/* Edit/Delete buttons */}
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <button
-                          onClick={() => openEditModal(table)}
-                          className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-blue-600"
-                          title="Edit table"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => openDeleteModal(table)}
-                          className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-red-600"
-                          title="Delete table"
-                          disabled={table.status === 'OCCUPIED'}
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                      
-                      <div className="mb-2 text-2xl font-bold text-slate-900">
-                        {table.tableNumber}
-                      </div>
-                      <div className="mb-2 text-sm text-slate-500">
-                        Capacity: {table.capacity}
-                      </div>
-                      <Badge variant={statusColors[table.status]}>
-                        {table.status}
-                      </Badge>
-                      <div className="mt-3 space-y-2">
-                        {/* Only show dropdown for non-OCCUPIED/RESERVED tables */}
-                        {(table.status === 'AVAILABLE' || table.status === 'CLEANING') ? (
-                          <Select
-                            value={table.status}
-                            options={statusOptions}
-                            onChange={(e) =>
-                              handleStatusChange(table, e.target.value as TableStatus)
-                            }
-                          />
-                        ) : (
-                          <div className="text-xs text-slate-500 text-center py-2">
-                            {table.status === 'OCCUPIED' ? 'Table has active order' : 'Table is reserved'}
-                          </div>
-                        )}
-                        {table.status === 'OCCUPIED' && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => openCloseModal(table)}
-                          >
-                            Close & Pay
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+          <div className="space-y-5">
+            {/* ── Section Tabs ── */}
+            {sectionKeys.length > 0 && (
+              <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 w-full sm:w-fit">
+                <button
+                  onClick={() => setActiveSection('__all__')}
+                  className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                    activeSection === '__all__'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  All
+                  <span className={`ml-1.5 inline-flex items-center justify-center h-5 min-w-[20px] rounded-full px-1.5 text-[10px] font-bold ${
+                    activeSection === '__all__' ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-700'
+                  }`}>
+                    {tables.length}
+                  </span>
+                </button>
+                {sectionKeys.map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => setActiveSection(sec)}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                      activeSection === sec
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {sec}
+                    <span className={`ml-1.5 inline-flex items-center justify-center h-5 min-w-[20px] rounded-full px-1.5 text-[10px] font-bold ${
+                      activeSection === sec ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-700'
+                    }`}>
+                      {tablesBySection[sec]?.length ?? 0}
+                    </span>
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
 
-            {tables.length === 0 && (
-              <div className="rounded-lg bg-slate-50 p-12 text-center">
-                <p className="text-slate-500">No tables found. Add your first table!</p>
+            {/* ── Table Grid ── */}
+            {displayedTables.length === 0 ? (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 p-12 text-center">
+                <p className="text-slate-500">
+                  No tables found{activeSection !== '__all__' ? ` in "${activeSection}"` : ''}. Add your first table!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {displayedTables.map((table) => (
+                  <Card key={table._id} className="p-4 text-center relative">
+                    {/* Edit/Delete buttons */}
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        onClick={() => openEditModal(table)}
+                        className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-blue-600"
+                        title="Edit table"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => openDeleteModal(table)}
+                        className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-red-600"
+                        title="Delete table"
+                        disabled={table.status === 'OCCUPIED'}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+
+                    <div className="mb-1 text-2xl font-bold text-slate-900">
+                      {table.tableNumber}
+                    </div>
+                    {activeSection === '__all__' && table.section && (
+                      <div className="mb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                        {table.section}
+                      </div>
+                    )}
+                    <div className="mb-2 text-xs text-slate-500">Cap: {table.capacity}</div>
+                    <Badge variant={statusColors[table.status]}>
+                      {table.status}
+                    </Badge>
+                    <div className="mt-3 space-y-2">
+                      {(table.status === 'AVAILABLE' || table.status === 'CLEANING') ? (
+                        <Select
+                          value={table.status}
+                          options={statusOptions}
+                          onChange={(e) =>
+                            handleStatusChange(table, e.target.value as TableStatus)
+                          }
+                        />
+                      ) : (
+                        <div className="text-xs text-slate-500 text-center py-2">
+                          {table.status === 'OCCUPIED' ? 'Has active order' : 'Reserved'}
+                        </div>
+                      )}
+                      {table.status === 'OCCUPIED' && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => openCloseModal(table)}
+                        >
+                          Close & Pay
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
               </div>
             )}
           </div>
         )}
       </PageContent>
+
 
       {/* Create/Edit Table Modal */}
       <Modal

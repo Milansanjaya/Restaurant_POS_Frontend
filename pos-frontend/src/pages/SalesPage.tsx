@@ -14,6 +14,7 @@ const SalesPage: React.FC = () => {
   const [totalSales, setTotalSales] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<SaleFilters>({
     page: 1,
     limit: 20,
@@ -618,68 +619,109 @@ const SalesPage: React.FC = () => {
       />
 
       <PageContent>
-        {/* Filters */}
-        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <input
-            type="text"
-            value={invoiceSearch}
-            onChange={(e) => setInvoiceSearch(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="Search Invoice #"
-          />
+        {/* ── Filter Bar ── */}
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          {/* Filter header / toggle */}
+          <div className="flex items-center gap-3 px-4 py-3">
+            {/* Invoice search always visible */}
+            <div className="relative flex-1 max-w-xs">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={invoiceSearch}
+                onChange={(e) => setInvoiceSearch(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                placeholder="Search Invoice #"
+              />
+            </div>
 
-          <select
-            value={filters.status || ''}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value as any, page: 1 })}
-            className="border rounded px-3 py-2 text-sm"
-          >
-            <option value="">All Status</option>
-            <option value="OPEN">Open</option>
-            <option value="PARTIALLY_PAID">Partially Paid</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="VOIDED">Voided</option>
-          </select>
-
-          <select
-            value={filters.orderType || ''}
-            onChange={(e) => setFilters({ ...filters, orderType: (e.target.value || undefined) as any, page: 1 })}
-            className="border rounded px-3 py-2 text-sm"
-          >
-            <option value="">All Order Types</option>
-            <option value="DINE_IN">Dine In</option>
-            <option value="TAKEAWAY">Takeaway</option>
-            <option value="DELIVERY">Delivery</option>
-          </select>
-
-          <input
-            type="date"
-            value={filters.from || ''}
-            onChange={(e) => setFilters({ ...filters, from: e.target.value, page: 1 })}
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="From Date"
-          />
-
-          <input
-            type="date"
-            value={filters.to || ''}
-            onChange={(e) => setFilters({ ...filters, to: e.target.value, page: 1 })}
-            className="border rounded px-3 py-2 text-sm"
-            placeholder="To Date"
-          />
-
-          {/* Clear Filters pushed to the right */}
-          <div className="ml-auto">
-            <Button 
-              onClick={() => {
-                setInvoiceSearch('');
-                setFilters({ page: 1, limit: 20 });
-              }}
-              variant="ghost"
-              className="hover:bg-red-50 hover:text-red-700"
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                filtersOpen ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
             >
-              Clear Filters
-            </Button>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filters
+              {/* Active filter count badge */}
+              {(() => {
+                const count = [filters.status, filters.orderType, filters.from, filters.to].filter(Boolean).length;
+                return count > 0 ? (
+                  <span className={`inline-flex items-center justify-center h-5 min-w-[20px] rounded-full px-1.5 text-xs font-bold ${
+                    filtersOpen ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
+                  }`}>{count}</span>
+                ) : null;
+              })()}
+            </button>
+
+            {/* Clear — only if any filter is active */}
+            {(filters.status || filters.orderType || filters.from || filters.to || invoiceSearch) && (
+              <button
+                onClick={() => { setInvoiceSearch(''); setFilters({ page: 1, limit: 20 }); }}
+                className="text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-2 rounded-lg hover:bg-red-50 transition"
+              >
+                Clear
+              </button>
+            )}
           </div>
+
+          {/* Collapsible filter panel */}
+          {filtersOpen && (
+            <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Status</label>
+                <select
+                  value={filters.status || ''}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value as any, page: 1 })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="">All Status</option>
+                  <option value="OPEN">Open</option>
+                  <option value="PARTIALLY_PAID">Partially Paid</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="VOIDED">Voided</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Order Type</label>
+                <select
+                  value={filters.orderType || ''}
+                  onChange={(e) => setFilters({ ...filters, orderType: (e.target.value || undefined) as any, page: 1 })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="">All Order Types</option>
+                  <option value="DINE_IN">Dine In</option>
+                  <option value="TAKEAWAY">Takeaway</option>
+                  <option value="DELIVERY">Delivery</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">From Date</label>
+                <input
+                  type="date"
+                  value={filters.from || ''}
+                  onChange={(e) => setFilters({ ...filters, from: e.target.value, page: 1 })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">To Date</label>
+                <input
+                  type="date"
+                  value={filters.to || ''}
+                  onChange={(e) => setFilters({ ...filters, to: e.target.value, page: 1 })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <Table
@@ -690,28 +732,83 @@ const SalesPage: React.FC = () => {
           emptyMessage="No sales found"
         />
 
-        {/* Pagination */}
-        {!invoiceSearch.trim() && totalSales > (filters.limit || 20) && (
-          <div className="mt-4 flex justify-center gap-2">
-            <Button
-              size="sm"
-              disabled={currentPage === 1}
-              onClick={() => setFilters({ ...filters, page: currentPage - 1 })}
-            >
-              Previous
-            </Button>
-            <span className="px-4 py-2">
-              Page {currentPage} of {Math.ceil(totalSales / (filters.limit || 20))}
-            </span>
-            <Button
-              size="sm"
-              disabled={currentPage >= Math.ceil(totalSales / (filters.limit || 20))}
-              onClick={() => setFilters({ ...filters, page: currentPage + 1 })}
-            >
-              Next
-            </Button>
-          </div>
-        )}
+        {/* ── Pagination ── */}
+        {!invoiceSearch.trim() && totalSales > (filters.limit || 20) && (() => {
+          const totalPages = Math.ceil(totalSales / (filters.limit || 20));
+          const page = currentPage;
+
+          // Build page number list with ellipsis
+          const pageNums: (number | '...')[] = [];
+          if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i++) pageNums.push(i);
+          } else {
+            pageNums.push(1);
+            if (page > 3) pageNums.push('...');
+            for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pageNums.push(i);
+            if (page < totalPages - 2) pageNums.push('...');
+            pageNums.push(totalPages);
+          }
+
+          return (
+            <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+              {/* Info */}
+              <p className="text-slate-500 text-xs">
+                Showing {Math.min((page - 1) * (filters.limit || 20) + 1, totalSales)}–{Math.min(page * (filters.limit || 20), totalSales)} of {totalSales} sales
+              </p>
+
+              {/* Page buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={page === 1}
+                  onClick={() => setFilters({ ...filters, page: page - 1 })}
+                  className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  Prev
+                </button>
+
+                {pageNums.map((n, i) =>
+                  n === '...' ? (
+                    <span key={`e${i}`} className="px-2 py-1.5 text-slate-400 text-xs">…</span>
+                  ) : (
+                    <button
+                      key={n}
+                      onClick={() => setFilters({ ...filters, page: n as number })}
+                      className={`h-8 w-8 rounded-lg text-xs font-semibold transition ${
+                        n === page
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  )
+                )}
+
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setFilters({ ...filters, page: page + 1 })}
+                  className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Next
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </div>
+
+              {/* Rows per page */}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-xs">Rows:</span>
+                <select
+                  value={filters.limit || 20}
+                  onChange={(e) => setFilters({ ...filters, limit: Number(e.target.value), page: 1 })}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Void Sale Modal */}
         <Modal

@@ -6,6 +6,8 @@ import { suppliersApi } from '../api/suppliers.api';
 import { grnApi } from '../api/grn.api';
 import { formatMoney } from '../money';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/auth.store';
+import { PERMISSIONS } from '../types';
 import type { Supplier, GRN, SupplierReturn, SupplierReturnItem, ReturnStatus } from '../types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -1613,33 +1615,65 @@ function SupplierReturnsPanel() {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReturnsPage() {
-  const [mainTab, setMainTab] = useState<'customer' | 'supplier'>('customer');
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+
+  // VIEW_RETURNS → Customer Return tab (Cashiers have this)
+  const canViewCustomerReturns = hasPermission(PERMISSIONS.VIEW_RETURNS);
+
+  // VIEW_SUPPLIER_RETURNS → Supplier Return tab (Admin/Manager only, NOT Cashier)
+  const canViewSupplierReturns = hasPermission(PERMISSIONS.VIEW_SUPPLIER_RETURNS);
+
+  const [mainTab, setMainTab] = useState<'customer' | 'supplier'>(
+    canViewCustomerReturns ? 'customer' : 'supplier'
+  );
+
+  // Auto-switch away from supplier tab if permission is lost
+  useEffect(() => {
+    if (mainTab === 'supplier' && !canViewSupplierReturns) {
+      setMainTab('customer');
+    }
+  }, [canViewSupplierReturns, mainTab]);
 
   return (
     <Layout>
       <PageHeader title="Returns" subtitle="Customer returns and supplier returns" />
       <PageContent>
         {/* Main Tab Navigation */}
-        <div className="mb-6 flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
-          <button
-            onClick={() => setMainTab('customer')}
-            className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${
-              mainTab === 'customer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🧾 Customer Return
-          </button>
-          <button
-            onClick={() => setMainTab('supplier')}
-            className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${
-              mainTab === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🚚 Supplier Return
-          </button>
-        </div>
+        {(canViewCustomerReturns || canViewSupplierReturns) && (
+          <div className="mb-6 flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
+            {canViewCustomerReturns && (
+              <button
+                onClick={() => setMainTab('customer')}
+                className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${
+                  mainTab === 'customer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🧾 Customer Return
+              </button>
+            )}
+            {canViewSupplierReturns && (
+              <button
+                onClick={() => setMainTab('supplier')}
+                className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${
+                  mainTab === 'supplier' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🚚 Supplier Return
+              </button>
+            )}
+          </div>
+        )}
 
-        {mainTab === 'customer' ? <CustomerReturnsPanel /> : <SupplierReturnsPanel />}
+        {!canViewCustomerReturns && !canViewSupplierReturns && (
+          <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+            <div className="text-4xl">🔒</div>
+            <p className="text-base font-semibold text-slate-700">Access Restricted</p>
+            <p className="text-sm text-slate-500">You don't have permission to view returns.</p>
+          </div>
+        )}
+
+        {mainTab === 'customer' && canViewCustomerReturns && <CustomerReturnsPanel />}
+        {mainTab === 'supplier' && canViewSupplierReturns && <SupplierReturnsPanel />}
       </PageContent>
     </Layout>
   );
