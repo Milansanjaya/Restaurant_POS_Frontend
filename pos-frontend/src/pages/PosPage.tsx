@@ -1819,7 +1819,7 @@ const handleCreateSale = async () => {
       {false && !isLgLayout && null}
 
       <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
-        <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col lg:min-h-0">
+        <aside className="hidden w-56 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col lg:min-h-0">
           <h2 className="mb-4 shrink-0 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
           </h2>
@@ -1827,7 +1827,7 @@ const handleCreateSale = async () => {
           <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
             <button
               onClick={() => setSelectedCategory("")}
-              className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
+              className={`touch-manipulation w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition active:scale-[0.99] ${
                 selectedCategory === ""
                   ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1839,7 +1839,7 @@ const handleCreateSale = async () => {
               <button
                 key={cat._id}
                 onClick={() => setSelectedCategory(cat._id)}
-                className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
+                className={`touch-manipulation w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition active:scale-[0.99] ${
                   selectedCategory === cat._id
                     ? "bg-slate-900 text-white"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1928,7 +1928,7 @@ const handleCreateSale = async () => {
             <div className="flex gap-2 overflow-x-auto pb-1">
               <button
                 onClick={() => setSelectedCategory("")}
-                className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition active:scale-[0.99] ${
+                className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold transition active:scale-[0.99] ${
                   selectedCategory === ""
                     ? "bg-slate-900 text-white"
                     : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
@@ -1940,7 +1940,7 @@ const handleCreateSale = async () => {
                 <button
                   key={cat._id}
                   onClick={() => setSelectedCategory(cat._id)}
-                  className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition active:scale-[0.99] ${
+                  className={`touch-manipulation shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold transition active:scale-[0.99] ${
                     selectedCategory === cat._id
                       ? "bg-slate-900 text-white"
                       : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
@@ -2330,7 +2330,7 @@ const handleCreateSale = async () => {
           ref={cartSectionRef}
           className={`bg-white flex flex-col min-h-0 overflow-hidden border-slate-200 ${
             !isLgLayout && mobileTab !== 'cart' ? 'hidden' : ''
-          } md:static md:z-auto md:flex md:w-[380px] md:max-w-[420px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[420px] xl:w-[480px]`}
+          } md:static md:z-auto md:flex md:w-[460px] md:max-w-[520px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[520px] xl:w-[560px]`}
         >
           {/* Cart Header — fixed */}
           <div className="px-4 py-3 sm:px-5 shrink-0">
@@ -2382,29 +2382,25 @@ const handleCreateSale = async () => {
                 {/* Cart header row */}
                 <div className="flex items-center gap-2 px-1 pb-1 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                   <span className="flex-1">Item</span>
-                  <span className="w-16 text-right">Price</span>
-                  <span className="w-28 text-center">Qty</span>
-                  <span className="w-16 text-right">Total</span>
+                  <span className="w-20 text-center">Qty</span>
+                  <span className="w-16 text-right">DIS</span>
+                  <span className="w-20 text-right">Total</span>
                   <span className="w-8"></span>
                 </div>
                 {items.map((item) => {
                   const hasDiscount = item.originalPrice != null && item.originalPrice > item.price;
                   const origPrice   = hasDiscount ? item.originalPrice! : item.price;
-                  const discAmt     = hasDiscount ? item.originalPrice! - item.price : 0;
+                  const discAmt     = hasDiscount ? origPrice - item.price : 0;
 
                   return (
                   <div key={item._id} className="border-b border-slate-50">
                     {/* ── Main item row ── */}
                     <div className="flex items-center gap-2 py-2 group">
-                      {/* Name */}
+                      {/* Name + unit price */}
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-medium text-slate-800 truncate">{item.name}</h3>
+                        <div className="text-xs text-slate-500 mt-0.5">{formatMoney(origPrice)}</div>
                       </div>
-
-                      {/* Original unit price */}
-                      <span className="w-16 text-right text-xs font-semibold text-slate-800 shrink-0">
-                        {formatMoney(origPrice)}
-                      </span>
 
                       {/* Qty controls */}
                       <div className="flex items-center gap-1 shrink-0">
@@ -2437,8 +2433,13 @@ const handleCreateSale = async () => {
                         </button>
                       </div>
 
-                      {/* Original line total */}
-                      <span className="w-16 text-right text-sm font-semibold text-slate-800 shrink-0">
+                      {/* DIS (per-unit discount) */}
+                      <span className={`w-16 text-right text-xs font-semibold ${hasDiscount ? 'text-emerald-600' : 'text-slate-400'} shrink-0`}>
+                        {hasDiscount ? `-${formatMoney(discAmt)}` : ''}
+                      </span>
+
+                      {/* Line total (show original/non-discounted total) */}
+                      <span className="w-20 text-right text-sm font-semibold text-slate-800 shrink-0">
                         {formatMoney(origPrice * item.quantity)}
                       </span>
 
@@ -2455,27 +2456,7 @@ const handleCreateSale = async () => {
                       </button>
                     </div>
 
-                    {/* ── Discount sub-row (matches receipt: "  discount   60") ── */}
-                    {hasDiscount && (
-                      <div className="flex items-center gap-2 pb-2 -mt-1">
-                        {/* "discount" label indented */}
-                        <span className="flex-1 pl-3 text-xs font-semibold text-emerald-600">
-                          discount
-                        </span>
-                        {/* per-unit discount */}
-                        <span className="w-16 text-right text-xs font-semibold text-emerald-600 shrink-0">
-                          -{formatMoney(discAmt)}
-                        </span>
-                        {/* spacer for qty column */}
-                        <div className="w-28 shrink-0" />
-                        {/* total line discount */}
-                        <span className="w-16 text-right text-xs font-bold text-emerald-600 shrink-0">
-                          -{formatMoney(discAmt * item.quantity)}
-                        </span>
-                        {/* spacer for trash */}
-                        <div className="w-11 md:w-9 shrink-0" />
-                      </div>
-                    )}
+                    {/* removed separate discount sub-row; DIS is now inline in the main row */}
                   </div>
                   );
                 })}

@@ -193,9 +193,19 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Returns',
-    path: '/returns',
-    permission: PERMISSIONS.VIEW_RETURNS,
+    label: 'Customer Returns',
+    path: '/returns?type=customer',
+    permission: PERMISSIONS.VIEW_CUSTOMER_RETURNS,
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Supplier Returns',
+    path: '/returns?type=supplier',
+    permission: PERMISSIONS.VIEW_SUPPLIER_RETURNS,
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
@@ -276,10 +286,10 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
+      <aside className="flex h-screen w-56 flex-col border-r border-slate-200 bg-white">
         {/* Logo */}
         <div className="flex h-16 items-center border-b border-slate-200 px-6">
-          <h1 className="text-xl font-bold text-slate-900">Restaurant POS</h1>
+          <h1 className="text-lg font-bold text-slate-900">Restaurant POS</h1>
         </div>
 
         {/* Navigation */}

@@ -1617,8 +1617,8 @@ function SupplierReturnsPanel() {
 export default function ReturnsPage() {
   const hasPermission = useAuthStore((s) => s.hasPermission);
 
-  // VIEW_RETURNS → Customer Return tab (Cashiers have this)
-  const canViewCustomerReturns = hasPermission(PERMISSIONS.VIEW_RETURNS);
+  // VIEW_CUSTOMER_RETURNS → Customer Return tab (Cashiers have this)
+  const canViewCustomerReturns = hasPermission(PERMISSIONS.VIEW_CUSTOMER_RETURNS);
 
   // VIEW_SUPPLIER_RETURNS → Supplier Return tab (Admin/Manager only, NOT Cashier)
   const canViewSupplierReturns = hasPermission(PERMISSIONS.VIEW_SUPPLIER_RETURNS);
