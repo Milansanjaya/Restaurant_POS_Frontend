@@ -620,7 +620,7 @@ const SalesPage: React.FC = () => {
 
       <PageContent>
         {/* ── Filter Bar ── */}
-        <div className="mb-8 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <div className="mb-10 sm:mb-12 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           {/* Filter header / toggle */}
           <div className="flex items-center gap-3 px-4 py-3">
             {/* Invoice search always visible */}
@@ -724,13 +724,15 @@ const SalesPage: React.FC = () => {
           )}
         </div>
 
-        <Table
-          columns={columns}
-          data={displayedSales}
-          keyExtractor={(sale) => sale._id}
-          loading={loading}
-          emptyMessage="No sales found"
-        />
+        <div className="mb-6 sm:mb-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <Table
+            columns={columns}
+            data={displayedSales}
+            keyExtractor={(sale) => sale._id}
+            loading={loading}
+            emptyMessage="No sales found"
+          />
+        </div>
 
         {/* ── Pagination ── */}
         {!invoiceSearch.trim() && totalSales > (filters.limit || 20) && (() => {
@@ -750,61 +752,67 @@ const SalesPage: React.FC = () => {
           }
 
           return (
-            <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
-              {/* Info */}
-              <p className="text-slate-500 text-xs">
-                Showing {Math.min((page - 1) * (filters.limit || 20) + 1, totalSales)}–{Math.min(page * (filters.limit || 20), totalSales)} of {totalSales} sales
-              </p>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                {/* Info */}
+                <p className="text-slate-500 text-xs sm:text-sm order-2 sm:order-1">
+                  Showing {Math.min((page - 1) * (filters.limit || 20) + 1, totalSales)}–{Math.min(page * (filters.limit || 20), totalSales)} of {totalSales} sales
+                </p>
 
-              {/* Page buttons */}
-              <div className="flex items-center gap-1">
-                <button
-                  disabled={page === 1}
-                  onClick={() => setFilters({ ...filters, page: page - 1 })}
-                  className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                  Prev
-                </button>
+                {/* Page buttons — responsive wrapping */}
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1 order-1 sm:order-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setFilters({ ...filters, page: page - 1 })}
+                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="Previous page"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                    <span className="hidden sm:inline">Prev</span>
+                  </button>
 
-                {pageNums.map((n, i) =>
-                  n === '...' ? (
-                    <span key={`e${i}`} className="px-2 py-1.5 text-slate-400 text-xs">…</span>
-                  ) : (
-                    <button
-                      key={n}
-                      onClick={() => setFilters({ ...filters, page: n as number })}
-                      className={`h-8 w-8 rounded-lg text-xs font-semibold transition ${
-                        n === page
-                          ? 'bg-slate-900 text-white'
-                          : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  )
-                )}
+                  {pageNums.map((n, i) =>
+                    n === '...' ? (
+                      <span key={`e${i}`} className="px-1 sm:px-2 py-1.5 text-slate-400 text-xs">…</span>
+                    ) : (
+                      <button
+                        key={n}
+                        onClick={() => setFilters({ ...filters, page: n as number })}
+                        className={`h-8 w-8 rounded-lg text-xs font-semibold transition ${
+                          n === page
+                            ? 'bg-slate-900 text-white'
+                            : 'border border-slate-300 text-slate-700 hover:bg-slate-50 active:scale-95'
+                        }`}
+                        aria-current={n === page ? 'page' : undefined}
+                      >
+                        {n}
+                      </button>
+                    )
+                  )}
 
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => setFilters({ ...filters, page: page + 1 })}
-                  className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  Next
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                </button>
-              </div>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setFilters({ ...filters, page: page + 1 })}
+                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    title="Next page"
+                  >
+                    <span className="hidden sm:inline">Next</span>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
 
-              {/* Rows per page */}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 text-xs">Rows:</span>
-                <select
-                  value={filters.limit || 20}
-                  onChange={(e) => setFilters({ ...filters, limit: Number(e.target.value), page: 1 })}
-                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                {/* Rows per page */}
+                <div className="flex items-center justify-center sm:justify-end gap-2 order-3">
+                  <label htmlFor="page-size" className="text-slate-500 text-xs sm:text-sm font-medium">Rows per page:</label>
+                  <select
+                    id="page-size"
+                    value={filters.limit || 20}
+                    onChange={(e) => setFilters({ ...filters, limit: Number(e.target.value), page: 1 })}
+                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+                  >
+                    {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           );

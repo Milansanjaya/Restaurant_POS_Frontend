@@ -1819,15 +1819,15 @@ const handleCreateSale = async () => {
       {false && !isLgLayout && null}
 
       <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
-        <aside className="hidden w-48 border-r border-slate-200 bg-white p-3 lg:flex lg:flex-col lg:min-h-0">
-          <h2 className="mb-3 shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <aside className="hidden w-64 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col lg:min-h-0">
+          <h2 className="mb-4 shrink-0 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Categories
           </h2>
 
-          <div className="flex-1 min-h-0 space-y-1 overflow-y-auto pr-1">
+          <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
             <button
               onClick={() => setSelectedCategory("")}
-              className={`touch-manipulation w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition active:scale-[0.99] ${
+              className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
                 selectedCategory === ""
                   ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1839,13 +1839,13 @@ const handleCreateSale = async () => {
               <button
                 key={cat._id}
                 onClick={() => setSelectedCategory(cat._id)}
-                className={`touch-manipulation w-full rounded-lg px-3 py-2 text-left text-xs font-semibold transition active:scale-[0.99] ${
+                className={`touch-manipulation w-full rounded-xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] ${
                   selectedCategory === cat._id
                     ? "bg-slate-900 text-white"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
-                {cat.icon && <span className="mr-1">{cat.icon}</span>}
+                {cat.icon && <span className="mr-2">{cat.icon}</span>}
                 {cat.name}
               </button>
             ))}
@@ -2330,7 +2330,7 @@ const handleCreateSale = async () => {
           ref={cartSectionRef}
           className={`bg-white flex flex-col min-h-0 overflow-hidden border-slate-200 ${
             !isLgLayout && mobileTab !== 'cart' ? 'hidden' : ''
-          } md:static md:z-auto md:flex md:w-[460px] md:max-w-[520px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[520px] xl:w-[580px]`}
+          } md:static md:z-auto md:flex md:w-[380px] md:max-w-[420px] md:h-full md:max-h-none md:rounded-none md:border-t-0 md:border-l lg:w-[420px] xl:w-[480px]`}
         >
           {/* Cart Header — fixed */}
           <div className="px-4 py-3 sm:px-5 shrink-0">
@@ -2382,8 +2382,8 @@ const handleCreateSale = async () => {
                 {/* Cart header row */}
                 <div className="flex items-center gap-2 px-1 pb-1 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                   <span className="flex-1">Item</span>
-                  <span className="w-32 text-center">Qty</span>
-                  <span className="w-16 text-right">Dis</span>
+                  <span className="w-16 text-right">Price</span>
+                  <span className="w-28 text-center">Qty</span>
                   <span className="w-16 text-right">Total</span>
                   <span className="w-8"></span>
                 </div>
@@ -2396,17 +2396,21 @@ const handleCreateSale = async () => {
                   <div key={item._id} className="border-b border-slate-50">
                     {/* ── Main item row ── */}
                     <div className="flex items-center gap-2 py-2 group">
-                      {/* Name + unit price stacked */}
+                      {/* Name */}
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-medium text-slate-800 truncate">{item.name}</h3>
-                        <span className="text-xs text-slate-500">{formatMoney(origPrice)}</span>
                       </div>
 
+                      {/* Original unit price */}
+                      <span className="w-16 text-right text-xs font-semibold text-slate-800 shrink-0">
+                        {formatMoney(origPrice)}
+                      </span>
+
                       {/* Qty controls */}
-                      <div className="flex items-center gap-1 shrink-0 w-32 justify-center">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => decreaseQty(item._id)}
-                          className="touch-manipulation h-9 w-9 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-8 md:w-8 md:rounded-lg"
+                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
                           aria-label="Decrease quantity"
                         >
                           −
@@ -2421,27 +2425,19 @@ const handleCreateSale = async () => {
                             const next = raw === '' ? 1 : parseInt(raw, 10);
                             setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
                           }}
-                          className="w-11 h-9 rounded-xl border border-slate-300 text-center text-sm md:w-10 md:h-8 md:rounded-lg"
+                          className="w-14 h-11 rounded-xl border border-slate-300 text-center text-base md:w-12 md:h-9 md:rounded-lg md:text-sm"
                           aria-label="Quantity"
                         />
                         <button
                           onClick={() => increaseQty(item._id)}
-                          className="touch-manipulation h-9 w-9 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-8 md:w-8 md:rounded-lg"
+                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
                           aria-label="Increase quantity"
                         >
                           +
                         </button>
                       </div>
 
-                      {/* DIS column — total discount for this line */}
-                      <span className="w-16 text-right text-xs font-semibold shrink-0">
-                        {hasDiscount
-                          ? <span className="text-emerald-600">-{formatMoney(discAmt * item.quantity)}</span>
-                          : <span className="text-slate-300">—</span>
-                        }
-                      </span>
-
-                      {/* Line total (original price × qty) */}
+                      {/* Original line total */}
                       <span className="w-16 text-right text-sm font-semibold text-slate-800 shrink-0">
                         {formatMoney(origPrice * item.quantity)}
                       </span>
@@ -2449,15 +2445,37 @@ const handleCreateSale = async () => {
                       {/* Trash */}
                       <button
                         onClick={() => removeItem(item._id)}
-                        className="touch-manipulation w-9 h-9 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0 md:w-8 md:h-8 md:rounded-lg"
+                        className="touch-manipulation w-11 h-11 flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 active:scale-[0.97] transition-colors shrink-0 md:w-9 md:h-9 md:rounded-lg"
                         aria-label="Remove item"
                         title="Remove"
                       >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>
+
+                    {/* ── Discount sub-row (matches receipt: "  discount   60") ── */}
+                    {hasDiscount && (
+                      <div className="flex items-center gap-2 pb-2 -mt-1">
+                        {/* "discount" label indented */}
+                        <span className="flex-1 pl-3 text-xs font-semibold text-emerald-600">
+                          discount
+                        </span>
+                        {/* per-unit discount */}
+                        <span className="w-16 text-right text-xs font-semibold text-emerald-600 shrink-0">
+                          -{formatMoney(discAmt)}
+                        </span>
+                        {/* spacer for qty column */}
+                        <div className="w-28 shrink-0" />
+                        {/* total line discount */}
+                        <span className="w-16 text-right text-xs font-bold text-emerald-600 shrink-0">
+                          -{formatMoney(discAmt * item.quantity)}
+                        </span>
+                        {/* spacer for trash */}
+                        <div className="w-11 md:w-9 shrink-0" />
+                      </div>
+                    )}
                   </div>
                   );
                 })}
