@@ -1149,7 +1149,9 @@ export default function PosPage() {
         const payload: any = {
           items: items.map((item) => ({
             product: item._id,
-            quantity: item.quantity
+            quantity: item.quantity,
+            price: item.price,
+            originalPrice: item.originalPrice
           })),
           paymentMethod: paymentMethod,
           orderType: 'DINE_IN',
@@ -1461,6 +1463,8 @@ const handleAddToTable = async () => {
         items: items.map((item) => ({
           product: item._id,
           quantity: item.quantity,
+          price: item.price,
+          originalPrice: item.originalPrice
         })),
         orderType: 'DINE_IN',
         tableId: selectedTable,
@@ -1542,7 +1546,9 @@ const handleCreateSale = async () => {
     const payload: any = {
       items: items.map((item) => ({
         product: item._id,
-        quantity: item.quantity
+        quantity: item.quantity,
+        price: item.price,
+        originalPrice: item.originalPrice
       })),
       paymentMethod: paymentMethod,
       orderType,
@@ -2403,7 +2409,7 @@ const handleCreateSale = async () => {
                       </div>
 
                       {/* Qty controls */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 justify-center w-20 shrink-0">
                         <button
                           onClick={() => decreaseQty(item._id)}
                           className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
@@ -2433,9 +2439,9 @@ const handleCreateSale = async () => {
                         </button>
                       </div>
 
-                      {/* DIS (per-unit discount) */}
+                      {/* DIS (line discount) */}
                       <span className={`w-16 text-right text-xs font-semibold ${hasDiscount ? 'text-emerald-600' : 'text-slate-400'} shrink-0`}>
-                        {hasDiscount ? `-${formatMoney(discAmt)}` : ''}
+                        {hasDiscount ? `-${formatMoney(discAmt * item.quantity)}` : ''}
                       </span>
 
                       {/* Line total (show original/non-discounted total) */}

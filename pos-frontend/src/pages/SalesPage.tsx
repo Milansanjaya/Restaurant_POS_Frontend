@@ -926,17 +926,23 @@ const SalesPage: React.FC = () => {
                         <th className="text-left p-2">Item</th>
                         <th className="text-center p-2">Qty</th>
                         <th className="text-right p-2">Price</th>
+                        <th className="text-right p-2">DIS</th>
                         <th className="text-right p-2">Subtotal</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selectedSale.items.map((item, idx) => {
                         const productName = typeof item.product === 'object' ? (item.product as Product).name : 'Product';
+                        const hasDiscount = item.originalPrice != null && item.originalPrice > item.price;
+                        const discountAmount = hasDiscount ? (item.originalPrice! - item.price) * item.quantity : 0;
                         return (
                           <tr key={idx} className="border-t">
                             <td className="p-2">{productName}</td>
                             <td className="text-center p-2">{item.quantity}</td>
                             <td className="text-right p-2">{formatMoney(item.price)}</td>
+                            <td className={`text-right p-2 ${hasDiscount ? 'text-emerald-600 font-semibold' : 'text-gray-400'}`}>
+                              {hasDiscount ? `-${formatMoney(discountAmount)}` : ''}
+                            </td>
                             <td className="text-right p-2">{formatMoney(item.subtotal)}</td>
                           </tr>
                         );

@@ -8,6 +8,7 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   permission?: string; // Permission required to see this item
+  permissions?: string[]; // Any of these permissions can show the item
 }
 
 const navItems: NavItem[] = [
@@ -193,19 +194,9 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Customer Returns',
-    path: '/returns?type=customer',
-    permission: PERMISSIONS.VIEW_CUSTOMER_RETURNS,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Supplier Returns',
-    path: '/returns?type=supplier',
-    permission: PERMISSIONS.VIEW_SUPPLIER_RETURNS,
+    label: 'Returns',
+    path: '/returns',
+    permissions: [PERMISSIONS.VIEW_CUSTOMER_RETURNS, PERMISSIONS.VIEW_SUPPLIER_RETURNS],
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
@@ -278,6 +269,9 @@ export default function Sidebar({
 
   // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter((item) => {
+    if (item.permissions?.length) {
+      return item.permissions.some((permission) => hasPermission(permission));
+    }
     // If no permission specified, show to everyone
     if (!item.permission) return true;
     // Check if user has the required permission

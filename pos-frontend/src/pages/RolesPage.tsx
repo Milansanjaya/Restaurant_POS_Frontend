@@ -121,10 +121,14 @@ const RolesPage: React.FC = () => {
   const allowedPermissions = useMemo(() => {
     if (!user) return [];
     // Super admin can assign all permissions
-    if (user.role?.name === 'SUPER_ADMIN') return permissions;
+    const visiblePermissions = permissions.filter(
+      (perm) => perm.name !== 'VIEW_SUPPLIER_RETURNS'
+    );
+
+    if (user.role?.name === 'SUPER_ADMIN') return visiblePermissions;
     
     // Other users can only assign permissions they have
-    return permissions.filter(perm => 
+    return visiblePermissions.filter(perm => 
       user.permissions?.includes(perm.name) || false
     );
   }, [permissions, user]);

@@ -512,6 +512,7 @@ export interface SaleItem {
   product: string | Product;
   quantity: number;
   price: number;
+  originalPrice?: number; // Original price before discount
   taxRate: number;
   subtotal: number;
   batch_id?: string;      // FIFO: Track which batch was used
