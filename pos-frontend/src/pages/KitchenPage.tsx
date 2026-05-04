@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { useAuthStore } from '../store/auth.store';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Badge, Card } from '../components';
@@ -134,7 +134,7 @@ export default function KitchenPage() {
 
   const handlePrintKitchenOrder = async (order: KitchenOrder, orderNo: string) => {
     if (!kitchenBillPrintingEnabled) {
-      toast.error('Kitchen printing is disabled in Settings');
+      notify.error('Kitchen printing is disabled in Settings');
       return;
     }
 
@@ -217,7 +217,7 @@ export default function KitchenPage() {
 
       const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720');
       if (!printWindow) {
-        toast.error('Popup blocked. Please allow popups to print.');
+        notify.error('Popup blocked. Please allow popups to print.');
         return;
       }
       printWindow.document.open();
@@ -225,7 +225,7 @@ export default function KitchenPage() {
       printWindow.document.close();
     } catch (e) {
       console.error('Kitchen print failed:', e);
-      toast.error('Failed to print kitchen order');
+      notify.error('Failed to print kitchen order');
     }
   };
 

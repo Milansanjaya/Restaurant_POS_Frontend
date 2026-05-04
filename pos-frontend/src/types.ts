@@ -317,6 +317,23 @@ export interface PurchaseOrderFormData {
 // ==================== GRN ====================
 export type GRNStatus = 'DRAFT' | 'APPROVED' | 'RECEIVED' | 'REJECTED';
 export type QualityStatus = 'ACCEPTED' | 'REJECTED' | 'PARTIAL';
+export type GRNPaymentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'FULLY_PAID';
+export type GRNPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CHEQUE';
+
+export interface GRNPayment {
+  _id: string;
+  grn_id: string | GRN;
+  supplier_id: string | Supplier;
+  amount: number;
+  paymentMethod: GRNPaymentMethod;
+  reference?: string;
+  notes?: string;
+  date: string;
+  branch_id: string;
+  createdBy: string | User;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface GRNItem {
   product_id: string;
@@ -348,6 +365,8 @@ export interface GRN {
   items: GRNItem[];
   batches: GRNBatch[];
   totalAmount: number;
+  paidAmount?: number;
+  paymentStatus?: GRNPaymentStatus;
   status: GRNStatus;
   receivedDate: string;
   approvedBy?: string;
@@ -689,6 +708,7 @@ export interface SystemConfig {
   taxes: TaxSetting[];
   currency: CurrencyConfig;
   expiryAlertDays: number;
+  dailyReceiptNumberLimit?: number;
   invoiceFormat: InvoiceFormat;
   serviceCharge: number;
   serviceChargeType: 'FIXED' | 'PERCENTAGE';

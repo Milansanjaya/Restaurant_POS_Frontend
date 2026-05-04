@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table } from '../components';
+import { PlusIcon, SeatIcon } from '../components/ActionIcons';
 import { reservationsApi } from '../api/reservations.api';
 import { tablesApi } from '../api/tables.api';
 import type { Reservation, ReservationFormData, ReservationStatus, RestaurantTable } from '../types';
@@ -91,18 +92,18 @@ export default function ReservationsPage() {
 
   const handleCreate = async () => {
     if (!hasValidPhone(formData.customerPhone)) {
-      toast.error('Enter a valid phone number (7 to 15 digits)');
+      notify.error('Enter a valid phone number (7 to 15 digits)');
       return;
     }
 
     if (!hasValidFutureDateTime(formData.reservationDateTime)) {
-      toast.error('Reservation date/time cannot be in the past');
+      notify.error('Reservation date/time cannot be in the past');
       return;
     }
 
     try {
       await reservationsApi.create(formData);
-      toast.success('📅 Reservation created successfully');
+      notify.success('Reservation created successfully');
       setShowModal(false);
       setFormData({
         tableId: '',
@@ -114,7 +115,7 @@ export default function ReservationsPage() {
       });
       loadData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create reservation');
+      notify.error(err?.response?.data?.message || 'Failed to create reservation');
       console.error('Failed to create reservation:', err);
     }
   };
@@ -122,10 +123,10 @@ export default function ReservationsPage() {
   const handleStatusChange = async (reservation: Reservation, status: ReservationStatus) => {
     try {
       await reservationsApi.updateStatus(reservation._id, status);
-      toast.success(`✅ Reservation status changed to ${status}`);
+      notify.success(`Reservation status changed to ${status}`);
       loadData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update status');
+      notify.error(err?.response?.data?.message || 'Failed to update status');
       console.error('Failed to update status:', err);
     }
   };
@@ -148,10 +149,10 @@ export default function ReservationsPage() {
         }
       }
       
-      toast.success('🪑 Customer seated successfully');
+      notify.success('Customer seated successfully');
       loadData();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to seat reservation');
+      notify.error(err?.response?.data?.message || 'Failed to seat reservation');
       console.error('Failed to seat reservation:', err);
     }
   };
@@ -211,8 +212,8 @@ export default function ReservationsPage() {
       render: (r: Reservation) => (
         <div className="flex items-center gap-2">
           {r.status === 'CONFIRMED' && (
-            <Button size="sm" onClick={() => handleSeat(r)}>
-              Seat
+            <Button size="sm" onClick={() => handleSeat(r)} aria-label={`Seat reservation for ${r.customerName}`} title="Seat">
+              <SeatIcon />
             </Button>
           )}
           {!['SEATED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(r.status) && (
@@ -234,7 +235,7 @@ export default function ReservationsPage() {
       <PageHeader
         title="Reservations"
         actions={
-          <Button onClick={() => setShowModal(true)}>New Reservation</Button>
+          <Button onClick={() => setShowModal(true)} aria-label="New Reservation" title="New Reservation"><PlusIcon /></Button>
         }
       />
 

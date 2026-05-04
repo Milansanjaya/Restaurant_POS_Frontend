@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Pagination, Badge, Modal, ConfirmDialog } from '../components';
 import { productsApi, categoriesApi, unitsApi, discountsApi } from '../api';
 import type { Product, Category, ProductFormData, Unit, Discount } from '../types';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { formatMoney } from '../money';
 
 type Numberish = number | '';
@@ -31,6 +31,8 @@ const toOptionalNumber = (v: Numberish, min?: number) => {
 };
 
 export default function ProductsPage() {
+  const PAGE_SIZE = 25;
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -72,7 +74,7 @@ export default function ProductsPage() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const res = await productsApi.getAll({ page, limit: 10, search });
+      const res = await productsApi.getAll({ page, limit: PAGE_SIZE, search });
       setProducts(res.products || []);
       setTotalPages(res.pagination?.pages || 1);
     } catch (error) {
@@ -189,7 +191,7 @@ export default function ProductsPage() {
 
   const handleCreateUnit = async () => {
     if (!newUnitName.trim()) {
-      toast.error('Please enter unit name');
+      notify.error('Please enter unit name');
       return;
     }
     try {
@@ -198,13 +200,13 @@ export default function ProductsPage() {
         shortCode: newUnitName.substring(0, 3).toUpperCase(),
         type: 'WEIGHT' as const
       });
-      toast.success('Unit created successfully!');
+      notify.success('Unit created successfully!');
       setShowUnitModal(false);
       setNewUnitName('');
       setNewUnitSymbol('');
       loadUnits();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to create unit');
+      notify.error(error?.response?.data?.message || 'Failed to create unit');
     }
   };
 
@@ -265,23 +267,23 @@ export default function ProductsPage() {
   const handleSave = async () => {
     // Validation
     if (!formData.name || !formData.name.trim()) {
-      toast.error('Please enter a product name');
+      notify.error('Please enter a product name');
       return;
     }
     if (!formData.sku || !formData.sku.trim()) {
-      toast.error('Please enter a SKU');
+      notify.error('Please enter a SKU');
       return;
     }
     if (!formData.category) {
-      toast.error('Please select a category');
+      notify.error('Please select a category');
       return;
     }
     if (typeof formData.price !== 'number' || formData.price < 0) {
-      toast.error('Please enter a valid price');
+      notify.error('Please enter a valid price');
       return;
     }
     if (typeof formData.cost !== 'number' || formData.cost < 0) {
-      toast.error('Please enter a valid cost');
+      notify.error('Please enter a valid cost');
       return;
     }
 
@@ -298,15 +300,25 @@ export default function ProductsPage() {
       };
       if (editingProduct) {
         await productsApi.update(editingProduct._id, payload);
-        toast.success('✅ Product updated successfully');
+        notify.success('Product updated successfully');
       } else {
         await productsApi.create(payload);
-        toast.success('✅ Product created successfully');
+        notify.success('Product created successfully');
       }
       setModalOpen(false);
-      loadProducts();
+      if (!editingProduct) {
+        const shouldResetListView = page !== 1 || search.trim() !== '';
+        if (shouldResetListView) {
+          setPage(1);
+          setSearch('');
+        } else {
+          loadProducts();
+        }
+      } else {
+        loadProducts();
+      }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save product');
+      notify.error(error?.response?.data?.message || 'Failed to save product');
     } finally {
       setSaving(false);
     }
@@ -322,12 +334,12 @@ export default function ProductsPage() {
     try {
       setDeleting(true);
       await productsApi.delete(deletingProduct._id);
-      toast.success('🗑️ Product deleted successfully');
+      notify.success('Product deleted successfully');
       setDeleteConfirmOpen(false);
       setDeletingProduct(null);
       loadProducts();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete product');
+      notify.error(error?.response?.data?.message || 'Failed to delete product');
     } finally {
       setDeleting(false);
     }
@@ -336,10 +348,10 @@ export default function ProductsPage() {
   const handleToggleAvailability = async (product: Product) => {
     try {
       await productsApi.toggleAvailability(product._id, !product.isAvailable);
-      toast.success(`${product.isAvailable ? '🔴' : '🟢'} Product availability updated`);
+      notify.success(`${product.isAvailable ? '🔴' : '🟢'} Product availability updated`);
       loadProducts();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to update availability');
+      notify.error(error?.response?.data?.message || 'Failed to update availability');
     }
   };
 
@@ -448,14 +460,21 @@ export default function ProductsPage() {
       header: 'Actions',
       render: (item: Product) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
-            View
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)} aria-label={`View ${item.name}`} title="View">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-            Edit
+          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M11 5h7m-7 0v7m0-7L4 16v4h4l7-7" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)}>
-            Delete
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)} aria-label={`Delete ${item.name}`} title="Delete">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+            </svg>
           </Button>
         </div>
       ),
@@ -468,7 +487,11 @@ export default function ProductsPage() {
         title="Products"
         subtitle="Manage your product catalog"
         actions={
-          <Button onClick={openCreateModal}>+ Add Product</Button>
+          <Button onClick={openCreateModal} aria-label="Add Product" title="Add Product">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </Button>
         }
       />
       <PageContent>
@@ -476,7 +499,10 @@ export default function ProductsPage() {
           <Input
             placeholder="Search products..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setSearch(e.target.value);
+            }}
             className="max-w-md"
           />
         </div>

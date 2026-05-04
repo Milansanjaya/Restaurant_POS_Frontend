@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, Table, Badge, Button, Input, PageLoader } from '../components';
+import { EyeIcon } from '../components/ActionIcons';
 import { loyaltyApi, customersApi } from '../api';
 import type { LoyaltyAccount, LoyaltyTransaction, Customer } from '../types';
 import { formatMoney } from '../money';
@@ -77,8 +78,8 @@ export default function LoyaltyPage() {
       key: 'actions',
       header: 'Actions',
       render: (item: Customer) => (
-        <Button size="sm" variant="ghost" onClick={() => viewLoyalty(item)}>
-          View Loyalty
+        <Button size="sm" variant="ghost" onClick={() => viewLoyalty(item)} aria-label={`View loyalty for ${item.name}`} title="View Loyalty">
+          <EyeIcon />
         </Button>
       ),
     },

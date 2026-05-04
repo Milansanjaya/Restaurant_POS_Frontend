@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Badge, ConfirmDialog } from '../components';
+import { PlusIcon, ToggleIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
 import { usersApi, rolesApi } from '../api';
@@ -169,14 +170,16 @@ const UsersPage: React.FC = () => {
             size="sm" 
             variant="ghost" 
             onClick={() => handleToggleStatus(user._id)}
+            aria-label={user.isActive ? 'Deactivate user' : 'Activate user'}
+            title={user.isActive ? 'Deactivate' : 'Activate'}
           >
-            {user.isActive ? 'Deactivate' : 'Activate'}
+            <ToggleIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handleOpenModal(user)}>
-            Edit
+          <Button size="sm" variant="ghost" onClick={() => handleOpenModal(user)} aria-label="Edit user" title="Edit">
+            <EditIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => requestDelete(user)}>
-            Delete
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(user)} aria-label="Delete user" title="Delete">
+            <TrashIcon />
           </Button>
         </div>
       ),
@@ -189,8 +192,8 @@ const UsersPage: React.FC = () => {
         title="User Management"
         subtitle="Manage users and assign roles"
         actions={
-          <Button onClick={() => handleOpenModal()}>
-            Create User
+          <Button onClick={() => handleOpenModal()} aria-label="Create User" title="Create User">
+            <PlusIcon />
           </Button>
         }
       />

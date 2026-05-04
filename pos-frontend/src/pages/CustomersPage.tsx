@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, ConfirmDialog } from '../components';
+import { PlusIcon, EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import { customersApi } from '../api';
 import type { Customer, CustomerFormData } from '../types';
 import { formatMoney } from '../money';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -100,7 +101,7 @@ export default function CustomersPage() {
       setHistoryData(data);
     } catch (error) {
       console.error('Failed to load customer history:', error);
-      toast.error('Failed to load customer history');
+      notify.error('Failed to load customer history');
     } finally {
       setHistoryLoading(false);
     }
@@ -127,10 +128,10 @@ export default function CustomersPage() {
       await loadCustomers();
       setCustomers((prev) => prev.filter((customer) => customer._id !== deletingId));
 
-      toast.success(`✅ ${backendMessage || 'Customer deleted successfully'}`);
+      notify.success(`${backendMessage || 'Customer deleted successfully'}`);
       setDeleteCustomer(null);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Failed to delete customer');
+      notify.error(error?.response?.data?.message || error?.message || 'Failed to delete customer');
     } finally {
       setDeleting(false);
     }
@@ -142,18 +143,18 @@ export default function CustomersPage() {
       const normalizedPhone = normalizePhoneInput(formData.phone || '');
 
       if (!name || !normalizedPhone) {
-        toast.error('Name and phone are required');
+        notify.error('Name and phone are required');
         return;
       }
 
       const digits = phoneDigits(normalizedPhone);
       if (digits.length < 10 || digits.length > 15) {
-        toast.error('Phone number must be 10 to 15 digits');
+        notify.error('Phone number must be 10 to 15 digits');
         return;
       }
 
       if (!isValidYmd(formData.dob || '')) {
-        toast.error('Date of Birth must be in YYYY-MM-DD format');
+        notify.error('Date of Birth must be in YYYY-MM-DD format');
         return;
       }
 
@@ -168,15 +169,15 @@ export default function CustomersPage() {
 
       if (editingCustomer) {
         await customersApi.update(editingCustomer._id, payload);
-        toast.success('✅ Customer updated successfully');
+        notify.success('Customer updated successfully');
       } else {
         await customersApi.create(payload);
-        toast.success('✅ Customer created successfully');
+        notify.success('Customer created successfully');
       }
       setModalOpen(false);
       loadCustomers();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save customer');
+      notify.error(error?.response?.data?.message || 'Failed to save customer');
     } finally {
       setSaving(false);
     }
@@ -226,14 +227,14 @@ export default function CustomersPage() {
       header: 'Actions',
       render: (item: Customer) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
-            View
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)} aria-label={`View ${item.name}`} title="View">
+            <EyeIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-            Edit
+          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">
+            <EditIcon />
           </Button>
-          <Button size="sm" variant="danger" onClick={() => openDeleteDialog(item)}>
-            Delete
+          <Button size="sm" variant="danger" onClick={() => openDeleteDialog(item)} aria-label={`Delete ${item.name}`} title="Delete">
+            <TrashIcon />
           </Button>
         </div>
       ),
@@ -245,7 +246,7 @@ export default function CustomersPage() {
       <PageHeader
         title="Customers"
         subtitle="Manage your customer database"
-        actions={<Button onClick={openCreateModal}>+ Add Customer</Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Customer" title="Add Customer"><PlusIcon /></Button>}
       />
       <PageContent>
         <div className="mb-4 flex gap-4">

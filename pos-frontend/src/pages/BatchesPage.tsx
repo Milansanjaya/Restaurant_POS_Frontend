@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader, ConfirmDialog } from '../components';
+import { PlusIcon, ToggleIcon, TrashIcon } from '../components/ActionIcons';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
 import type { CreateBatchData } from '../api/batches.api';
@@ -78,7 +79,7 @@ export default function BatchesPage() {
       setProducts(productsRes.products || []);
     } catch (error) {
       console.error('Failed to load data:', error);
-      toast.error('❌ Failed to load batches');
+      notify.error('Failed to load batches');
     } finally {
       setLoading(false);
     }
@@ -91,10 +92,10 @@ export default function BatchesPage() {
   const handleToggleBlock = async (id: string) => {
     try {
       await batchesApi.toggleBlock(id);
-      toast.success('✅ Batch status updated');
+      notify.success('Batch status updated');
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to toggle batch');
+      notify.error(error?.response?.data?.message || 'Failed to toggle batch');
     }
   };
 
@@ -108,12 +109,12 @@ export default function BatchesPage() {
     try {
       setDeleting(true);
       await batchesApi.delete(deletingBatch._id);
-      toast.success('✅ Batch deleted');
+      notify.success('Batch deleted');
       setDeleteConfirmOpen(false);
       setDeletingBatch(null);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete batch');
+      notify.error(error?.response?.data?.message || 'Failed to delete batch');
     } finally {
       setDeleting(false);
     }
@@ -133,30 +134,30 @@ export default function BatchesPage() {
 
   const handleSave = async () => {
     if (!formData.product_id) {
-      toast.error('❌ Please select a product');
+      notify.error('Please select a product');
       return;
     }
     if (!formData.batchNumber) {
-      toast.error('❌ Please enter a batch number');
+      notify.error('Please enter a batch number');
       return;
     }
     if (formData.quantity <= 0) {
-      toast.error('❌ Please enter a valid quantity');
+      notify.error('Please enter a valid quantity');
       return;
     }
     if (!formData.expiryDate) {
-      toast.error('❌ Please enter an expiry date');
+      notify.error('Please enter an expiry date');
       return;
     }
     
     try {
       setSaving(true);
       await batchesApi.create(formData);
-      toast.success('✅ Batch created successfully');
+      notify.success('Batch created successfully');
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to create batch');
+      notify.error(error?.response?.data?.message || 'Failed to create batch');
     } finally {
       setSaving(false);
     }
@@ -229,16 +230,20 @@ export default function BatchesPage() {
             size="sm"
             variant={item.status === 'BLOCKED' ? 'outline' : 'danger'}
             onClick={() => handleToggleBlock(item._id)}
+            aria-label={item.status === 'BLOCKED' ? `Unblock batch ${item.batchNumber}` : `Block batch ${item.batchNumber}`}
+            title={item.status === 'BLOCKED' ? 'Unblock' : 'Block'}
           >
-            {item.status === 'BLOCKED' ? 'Unblock' : 'Block'}
+            <ToggleIcon />
           </Button>
           {item.remainingQuantity === 0 && (
             <Button
               size="sm"
               variant="ghost"
               onClick={() => requestDelete(item)}
+              aria-label={`Delete batch ${item.batchNumber}`}
+              title="Delete"
             >
-              🗑️
+              <TrashIcon />
             </Button>
           )}
         </div>
@@ -259,7 +264,7 @@ export default function BatchesPage() {
       <PageHeader
         title="Batch & Expiry Management"
         subtitle="Track product batches and expiry dates"
-        actions={<Button onClick={openCreateModal}>+ Create Batch</Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Create Batch" title="Create Batch"><PlusIcon /></Button>}
       />
       <PageContent>
         {/* Dashboard Stats */}

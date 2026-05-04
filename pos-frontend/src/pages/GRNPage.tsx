@@ -1,12 +1,20 @@
 import { useEffect, useState, Fragment } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal, Card, Input } from '../components';
+import { PlusIcon, EyeIcon, PrinterIcon, DollarIcon, EditIcon, CheckIcon, TrashIcon } from '../components/ActionIcons';
 import { grnApi, purchaseOrdersApi, suppliersApi } from '../api';
-import type { GRN, GRNFormData, GRNItem, GRNBatch, PurchaseOrder, Supplier, QualityStatus } from '../types';
+import type { GRN, GRNBatch, GRNFormData, GRNItem, GRNPayment, GRNPaymentMethod, PurchaseOrder, QualityStatus, Supplier } from '../types';
 import { formatMoney } from '../money';
 
 type GRNItemForm = Omit<GRNItem, 'receivedQuantity'> & { receivedQuantity: number | '' };
 type GRNFormState = Omit<GRNFormData, 'items'> & { items: GRNItemForm[] };
+
+type Numberish = number | '';
+
+const toNumber = (v: Numberish, fallback = 0) => {
+  if (v === '') return fallback;
+  return Number.isFinite(v) ? v : fallback;
+};
 
 export default function GRNPage() {
   const [grns, setGrns] = useState<GRN[]>([]);
@@ -19,6 +27,28 @@ export default function GRNPage() {
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Payment modal state
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentGRN, setPaymentGRN] = useState<GRN | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<Numberish>('');
+  const [paymentMethod, setPaymentMethod] = useState<GRNPaymentMethod>('CASH');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paying, setPaying] = useState(false);
+
+  // Payment history for details
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [grnPayments, setGrnPayments] = useState<GRNPayment[]>([]);
+  const [paymentTotals, setPaymentTotals] = useState<{
+    totalAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    paymentStatus: string;
+  } | null>(null);
+  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
+  const [printLoadingId, setPrintLoadingId] = useState<string | null>(null);
+  const [approveLoadingId, setApproveLoadingId] = useState<string | null>(null);
   
   // Filter states
   const [filterStatus, setFilterStatus] = useState('');
@@ -62,7 +92,7 @@ export default function GRNPage() {
       setSuppliers(supplierRes.suppliers || []);
     } catch (error) {
       console.error('Failed to load data:', error);
-      toast.error('❌ Failed to load data');
+      notify.error('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -71,6 +101,78 @@ export default function GRNPage() {
   useEffect(() => {
     loadData();
   }, [filterStatus, filterSupplier]);
+
+  const getPaidAmount = (grn: GRN) => Math.max(Number(grn.paidAmount ?? 0) || 0, 0);
+  const getRemainingAmount = (grn: GRN) => Math.max((Number(grn.totalAmount || 0) || 0) - getPaidAmount(grn), 0);
+  const getPaymentStatus = (grn: GRN) => {
+    if (grn.paymentStatus) return grn.paymentStatus;
+    const paid = getPaidAmount(grn);
+    const rem = getRemainingAmount(grn);
+    if (paid <= 0) return 'PENDING';
+    if (rem <= 0) return 'FULLY_PAID';
+    return 'PARTIALLY_PAID';
+  };
+
+  const openPaymentModal = (grn: GRN) => {
+    const remaining = getRemainingAmount(grn);
+    setPaymentGRN(grn);
+    setPaymentAmount(remaining > 0 ? remaining : '');
+    setPaymentMethod('CASH');
+    setPaymentReference('');
+    setPaymentNotes('');
+    setPaymentOpen(true);
+  };
+
+  const handleRecordPayment = async () => {
+    if (!paymentGRN) return;
+
+    const remaining = getRemainingAmount(paymentGRN);
+    const amount = toNumber(paymentAmount, 0);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify.error('Enter a valid payment amount');
+      return;
+    }
+
+    if (remaining <= 0) {
+      notify.error('This GRN is already fully paid');
+      return;
+    }
+
+    if (amount > remaining) {
+      notify.error('Payment amount cannot exceed remaining balance');
+      return;
+    }
+
+    try {
+      setPaying(true);
+      await grnApi.recordPayment(paymentGRN._id, {
+        amount,
+        paymentMethod,
+        reference: paymentReference || undefined,
+        notes: paymentNotes || undefined,
+      });
+
+      notify.success('Payment recorded successfully');
+      setPaymentOpen(false);
+      await loadData();
+
+      // Refresh details modal (if currently viewing same GRN)
+      if (selectedGRN?._id === paymentGRN._id) {
+        const [fullGrn, payRes] = await Promise.all([
+          grnApi.getById(paymentGRN._id),
+          grnApi.getPayments(paymentGRN._id),
+        ]);
+        setSelectedGRN(fullGrn);
+        setGrnPayments(payRes.payments || []);
+        setPaymentTotals(payRes.totals || null);
+      }
+    } catch (error: any) {
+      notify.error(error?.response?.data?.message || 'Failed to record payment');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const generateBatchNumber = (productName: string) => {
     const date = new Date();
@@ -137,7 +239,7 @@ export default function GRNPage() {
   const handleSave = async () => {
     // Validation
     if (!formData.items || formData.items.length === 0) {
-      toast.error('❌ Please add at least one item');
+      notify.error('Please add at least one item');
       return;
     }
 
@@ -145,20 +247,20 @@ export default function GRNPage() {
     for (const item of formData.items) {
       const qty = item.receivedQuantity === '' ? NaN : Number(item.receivedQuantity);
       if (!Number.isFinite(qty) || qty < 0) {
-        toast.error(`❌ Invalid received quantity for ${item.productName}`);
+        notify.error(`Invalid received quantity for ${item.productName}`);
         return;
       }
 
       if (item.qualityStatus === 'REJECTED' || item.qualityStatus === 'PARTIAL') {
         if (!item.rejectionReason || item.rejectionReason.trim() === '') {
-          toast.error(`❌ Please provide rejection reason for ${item.productName}`);
+          notify.error(`Please provide rejection reason for ${item.productName}`);
           return;
         }
       }
 
       // Validate batch info - if batch number provided, expiry date is required
       if (item.batchNumber && item.batchNumber.trim() !== '' && !item.expiryDate) {
-        toast.error(`❌ Please provide expiry date for batch ${item.batchNumber}`);
+        notify.error(`Please provide expiry date for batch ${item.batchNumber}`);
         return;
       }
     }
@@ -197,15 +299,15 @@ export default function GRNPage() {
       setSaving(true);
       if (editingId) {
         await grnApi.update(editingId, payload);
-        toast.success('✅ GRN updated successfully');
+        notify.success('GRN updated successfully');
       } else {
         await grnApi.create(payload);
-        toast.success('✅ GRN created successfully');
+        notify.success('GRN created successfully');
       }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || '❌ Failed to save GRN');
+      notify.error(error?.response?.data?.message || 'Failed to save GRN');
     } finally {
       setSaving(false);
     }
@@ -215,15 +317,15 @@ export default function GRNPage() {
     if (!confirm('Delete this GRN? This cannot be undone.')) return;
     try {
       await grnApi.delete(id);
-      toast.success('✅ GRN deleted successfully');
+      notify.success('GRN deleted successfully');
       loadData();
     } catch (error: any) {
       if (error?.response?.status === 404) {
-        toast.error('❌ GRN not found (already deleted)');
+        notify.error('GRN not found (already deleted)');
         // Refresh the list to remove the stale item
         loadData();
       } else {
-        toast.error(error?.response?.data?.message || '❌ Failed to delete GRN');
+        notify.error(error?.response?.data?.message || 'Failed to delete GRN');
       }
     }
   };
@@ -231,27 +333,47 @@ export default function GRNPage() {
   const handleApprove = async (id: string) => {
     if (!confirm('Approve GRN? This will update inventory and supplier balance.')) return;
     try {
+      setApproveLoadingId(id);
       await grnApi.approve(id);
-      toast.success('💰 GRN approved! Inventory and batches updated');
+      notify.success('GRN approved successfully. Inventory and supplier balance have been updated.');
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || '❌ Failed to approve GRN');
+      notify.error(error?.response?.data?.message || 'Failed to approve GRN');
+    } finally {
+      setApproveLoadingId(null);
     }
   };
 
   const handleViewDetails = async (grn: GRN) => {
     try {
+      setViewLoadingId(grn._id);
       // Fetch full GRN details to ensure all data is available
       const fullGrn = await grnApi.getById(grn._id);
       setSelectedGRN(fullGrn || grn);
+      setPaymentsLoading(true);
+      try {
+        const payRes = await grnApi.getPayments(grn._id);
+        setGrnPayments(payRes.payments || []);
+        setPaymentTotals(payRes.totals || null);
+      } catch (err) {
+        console.warn('Failed to load GRN payments:', err);
+        setGrnPayments([]);
+        setPaymentTotals(null);
+      } finally {
+        setPaymentsLoading(false);
+      }
       setDetailModalOpen(true);
-      toast.success('📄 GRN details opened');
+      notify.success('GRN details opened');
     } catch (error) {
       console.error('Failed to fetch GRN details:', error);
       // Fall back to using the list data
       setSelectedGRN(grn);
+      setGrnPayments([]);
+      setPaymentTotals(null);
       setDetailModalOpen(true);
-      toast.success('📄 GRN details opened (partial data)');
+      notify.success('GRN details opened (partial data)');
+    } finally {
+      setViewLoadingId(null);
     }
   };
 
@@ -365,7 +487,7 @@ export default function GRNPage() {
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Pop-up blocked. Please allow pop-ups to print.');
+      notify.error('Pop-up blocked. Please allow pop-ups to print.');
       return;
     }
     printWindow.document.write(printContent);
@@ -374,12 +496,15 @@ export default function GRNPage() {
 
   const handlePrintGRN = async (grn: GRN) => {
     try {
+      setPrintLoadingId(grn._id);
       const fullGrn = await grnApi.getById(grn._id);
       printGRN(fullGrn || grn);
     } catch (error) {
       console.error('Failed to load GRN for print:', error);
       // Fall back to current data
       printGRN(grn);
+    } finally {
+      setPrintLoadingId(null);
     }
   };
 
@@ -403,6 +528,25 @@ export default function GRNPage() {
       render: (item: GRN) => formatMoney(item.totalAmount),
     },
     {
+      key: 'paidAmount',
+      header: 'Paid',
+      render: (item: GRN) => formatMoney(getPaidAmount(item)),
+    },
+    {
+      key: 'remainingAmount',
+      header: 'Due',
+      render: (item: GRN) => formatMoney(getRemainingAmount(item)),
+    },
+    {
+      key: 'paymentStatus',
+      header: 'Payment',
+      render: (item: GRN) => (
+        <Badge variant={getStatusBadgeVariant(getPaymentStatus(item))}>
+          {getPaymentStatus(item)}
+        </Badge>
+      ),
+    },
+    {
       key: 'status',
       header: 'Status',
       render: (item: GRN) => (
@@ -419,22 +563,27 @@ export default function GRNPage() {
       header: 'Actions',
       render: (item: GRN) => (
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => handleViewDetails(item)}>
-            View
+          <Button size="sm" variant="ghost" onClick={() => handleViewDetails(item)} loading={viewLoadingId === item._id} aria-label={`View GRN ${item.grnNumber}`} title="View">
+            <EyeIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handlePrintGRN(item)}>
-            🖨️ Print
+          <Button size="sm" variant="ghost" onClick={() => handlePrintGRN(item)} loading={printLoadingId === item._id} aria-label={`Print GRN ${item.grnNumber}`} title="Print">
+            <PrinterIcon />
           </Button>
+          {['APPROVED', 'RECEIVED'].includes(item.status) && getRemainingAmount(item) > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => openPaymentModal(item)} aria-label={`Pay GRN ${item.grnNumber}`} title="Pay">
+              <DollarIcon />
+            </Button>
+          )}
           {item.status === 'DRAFT' && (
             <>
-              <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-                Edit
+              <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit GRN ${item.grnNumber}`} title="Edit">
+                <EditIcon />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
-                Approve
+              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)} loading={approveLoadingId === item._id} aria-label={`Approve GRN ${item.grnNumber}`} title="Approve">
+                <CheckIcon />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
-                Delete
+              <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)} aria-label={`Delete GRN ${item.grnNumber}`} title="Delete">
+                <TrashIcon />
               </Button>
             </>
           )}
@@ -498,7 +647,7 @@ export default function GRNPage() {
                       {po.items?.length || 0} items • {formatMoney(po.totalAmount || 0)}
                     </p>
                   </div>
-                  <Button onClick={() => openCreateModal(po)}>Receive</Button>
+                  <Button onClick={() => openCreateModal(po)} aria-label={`Receive PO ${po.poNumber}`} title="Receive"><PlusIcon /></Button>
                 </div>
               ))}
             </div>
@@ -631,7 +780,22 @@ export default function GRNPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Close</Button>
-            <Button onClick={() => selectedGRN && handlePrintGRN(selectedGRN)} disabled={!selectedGRN}>🖨️ Print</Button>
+            <Button
+              variant="outline"
+              onClick={() => selectedGRN && openPaymentModal(selectedGRN)}
+              disabled={
+                !selectedGRN ||
+                !['APPROVED', 'RECEIVED'].includes(selectedGRN.status) ||
+                getRemainingAmount(selectedGRN) <= 0
+              }
+              aria-label="Pay GRN"
+              title="Pay"
+            >
+              <DollarIcon />
+            </Button>
+            <Button onClick={() => selectedGRN && handlePrintGRN(selectedGRN)} loading={selectedGRN ? printLoadingId === selectedGRN._id : false} disabled={!selectedGRN} aria-label="Print GRN" title="Print">
+              <PrinterIcon />
+            </Button>
           </>
         }
       >
@@ -670,6 +834,22 @@ export default function GRNPage() {
               <div>
                 <label className="text-sm font-medium text-slate-700">Total Amount</label>
                 <p className="text-slate-900 font-bold">{formatMoney(selectedGRN.totalAmount)}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Payment Status</label>
+                <div className="mt-1">
+                  <Badge variant={getStatusBadgeVariant(getPaymentStatus(selectedGRN))}>
+                    {getPaymentStatus(selectedGRN)}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Paid Amount</label>
+                <p className="text-slate-900 font-bold">{formatMoney(getPaidAmount(selectedGRN))}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Remaining</label>
+                <p className="text-slate-900 font-bold">{formatMoney(getRemainingAmount(selectedGRN))}</p>
               </div>
             </div>
 
@@ -748,6 +928,42 @@ export default function GRNPage() {
               </div>
             )}
 
+            {/* Payments Section */}
+            <div>
+              <h3 className="font-medium text-slate-900 mb-3">💳 Payments</h3>
+              {paymentsLoading ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                  Loading payments...
+                </div>
+              ) : grnPayments.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                  No payments recorded for this GRN
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {grnPayments.map((p) => (
+                    <div key={p._id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="font-medium">{p.paymentMethod}</p>
+                        <p className="text-sm text-slate-500">
+                          {new Date(p.createdAt || p.date).toLocaleString()}
+                          {p.reference ? ` • Ref: ${p.reference}` : ''}
+                        </p>
+                        {p.notes ? <p className="text-xs text-slate-500 mt-1">{p.notes}</p> : null}
+                      </div>
+                      <span className="font-medium text-green-700">{formatMoney(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {paymentTotals && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Paid: {formatMoney(paymentTotals.paidAmount)} • Due: {formatMoney(paymentTotals.remainingAmount)}
+                </p>
+              )}
+            </div>
+
             {/* Batches Section */}
             {selectedGRN.batches && selectedGRN.batches.length > 0 && (
               <div>
@@ -790,6 +1006,94 @@ export default function GRNPage() {
                 </p>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Record Payment Modal */}
+      <Modal
+        isOpen={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        title={`Record Payment: ${paymentGRN?.grnNumber || ''}`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPaymentOpen(false)} disabled={paying}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRecordPayment}
+              loading={paying}
+              disabled={
+                !paymentGRN ||
+                typeof paymentAmount !== 'number' ||
+                paymentAmount <= 0 ||
+                paymentAmount > getRemainingAmount(paymentGRN)
+              }
+            >
+              Record Payment
+            </Button>
+          </>
+        }
+      >
+        {paymentGRN && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+              Total: {formatMoney(paymentGRN.totalAmount)} • Paid: {formatMoney(getPaidAmount(paymentGRN))} • Due:{' '}
+              {formatMoney(getRemainingAmount(paymentGRN))}
+            </div>
+
+            <Input
+              label="Amount"
+              type="number"
+              value={paymentAmount}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const max = getRemainingAmount(paymentGRN);
+                if (raw === '') {
+                  setPaymentAmount('');
+                  return;
+                }
+                const n = Number(raw);
+                if (!Number.isFinite(n)) {
+                  setPaymentAmount('');
+                  return;
+                }
+                if (n < 0) {
+                  setPaymentAmount(0);
+                  return;
+                }
+                setPaymentAmount(Math.min(n, max));
+              }}
+              min={0}
+              max={getRemainingAmount(paymentGRN)}
+              helperText={`Maximum payable: ${formatMoney(getRemainingAmount(paymentGRN))}`}
+            />
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Method</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as GRNPaymentMethod)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="CASH">Cash</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CHEQUE">Cheque</option>
+              </select>
+            </div>
+
+            <Input
+              label="Reference (optional)"
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              placeholder="Bank reference / Cheque number"
+            />
+            <Input
+              label="Notes (optional)"
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              placeholder="Any notes about this payment"
+            />
           </div>
         )}
       </Modal>

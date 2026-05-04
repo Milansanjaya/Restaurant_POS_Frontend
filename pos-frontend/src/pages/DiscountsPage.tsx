@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
+import { PlusIcon, EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import { discountsApi, productsApi } from '../api';
 import type { Discount, DiscountFormData, DiscountType, Product, ProductFormData } from '../types';
 import { formatMoney } from '../money';
@@ -66,7 +67,7 @@ export default function DiscountsPage() {
       setDiscounts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load discounts:', err);
-      toast.error('Failed to load discounts');
+      notify.error('Failed to load discounts');
       setDiscounts([]);
     } finally {
       setLoading(false);
@@ -249,11 +250,11 @@ export default function DiscountsPage() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      toast.error('Please enter discount name');
+      notify.error('Please enter discount name');
       return;
     }
     if (typeof formData.value !== 'number' || formData.value <= 0) {
-      toast.error('Please enter a valid discount value');
+      notify.error('Please enter a valid discount value');
       return;
     }
 
@@ -271,7 +272,7 @@ export default function DiscountsPage() {
       if (editingDiscount) {
         saved = await discountsApi.update(editingDiscount._id, payload);
         await syncProductAssignments(saved._id);
-        toast.success('✅ Discount updated');
+        notify.success('Discount updated');
       } else {
         saved = await discountsApi.create(payload);
         // Assign selected products to the newly created discount
@@ -279,12 +280,12 @@ export default function DiscountsPage() {
           setInitialAssignedProductIds([]);
           await syncProductAssignments(saved._id);
         }
-        toast.success('✅ Discount created');
+        notify.success('Discount created');
       }
       setShowModal(false);
       loadDiscounts();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to save discount');
+      notify.error(err?.response?.data?.message || 'Failed to save discount');
     } finally {
       setSaving(false);
     }
@@ -295,7 +296,7 @@ export default function DiscountsPage() {
       await discountsApi.toggle(discount._id);
       loadDiscounts();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to toggle discount status');
+      notify.error(err?.response?.data?.message || 'Failed to toggle discount status');
     }
   };
 
@@ -309,12 +310,12 @@ export default function DiscountsPage() {
     try {
       setDeleting(true);
       await discountsApi.delete(deletingDiscount._id);
-      toast.success('🗑️ Discount deleted');
+      notify.success('Discount deleted');
       setDeleteConfirmOpen(false);
       setDeletingDiscount(null);
       loadDiscounts();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete discount');
+      notify.error(err?.response?.data?.message || 'Failed to delete discount');
     } finally {
       setDeleting(false);
     }
@@ -359,14 +360,14 @@ export default function DiscountsPage() {
     }},
     { key: 'actions', header: 'Actions', render: (d: Discount) => (
       <div className="flex gap-1">
-        <Button size="sm" variant="ghost" onClick={() => openViewModal(d)}>
-          View
+        <Button size="sm" variant="ghost" onClick={() => openViewModal(d)} aria-label={`View ${d.name}`} title="View">
+          <EyeIcon />
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => openEditModal(d)}>
-          Edit
+        <Button size="sm" variant="ghost" onClick={() => openEditModal(d)} aria-label={`Edit ${d.name}`} title="Edit">
+          <EditIcon />
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => requestDelete(d)}>
-          Delete
+        <Button size="sm" variant="ghost" onClick={() => requestDelete(d)} aria-label={`Delete ${d.name}`} title="Delete">
+          <TrashIcon />
         </Button>
       </div>
     )},
@@ -377,7 +378,7 @@ export default function DiscountsPage() {
       <PageHeader
         title="Discounts"
         subtitle="Create discounts and assign them to products"
-        actions={<Button onClick={openCreateModal}>+ Add Discount</Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Discount" title="Add Discount"><PlusIcon /></Button>}
       />
 
       <PageContent>

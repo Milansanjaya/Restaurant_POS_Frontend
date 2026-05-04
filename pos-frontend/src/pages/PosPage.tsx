@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import toast from "react-hot-toast";
+import notify from "../utils/notify";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
 import api from "../api/axios";
@@ -343,7 +343,7 @@ export default function PosPage() {
     setPrintingReceipt(true);
     const printWindow = window.open('', '_blank', 'width=420,height=680');
     if (!printWindow) {
-      toast.error('Popup blocked. Please allow popups to print.');
+      notify.error('Popup blocked. Please allow popups to print.');
       setPrintingReceipt(false);
       return;
     }
@@ -398,7 +398,7 @@ export default function PosPage() {
       printWindow.print();
     } catch (error) {
       console.error('Print receipt failed:', error);
-      toast.error('Failed to print receipt');
+      notify.error('Failed to print receipt');
       try { printWindow.close(); } catch { /* ignore */ }
     } finally {
       setPrintingReceipt(false);
@@ -481,7 +481,7 @@ export default function PosPage() {
 
   const handlePrintKitchenOrder = async (order: KitchenOrder) => {
     if (!kitchenBillPrintingEnabled) {
-      toast.error('Kitchen printing is disabled in Settings');
+      notify.error('Kitchen printing is disabled in Settings');
       return;
     }
 
@@ -574,7 +574,7 @@ export default function PosPage() {
       const doc = iframe.contentWindow?.document;
       if (!doc || !iframe.contentWindow) {
         try { document.body.removeChild(iframe); } catch { /* ignore */ }
-        toast.error('Unable to start printing');
+        notify.error('Unable to start printing');
         return;
       }
 
@@ -590,7 +590,7 @@ export default function PosPage() {
       }, 1000);
     } catch (e) {
       console.error('Kitchen print failed:', e);
-      toast.error('Failed to print kitchen order');
+      notify.error('Failed to print kitchen order');
     }
   };
 
@@ -617,8 +617,30 @@ export default function PosPage() {
 
     const loadData = async () => {
       try {
-        const [productsRes, activeCategoriesRes, inactiveCategoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes, inventoryRes] = await Promise.all([
-          api.get("/products"),
+        const fetchAllProducts = async () => {
+          const limit = 200;
+          const maxPages = 50;
+          const all: Product[] = [];
+
+          for (let page = 1; page <= maxPages; page += 1) {
+            const res = await api.get('/products', { params: { page, limit } });
+            const batch = (res?.data?.products || []) as Product[];
+            all.push(...batch);
+
+            const pages = res?.data?.pagination?.pages;
+            if (typeof pages === 'number' && Number.isFinite(pages)) {
+              if (page >= pages) break;
+            } else {
+              // Fallback if backend doesn't return pagination
+              if (batch.length < limit) break;
+            }
+          }
+
+          return all;
+        };
+
+        const [productsList, activeCategoriesRes, inactiveCategoriesRes, tablesRes, shiftRes, customersRes, reservationsRes, configRes, inventoryRes] = await Promise.all([
+          fetchAllProducts().catch(() => [] as Product[]),
           categoriesApi.getAll({ isActive: true }).catch(() => []),
           categoriesApi.getAll({ isActive: false }).catch(() => []),
           tablesApi.getAll(),
@@ -654,7 +676,7 @@ export default function PosPage() {
           inventoryByProductId.set(productId, inv.stockQuantity);
         });
 
-        const mergedProducts = (productsRes.data.products || []).map((p: Product) => {
+        const mergedProducts = (productsList || []).map((p: Product) => {
           if (p.trackStock === true) {
             const qty = inventoryByProductId.get(p._id);
             if (typeof qty === 'number') {
@@ -805,7 +827,7 @@ export default function PosPage() {
             clearCart();
             setSelectedTableForPayment(null);
             setShowPaymentModal(false);
-            toast.success('Cart cleared');
+            notify.success('Cart cleared');
           }
           break;
         case 'F5':
@@ -822,12 +844,12 @@ export default function PosPage() {
     const openingCashNumber = openingCash === "" ? 0 : Number(openingCash);
 
     if (!Number.isFinite(openingCashNumber)) {
-      toast.error("Opening cash amount is invalid");
+      notify.error("Opening cash amount is invalid");
       return;
     }
 
     if (openingCashNumber < 0) {
-      toast.error("Opening cash cannot be negative");
+      notify.error("Opening cash cannot be negative");
       return;
     }
     
@@ -837,9 +859,9 @@ export default function PosPage() {
       setCurrentShift(shift);
       setShowShiftModal(false);
       setOpeningCash("");
-      toast.success("✅ Shift opened successfully!");
+      notify.success("Shift opened successfully!");
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to open shift");
+      notify.error(error?.response?.data?.message || "Failed to open shift");
     } finally {
       setProcessingShift(false);
     }
@@ -847,24 +869,24 @@ export default function PosPage() {
 
   const handleCloseShift = async () => {
     if (!currentShift) {
-      toast.error("No open shift");
+      notify.error("No open shift");
       return;
     }
 
     if (closingCash.trim() === "") {
-      toast.error("Closing cash amount is required");
+      notify.error("Closing cash amount is required");
       return;
     }
 
     const closingCashNumber = Number(closingCash);
 
     if (!Number.isFinite(closingCashNumber)) {
-      toast.error("Closing cash amount is invalid");
+      notify.error("Closing cash amount is invalid");
       return;
     }
 
     if (closingCashNumber < 0) {
-      toast.error("Closing cash cannot be negative");
+      notify.error("Closing cash cannot be negative");
       return;
     }
 
@@ -874,9 +896,9 @@ export default function PosPage() {
       setCurrentShift(null);
       setShowCloseShiftModal(false);
       setClosingCash("");
-      toast.success("✅ Shift closed successfully!");
+      notify.success("Shift closed successfully!");
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to close shift");
+      notify.error(error?.response?.data?.message || "Failed to close shift");
     } finally {
       setProcessingCloseShift(false);
     }
@@ -885,7 +907,7 @@ export default function PosPage() {
   // Create new customer from POS
   const handleCreateCustomer = async () => {
     if (!newCustomerData.name.trim() || !newCustomerData.phone.trim()) {
-      toast.error("Name and phone are required");
+      notify.error("Name and phone are required");
       return;
     }
     
@@ -913,10 +935,10 @@ export default function PosPage() {
       setSelectedCustomerId(customer._id);
       setShowNewCustomerModal(false);
       setNewCustomerData({ name: "", phone: "", email: "" });
-      toast.success("✅ Customer created and selected!");
+      notify.success("Customer created and selected!");
     } catch (error: any) {
       console.error("Create customer error:", error?.response?.data || error);
-      toast.error(error?.response?.data?.message || "Failed to create customer");
+      notify.error(error?.response?.data?.message || "Failed to create customer");
     }
   };
 
@@ -969,7 +991,7 @@ export default function PosPage() {
 
     const orderTotal = subtotal() + taxTotal();
     if (orderTotal <= 0) {
-      toast.error("Add items to cart first");
+      notify.error("Add items to cart first");
       return;
     }
 
@@ -978,14 +1000,14 @@ export default function PosPage() {
       const result = await couponsApi.validate(couponCode.trim(), orderTotal);
       setCouponValidation(result);
       if (result.success) {
-        toast.success(`🎫 Coupon applied! Discount: ${formatMoney(result.discount)}`);
+        notify.success(`Coupon applied! Discount: ${formatMoney(result.discount)}`);
       }
     } catch (error: any) {
       setCouponValidation({
         success: false,
         message: error?.response?.data?.message || "Invalid coupon"
       });
-      toast.error(error?.response?.data?.message || "Invalid coupon");
+      notify.error(error?.response?.data?.message || "Invalid coupon");
     } finally {
       setValidatingCoupon(false);
     }
@@ -1092,7 +1114,7 @@ export default function PosPage() {
     const tableOrder = tableOrders.find(order => order.tableId === table._id);
     
     if (!tableOrder || tableOrder.items.length === 0) {
-      toast.error("No items in this table order");
+      notify.error("No items in this table order");
 
       setShowPaymentModal(false);
       setSelectedTableForPayment(null);
@@ -1101,7 +1123,7 @@ export default function PosPage() {
 
     // Load items into the cart for this table
     if (!loadCartFromLines(tableOrder.items as any)) {
-      toast.error("No items in this table order");
+      notify.error("No items in this table order");
 
       setShowPaymentModal(false);
       setSelectedTableForPayment(null);
@@ -1113,12 +1135,12 @@ export default function PosPage() {
   // Handle payment for table
   const handleTablePayment = async () => {
     if (!selectedTableForPayment || items.length === 0) {
-      toast.error("No items to pay for");
+      notify.error("No items to pay for");
       return;
     }
 
     if (!currentShift) {
-      toast.error("No open shift");
+      notify.error("No open shift");
       return;
     }
 
@@ -1194,7 +1216,7 @@ export default function PosPage() {
           await loyaltyApi.earnPoints(selectedCustomerId, sale.grandTotal, sale._id);
           const pointsEarned = Math.floor(sale.grandTotal / 10);
           if (pointsEarned > 0) {
-            toast.success(`🎉 Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
+            notify.success(`Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
           }
         } catch (loyaltyError) {
           console.log("Loyalty points earning failed:", loyaltyError);
@@ -1214,7 +1236,7 @@ export default function PosPage() {
         
         if (activeReservation) {
           await reservationsApi.updateStatus(activeReservation._id, 'COMPLETED');
-          toast.success('✅ Reservation completed', { duration: 2000 });
+          notify.success('Reservation completed', { duration: 2000 });
         }
       } catch (reservationError) {
         console.log('No active reservation for this table or completion failed:', reservationError);
@@ -1234,7 +1256,7 @@ export default function PosPage() {
       );
       setReservations(activeReservations);
 
-      toast.success(`💰 Payment complete! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
+      notify.success(`Payment complete! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
       
       clearCart();
       setDiscountType('');
@@ -1254,7 +1276,7 @@ export default function PosPage() {
 
       setSelectedTableForPayment(null);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Payment failed");
+      notify.error(error?.response?.data?.message || "Payment failed");
     } finally {
       setProcessingPayment(false);
     }
@@ -1409,17 +1431,17 @@ const handleAddToTable = async () => {
   if (addingToTableRef.current) return;
 
   if (items.length === 0) {
-    toast.error("Cart is empty");
+    notify.error("Cart is empty");
     return;
   }
 
   if (!selectedTable) {
-    toast.error("Please select a table");
+    notify.error("Please select a table");
     return;
   }
 
   if (!currentShift) {
-    toast.error("No open shift. Please open a shift first.");
+    notify.error("No open shift. Please open a shift first.");
     setShowShiftModal(true);
     return;
   }
@@ -1515,10 +1537,10 @@ const handleAddToTable = async () => {
     setTables(tablesRes || []);
     
     clearCart();
-    toast.success("🍽️ Items added to table! Table is now OCCUPIED.");
+    notify.success("Items added to table! Table is now OCCUPIED.");
   } catch (error: any) {
     console.error("Add to table error:", error);
-    toast.error(error?.response?.data?.message || "Failed to add items to table");
+    notify.error(error?.response?.data?.message || "Failed to add items to table");
   } finally {
     addingToTableRef.current = false;
     setAddingToTable(false);
@@ -1529,12 +1551,12 @@ const handleCreateSale = async () => {
   if (creatingSaleRef.current) return;
 
   if (items.length === 0) {
-    toast.error("Cart is empty");
+    notify.error("Cart is empty");
     return;
   }
 
   if (!currentShift) {
-    toast.error("No open shift. Please open a shift first.");
+    notify.error("No open shift. Please open a shift first.");
     setShowShiftModal(true);
     return;
   }
@@ -1591,10 +1613,10 @@ const handleCreateSale = async () => {
           points: pointsToUse,
           sale_id: sale._id,
         });
-        toast.success(`🎁 Redeemed ${pointsToUse} loyalty points! (${formatMoney(calculatePointsDiscount())} off)`, { duration: 3000 });
+        notify.success(`Redeemed ${pointsToUse} loyalty points! (${formatMoney(calculatePointsDiscount())} off)`, { duration: 3000 });
       } catch (redeemError: any) {
         console.log("Points redemption failed:", redeemError);
-        toast.error(redeemError?.response?.data?.message || "Failed to redeem points");
+        notify.error(redeemError?.response?.data?.message || "Failed to redeem points");
       }
     }
 
@@ -1610,7 +1632,7 @@ const handleCreateSale = async () => {
         // Display-only estimate (backend is source of truth)
         const pointsEarned = Math.floor(adjustedAmount / 10);
         if (pointsEarned > 0) {
-          toast.success(`🎉 Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
+          notify.success(`Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
         }
       } catch (loyaltyError) {
         console.log("Loyalty points earning failed:", loyaltyError);
@@ -1618,7 +1640,7 @@ const handleCreateSale = async () => {
       }
     }
 
-    toast.success(`✅ Sale created successfully! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
+    notify.success(`Sale created successfully! Invoice: ${sale.invoiceNumber}`, { duration: 4000 });
     clearCart();
     setDiscountType('');
     setDiscountValue('');
@@ -1631,7 +1653,7 @@ const handleCreateSale = async () => {
     console.log("SALE:", sale);
   } catch (error: any) {
     console.error("Create sale error:", error?.response?.data || error);
-    toast.error(error?.response?.data?.message || "Failed to create sale");
+    notify.error(error?.response?.data?.message || "Failed to create sale");
   } finally {
     creatingSaleRef.current = false;
     setCreatingSale(false);
@@ -2319,7 +2341,7 @@ const handleCreateSale = async () => {
                     clearCart();
                     setSelectedTableForPayment(null);
                     setShowPaymentModal(false);
-                    toast.success('Cart cleared');
+                    notify.success('Cart cleared');
                   }}
                   className="touch-manipulation rounded-xl border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.99]"
                 >
@@ -2624,7 +2646,7 @@ const handleCreateSale = async () => {
               {/* Clear Cart */}
               <button
                 type="button"
-                onClick={() => { clearCart(); setSelectedTableForPayment(null); setShowPaymentModal(false); toast.success('Cart cleared'); }}
+                onClick={() => { clearCart(); setSelectedTableForPayment(null); setShowPaymentModal(false); notify.success('Cart cleared'); }}
                 className="touch-manipulation w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.99]"
               >
                 🗑️ Clear Cart
@@ -3214,7 +3236,7 @@ const handleCreateSale = async () => {
                                     }
                                   }
 
-                                  toast.success('🪑 Customer seated');
+                                  notify.success('Customer seated');
                                   const updated = await reservationsApi.getAll().catch(() => []);
                                   setReservationsViewer(updated || []);
                                   const activeReservations = (updated || []).filter(
@@ -3222,7 +3244,7 @@ const handleCreateSale = async () => {
                                   );
                                   setReservations(activeReservations);
                                 } catch (err: any) {
-                                  toast.error(err?.response?.data?.message || 'Failed to seat reservation');
+                                  notify.error(err?.response?.data?.message || 'Failed to seat reservation');
                                 } finally {
                                   setLoadingReservationsViewer(false);
                                 }
@@ -3241,7 +3263,7 @@ const handleCreateSale = async () => {
                                 try {
                                   setLoadingReservationsViewer(true);
                                   await reservationsApi.updateStatus(r._id, next);
-                                  toast.success(`✅ Status: ${next}`);
+                                  notify.success(`Status: ${next}`);
                                   const updated = await reservationsApi.getAll().catch(() => []);
                                   setReservationsViewer(updated || []);
                                   const activeReservations = (updated || []).filter(
@@ -3249,7 +3271,7 @@ const handleCreateSale = async () => {
                                   );
                                   setReservations(activeReservations);
                                 } catch (err: any) {
-                                  toast.error(err?.response?.data?.message || 'Failed to update status');
+                                  notify.error(err?.response?.data?.message || 'Failed to update status');
                                 } finally {
                                   setLoadingReservationsViewer(false);
                                 }
@@ -3292,7 +3314,7 @@ const handleCreateSale = async () => {
                                 try {
                                   setLoadingReservationsViewer(true);
                                   await reservationsApi.delete(r._id);
-                                  toast.success('🗑️ Reservation cancelled');
+                                  notify.success('Reservation cancelled');
                                   const updated = await reservationsApi.getAll().catch(() => []);
                                   setReservationsViewer(updated || []);
                                   const activeReservations = (updated || []).filter(
@@ -3300,7 +3322,7 @@ const handleCreateSale = async () => {
                                   );
                                   setReservations(activeReservations);
                                 } catch (err: any) {
-                                  toast.error(err?.response?.data?.message || 'Failed to cancel reservation');
+                                  notify.error(err?.response?.data?.message || 'Failed to cancel reservation');
                                 } finally {
                                   setLoadingReservationsViewer(false);
                                 }
@@ -3446,10 +3468,10 @@ const handleCreateSale = async () => {
                     setSavingReservation(true);
                     if (editingReservation) {
                       await reservationsApi.update(editingReservation._id, reservationFormData);
-                      toast.success('✅ Reservation updated');
+                      notify.success('Reservation updated');
                     } else {
                       await reservationsApi.create(reservationFormData);
-                      toast.success('📅 Reservation created');
+                      notify.success('Reservation created');
                     }
 
                     const updated = await reservationsApi.getAll().catch(() => []);
@@ -3462,7 +3484,7 @@ const handleCreateSale = async () => {
                     setShowReservationEditor(false);
                     setEditingReservation(null);
                   } catch (err: any) {
-                    toast.error(err?.response?.data?.message || 'Failed to save reservation');
+                    notify.error(err?.response?.data?.message || 'Failed to save reservation');
                   } finally {
                     setSavingReservation(false);
                   }
@@ -3688,7 +3710,7 @@ const handleCreateSale = async () => {
                                           }));
                                           total = localOrder.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
                                         } else {
-                                          toast.error('Order record not found.');
+                                          notify.error('Order record not found.');
                                           return;
                                         }
                                       }
@@ -3703,13 +3725,13 @@ const handleCreateSale = async () => {
                                         }));
                                         total = localOrder.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
                                       } else {
-                                        toast.error('No items on this table yet');
+                                        notify.error('No items on this table yet');
                                         return;
                                       }
                                     }
                                     setViewOrderTable({ table: t, items, total });
                                   } catch (err) {
-                                    toast.error('Could not load order');
+                                    notify.error('Could not load order');
                                   } finally {
                                     setLoadingViewOrder(false);
                                   }
@@ -3808,9 +3830,9 @@ const handleCreateSale = async () => {
 
                                 const refreshed = await tablesApi.getAll();
                                 setTables(refreshed);
-                                toast.success(`✅ Table ${t.tableNumber} is ready`);
+                                notify.success(`Table ${t.tableNumber} is ready`);
                               } catch {
-                                toast.error('Error updating status');
+                                notify.error('Error updating status');
                               }
                             }}
                             className="w-full touch-manipulation flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3 text-xs font-bold text-white hover:bg-indigo-700 transition-all hover-lift active:scale-95 shadow-lg shadow-indigo-100"

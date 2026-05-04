@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layout, PageHeader, PageContent, Card, Button, Input, PageLoader } from '../components';
 import { configApi } from '../api';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import type { TaxSetting } from '../types';
+import { formatMoneyValue } from '../money';
 
 type Numberish = number | '';
 
@@ -17,6 +18,15 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<{
+    day: string;
+    lastIssued: number;
+    next: number | null;
+    limit: number;
+    reached: boolean;
+  } | null>(null);
+
   const [taxes, setTaxes] = useState<TaxFormState[]>([]);
   const [currency, setCurrency] = useState<{ code: string; symbol: string; position: 'BEFORE' | 'AFTER' }>({ 
     code: 'USD', 
@@ -26,6 +36,7 @@ export default function SettingsPage() {
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
   const [invoiceHeader, setInvoiceHeader] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Thank you for your business!');
+  const [dailyReceiptNumberLimit, setDailyReceiptNumberLimit] = useState<Numberish>(1500);
   const [expiryAlertDays, setExpiryAlertDays] = useState<Numberish>(30);
   const [serviceCharge, setServiceCharge] = useState<Numberish>(0);
   const [serviceChargeType, setServiceChargeType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
@@ -69,6 +80,7 @@ export default function SettingsPage() {
       setInvoicePrefix(data.invoiceFormat?.prefix || 'INV');
       setInvoiceHeader(data.invoiceFormat?.header || '');
       setInvoiceFooter(data.invoiceFormat?.footer || 'Thank you!');
+      setDailyReceiptNumberLimit(typeof (data as any).dailyReceiptNumberLimit === 'number' ? (data as any).dailyReceiptNumberLimit : 1500);
       setExpiryAlertDays(typeof data.expiryAlertDays === 'number' ? data.expiryAlertDays : 30);
       setServiceCharge(typeof data.serviceCharge === 'number' ? data.serviceCharge : 0);
       setServiceChargeType((data.serviceChargeType as 'FIXED' | 'PERCENTAGE') || 'PERCENTAGE');
@@ -97,15 +109,73 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load config:', error);
-      toast.error('Failed to load settings. Please try again.');
+      notify.error('Failed to load settings. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const loadReceiptPreview = async () => {
+    try {
+      setReceiptPreviewLoading(true);
+      const data = await configApi.getReceiptPreview();
+      setReceiptPreview(data);
+    } catch (error) {
+      console.warn('Failed to load receipt preview:', error);
+      setReceiptPreview(null);
+    } finally {
+      setReceiptPreviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadConfig();
+    loadReceiptPreview();
   }, []);
+
+  const invoiceSeed = useState(() => Date.now())[0];
+  const invoicePreview = useMemo(() => {
+    const prefix = (invoicePrefix || 'INV').trim() || 'INV';
+    return `${prefix}-${invoiceSeed}`;
+  }, [invoicePrefix]);
+
+  const formatPreviewMoney = useMemo(() => {
+    const symbol = currency.symbol || '';
+    const position = currency.position || 'BEFORE';
+    return (amount: number) => {
+      const n = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
+      const v = formatMoneyValue(n);
+      if (!symbol) return v;
+      return position === 'AFTER' ? `${v}${symbol}` : `${symbol} ${v}`;
+    };
+  }, [currency.symbol, currency.position]);
+
+  const receiptPreviewComputed = useMemo(() => {
+    const lastIssued = Math.max(0, Number(receiptPreview?.lastIssued ?? 0) || 0);
+    const limit = Math.max(1, Math.floor(toNumber(dailyReceiptNumberLimit, receiptPreview?.limit ?? 1500)));
+    const reached = lastIssued >= limit;
+    return {
+      day: receiptPreview?.day || '',
+      lastIssued,
+      limit,
+      reached,
+      next: reached ? null : lastIssued + 1,
+    };
+  }, [receiptPreview, dailyReceiptNumberLimit]);
+
+  const receiptOrderNumberPreview = receiptPreviewComputed.next ? String(receiptPreviewComputed.next) : '—';
+
+  const sampleSubtotal = 1200;
+  const samplePackagingCharge = useMemo(() => {
+    const base = sampleSubtotal;
+    const rate = Math.max(0, toNumber(packagingCharge, 0));
+    const v = packagingChargeType === 'PERCENTAGE' ? (base * rate) / 100 : rate;
+    return Math.round(v * 100) / 100;
+  }, [packagingCharge, packagingChargeType]);
+
+  const sampleOrderType = 'TAKEAWAY';
+  const showPackaging = samplePackagingCharge > 0;
+  const sampleGrandTotal = sampleSubtotal + (showPackaging ? samplePackagingCharge : 0);
 
   const handleSave = async () => {
     try {
@@ -127,6 +197,7 @@ export default function SettingsPage() {
         currency,
         logo: businessLogo || undefined,
         kitchenBillPrintingEnabled,
+        dailyReceiptNumberLimit: Math.max(1, Math.floor(toNumber(dailyReceiptNumberLimit, 1500))),
         pointsPerDollar: toNumber(pointsPerDollar, 0),
         pointsExpiryDays: toNumber(pointsExpiryDays, 0),
         pointsMultiplierByTier: pointsMultiplierByTierPayload,
@@ -172,9 +243,10 @@ export default function SettingsPage() {
         // ignore localStorage failures
       }
 
-      toast.success('✅ Settings saved successfully');
+      notify.success('Settings saved successfully');
+      loadReceiptPreview();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save settings');
+      notify.error(error?.response?.data?.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -226,7 +298,13 @@ export default function SettingsPage() {
                 placeholder="Your business name"
               />
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Address</label>
+                <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 21s6-5.686 6-10.5A6 6 0 106 10.5C6 15.314 12 21 12 21z" />
+                    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 12.5a2 2 0 100-4 2 2 0 000 4z" />
+                  </svg>
+                  <span>Address</span>
+                </label>
                 <textarea
                   value={businessAddress}
                   onChange={(e) => setBusinessAddress(e.target.value)}
@@ -256,6 +334,146 @@ export default function SettingsPage() {
                 placeholder="https://..."
                 helperText="Used on printed invoice/receipt"
               />
+            </div>
+          </Card>
+
+          {/* Current Invoice Preview */}
+          <Card>
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">Current Invoice Preview</h3>
+            <p className="mb-4 text-sm text-slate-500">
+              Read-only preview. This does not generate or change real invoice/receipt data.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Next Receipt/Bill Number (Today)"
+                value={
+                  receiptPreviewLoading
+                    ? 'Loading...'
+                    : receiptPreviewComputed.next
+                      ? String(receiptPreviewComputed.next)
+                      : 'Limit reached'
+                }
+                disabled
+                helperText={
+                  receiptPreviewLoading
+                    ? undefined
+                    : receiptPreviewComputed.day
+                      ? `Day: ${receiptPreviewComputed.day} • Last issued: ${receiptPreviewComputed.lastIssued} • Limit: ${receiptPreviewComputed.limit}`
+                      : 'Preview unavailable'
+                }
+              />
+
+              <Input
+                label="Invoice Number Preview"
+                value={invoicePreview}
+                disabled
+                helperText="Preview uses prefix + timestamp-style number"
+              />
+            </div>
+
+            {/* Bill preview (thermal receipt style) */}
+            <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="text-center">
+                {businessLogo ? (
+                  <img
+                    src={businessLogo}
+                    alt="Business logo"
+                    className="mx-auto mb-2 h-10 w-10 object-contain"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                {businessName ? (
+                  <div className="text-sm font-semibold text-slate-900">{businessName}</div>
+                ) : null}
+                {businessAddress ? (
+                  <div className="mt-1 text-[11px] text-slate-700 whitespace-pre-wrap">{businessAddress}</div>
+                ) : null}
+                {businessPhone || businessEmail ? (
+                  <div className="mt-1 text-[11px] text-slate-700">
+                    {[businessPhone, businessEmail].filter(Boolean).join(' | ')}
+                  </div>
+                ) : null}
+                {invoiceHeader ? (
+                  <div className="mt-1 text-xs font-semibold text-slate-700 whitespace-pre-wrap">{invoiceHeader}</div>
+                ) : null}
+              </div>
+
+              <div className="my-3 border-t border-dashed border-slate-900/60" />
+
+              <div className="border-2 border-slate-900 p-3 text-center">
+                <div className="text-xs font-bold tracking-wide text-slate-900">ORDER NUMBER</div>
+                <div className="mt-1 text-3xl font-black text-slate-900">{receiptOrderNumberPreview}</div>
+              </div>
+
+              <div className="mt-3 space-y-1 text-xs text-slate-900">
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-700">Date</span>
+                  <span className="text-right">{new Date().toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-700">Invoice</span>
+                  <span className="text-right">{invoicePreview}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-700">Order Type</span>
+                  <span className="text-right">{sampleOrderType}</span>
+                </div>
+              </div>
+
+              <div className="my-3 border-t border-dashed border-slate-900/60" />
+
+              <div className="text-xs">
+                <div className="grid grid-cols-[1fr_56px_90px] gap-2 font-bold text-slate-900">
+                  <div>ITEM</div>
+                  <div className="text-right">QTY</div>
+                  <div className="text-right">AMT</div>
+                </div>
+
+                <div className="mt-2">
+                  <div className="grid grid-cols-[1fr_56px_90px] gap-2 text-slate-900">
+                    <div>Product</div>
+                    <div className="text-right">1</div>
+                    <div className="text-right">{formatPreviewMoney(sampleSubtotal)}</div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-700">1 × {formatPreviewMoney(sampleSubtotal)}</div>
+                </div>
+              </div>
+
+              <div className="my-3 border-t border-dashed border-slate-900/60" />
+
+              <div className="text-xs text-slate-900">
+                <div className="flex justify-between gap-3 py-0.5">
+                  <span className="text-slate-700">Subtotal</span>
+                  <span>{formatPreviewMoney(sampleSubtotal)}</span>
+                </div>
+                {showPackaging ? (
+                  <div className="flex justify-between gap-3 py-0.5">
+                    <span className="text-slate-700">Packaging Charge</span>
+                    <span>{formatPreviewMoney(samplePackagingCharge)}</span>
+                  </div>
+                ) : null}
+
+                <div className="mt-2 border-t-2 border-slate-900 pt-2">
+                  <div className="flex justify-between gap-3 font-extrabold">
+                    <span>TOTAL DUE</span>
+                    <span>{formatPreviewMoney(sampleGrandTotal)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between gap-3">
+                    <span className="text-slate-700">Paid</span>
+                    <span>{formatPreviewMoney(sampleGrandTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="my-3 border-t border-dashed border-slate-900/60" />
+
+              <div className="text-center text-xs text-slate-700 whitespace-pre-wrap">
+                {invoiceFooter || 'Thank you!'}
+              </div>
             </div>
           </Card>
 
@@ -532,6 +750,22 @@ export default function SettingsPage() {
                 value={invoicePrefix}
                 onChange={(e) => setInvoicePrefix(e.target.value)}
                 placeholder="INV"
+              />
+
+              <Input
+                label="Daily Receipt/Bill Number Limit"
+                type="number"
+                value={dailyReceiptNumberLimit}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setDailyReceiptNumberLimit('');
+                    return;
+                  }
+                  const n = Number(raw);
+                  setDailyReceiptNumberLimit(Number.isFinite(n) ? n : '');
+                }}
+                helperText="Receipt/bill numbers reset daily and run from 1 up to this limit (default: 1500)"
               />
 
               <div>

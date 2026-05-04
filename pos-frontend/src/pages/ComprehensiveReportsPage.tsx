@@ -27,7 +27,7 @@ import type {
   ProfitReport,
   ProfitReportDay
 } from '../types';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { formatMoney } from '../money';
 
 type ReportSection = 
@@ -344,7 +344,7 @@ export default function ComprehensiveReportsPage() {
           break;
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || `Failed to load ${section}`);
+      notify.error(error?.response?.data?.message || `Failed to load ${section}`);
       // Set empty arrays on error
       switch (section) {
         case 'products': setProducts([]); break;
@@ -376,7 +376,7 @@ export default function ComprehensiveReportsPage() {
 
   const exportToCSV = (data: any[], filename: string) => {
     if (data.length === 0) {
-      toast.error('No data to export');
+      notify.error('No data to export');
       return;
     }
     
@@ -398,7 +398,7 @@ export default function ComprehensiveReportsPage() {
     a.href = url;
     a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
-    toast.success(`Exported ${data.length} records`);
+    notify.success(`Exported ${data.length} records`);
   };
 
   const exportToPDF = () => {
@@ -422,7 +422,7 @@ export default function ComprehensiveReportsPage() {
     const { title, data, columns } = getSectionData();
     
     if (!data || data.length === 0) {
-      toast.error('No data to export');
+      notify.error('No data to export');
       return;
     }
 
@@ -631,9 +631,9 @@ export default function ComprehensiveReportsPage() {
       printWindow.onload = () => {
         printWindow.print();
       };
-      toast.success('PDF ready for printing');
+      notify.success('PDF ready for printing');
     } else {
-      toast.error('Please allow popups to download PDF');
+      notify.error('Please allow popups to download PDF');
     }
   };
 

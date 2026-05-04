@@ -55,6 +55,7 @@ export function getStatusBadgeVariant(
     // Sale
     OPEN: 'warning',
     PARTIALLY_PAID: 'info',
+    FULLY_PAID: 'success',
     COMPLETED: 'success',
     VOIDED: 'danger',
     

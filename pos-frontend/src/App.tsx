@@ -10,6 +10,7 @@ import InventoryPage from "./pages/InventoryPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import GRNPage from "./pages/GRNPage";
+import GRNPaymentsPage from "./pages/GRNPaymentsPage";
 import BatchesPage from "./pages/BatchesPage";
 import CustomersPage from "./pages/CustomersPage";
 import ReturnsPage from "./pages/ReturnsPage";
@@ -112,6 +113,7 @@ export default function App() {
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
         <Route path="/grn" element={<GRNPage />} />
+        <Route path="/grn-payments" element={<GRNPaymentsPage />} />
         <Route path="/batches" element={<BatchesPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/loyalty" element={<LoyaltyPage />} />

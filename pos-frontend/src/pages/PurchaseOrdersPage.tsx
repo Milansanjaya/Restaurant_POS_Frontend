@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card } from '../components';
+import { PlusIcon, EyeIcon, PrinterIcon, EditIcon, CheckIcon, XIcon, TrashIcon } from '../components/ActionIcons';
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
 import { formatMoney } from '../money';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -18,6 +19,10 @@ export default function PurchaseOrdersPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewOrder, setViewOrder] = useState<PurchaseOrder | null>(null);
+  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
+  const [printLoadingId, setPrintLoadingId] = useState<string | null>(null);
+  const [approveLoadingId, setApproveLoadingId] = useState<string | null>(null);
+  const [cancelLoadingId, setCancelLoadingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<PurchaseOrderFormData>({
     supplier_id: '',
@@ -86,18 +91,20 @@ export default function PurchaseOrdersPage() {
 
   const openViewModal = async (id: string) => {
     try {
+      setViewLoadingId(id);
       setViewOpen(true);
       setViewLoading(true);
       setViewOrder(null);
       const po = await purchaseOrdersApi.getById(id);
       setViewOrder(po);
-      toast.success('📄 Purchase order details opened');
+      notify.success('Purchase order details opened');
     } catch (error) {
       console.error('Failed to load PO:', error);
-      toast.error('Failed to load purchase order');
+      notify.error('Failed to load purchase order');
       setViewOpen(false);
     } finally {
       setViewLoading(false);
+      setViewLoadingId(null);
     }
   };
 
@@ -212,7 +219,7 @@ export default function PurchaseOrdersPage() {
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Pop-up blocked. Please allow pop-ups to print.');
+      notify.error('Pop-up blocked. Please allow pop-ups to print.');
       return;
     }
     printWindow.document.write(printContent);
@@ -221,35 +228,38 @@ export default function PurchaseOrdersPage() {
 
   const handlePrintPO = async (id: string) => {
     try {
+      setPrintLoadingId(id);
       const po = await purchaseOrdersApi.getById(id);
       printPurchaseOrder(po);
     } catch (error) {
       console.error('Failed to load PO for print:', error);
-      toast.error('Failed to print purchase order');
+      notify.error('Failed to print purchase order');
+    } finally {
+      setPrintLoadingId(null);
     }
   };
 
   const addItem = () => {
     if (!newItem.product_id) {
-      toast.error('Please select a product');
+      notify.error('Please select a product');
       return;
     }
     const product = products.find((p) => p._id === newItem.product_id);
     if (!product) {
-      toast.error('Product not found');
+      notify.error('Product not found');
       return;
     }
 
     const quantity = newItem.quantity === '' ? NaN : Number(newItem.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Please enter a valid quantity');
+      notify.error('Please enter a valid quantity');
       return;
     }
 
     const fallbackCost = typeof product.cost === 'number' ? product.cost : 0;
     const unitPrice = newItem.unitPrice === '' ? fallbackCost : Number(newItem.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      toast.error('Please enter a valid unit price');
+      notify.error('Please enter a valid unit price');
       return;
     }
 
@@ -276,12 +286,12 @@ export default function PurchaseOrdersPage() {
 
   const handleSave = async () => {
     if (!formData.supplier_id) {
-      toast.error('Please select a supplier');
+      notify.error('Please select a supplier');
       return;
     }
 
     if (formData.items.length === 0) {
-      toast.error('Please add at least one item');
+      notify.error('Please add at least one item');
       return;
     }
 
@@ -289,15 +299,15 @@ export default function PurchaseOrdersPage() {
       setSaving(true);
       if (editingId) {
         await purchaseOrdersApi.update(editingId, formData);
-        toast.success('✅ Purchase order updated successfully');
+        notify.success('Purchase order updated successfully');
       } else {
         await purchaseOrdersApi.create(formData);
-        toast.success('✅ Purchase order created successfully');
+        notify.success('Purchase order created successfully');
       }
       setModalOpen(false);
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save PO');
+      notify.error(error?.response?.data?.message || 'Failed to save PO');
     } finally {
       setSaving(false);
     }
@@ -306,22 +316,28 @@ export default function PurchaseOrdersPage() {
   const handleApprove = async (id: string) => {
     if (!confirm('Are you sure you want to approve this PO?')) return;
     try {
+      setApproveLoadingId(id);
       await purchaseOrdersApi.approve(id);
-      toast.success('✅ Purchase order approved');
+      notify.success('Purchase order approved successfully. Procurement is now ready for the next step.');
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to approve PO');
+      notify.error(error?.response?.data?.message || 'Failed to approve PO');
+    } finally {
+      setApproveLoadingId(null);
     }
   };
 
   const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this PO?')) return;
     try {
+      setCancelLoadingId(id);
       await purchaseOrdersApi.cancel(id);
-      toast.success('✅ Purchase order cancelled');
+      notify.success('Purchase order cancelled');
       loadData();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to cancel PO');
+      notify.error(error?.response?.data?.message || 'Failed to cancel PO');
+    } finally {
+      setCancelLoadingId(null);
     }
   };
 
@@ -360,24 +376,24 @@ export default function PurchaseOrdersPage() {
       header: 'Actions',
       render: (item: PurchaseOrder) => (
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => openViewModal(item._id)}>
-            View
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item._id)} loading={viewLoadingId === item._id} aria-label={`View purchase order ${item.poNumber}`} title="View">
+            <EyeIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handlePrintPO(item._id)}>
-            🖨️ Print
+          <Button size="sm" variant="ghost" onClick={() => handlePrintPO(item._id)} loading={printLoadingId === item._id} aria-label={`Print purchase order ${item.poNumber}`} title="Print">
+            <PrinterIcon />
           </Button>
           {(item.status === 'DRAFT' || item.status === 'PENDING') && (
-            <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-              Edit
+            <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit purchase order ${item.poNumber}`} title="Edit">
+              <EditIcon />
             </Button>
           )}
           {item.status === 'PENDING' && (
             <>
-              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)}>
-                Approve
+              <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)} loading={approveLoadingId === item._id} aria-label={`Approve purchase order ${item.poNumber}`} title="Approve">
+                <CheckIcon />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => handleCancel(item._id)}>
-                Cancel
+              <Button size="sm" variant="ghost" onClick={() => handleCancel(item._id)} loading={cancelLoadingId === item._id} aria-label={`Cancel purchase order ${item.poNumber}`} title="Cancel">
+                <XIcon />
               </Button>
             </>
           )}
@@ -391,7 +407,7 @@ export default function PurchaseOrdersPage() {
       <PageHeader
         title="Purchase Orders"
         subtitle="Manage procurement orders"
-        actions={<Button onClick={openCreateModal}>+ Create PO</Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Create Purchase Order" title="Create PO"><PlusIcon /></Button>}
       />
       <PageContent>
         <div className="mb-4">
@@ -501,7 +517,7 @@ export default function PurchaseOrdersPage() {
                   })
                 }
               />
-              <Button onClick={addItem}>Add</Button>
+              <Button onClick={addItem} aria-label="Add item" title="Add"><PlusIcon /></Button>
             </div>
           </Card>
 
@@ -518,7 +534,9 @@ export default function PurchaseOrdersPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-medium">{formatMoney(item.totalPrice)}</span>
-                    <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>×</Button>
+                    <Button size="sm" variant="ghost" onClick={() => removeItem(index)} aria-label="Remove item" title="Remove">
+                      <TrashIcon />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -546,8 +564,8 @@ export default function PurchaseOrdersPage() {
             <Button variant="outline" onClick={() => setViewOpen(false)}>
               Close
             </Button>
-            <Button onClick={() => viewOrder && printPurchaseOrder(viewOrder)} disabled={!viewOrder || viewLoading}>
-              🖨️ Print
+            <Button onClick={() => viewOrder && printPurchaseOrder(viewOrder)} disabled={!viewOrder || viewLoading} aria-label="Print purchase order" title="Print">
+              <PrinterIcon />
             </Button>
           </>
         }

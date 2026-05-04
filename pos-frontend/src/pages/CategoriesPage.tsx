@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader, Badge } from '../components';
+import { PlusIcon, EditIcon, ToggleIcon } from '../components/ActionIcons';
 import { categoriesApi } from '../api';
 import type { Category, CategoryFormData } from '../types';
 
@@ -129,7 +130,7 @@ export default function CategoriesPage() {
     try {
       const normalizedName = normalizeCategoryName(formData.name || '');
       if (!normalizedName) {
-        toast.error('Category name is required');
+        notify.error('Category name is required');
         return;
       }
 
@@ -142,7 +143,7 @@ export default function CategoriesPage() {
       });
 
       if (duplicate) {
-        toast.error('A category with this name already exists');
+        notify.error('A category with this name already exists');
         return;
       }
 
@@ -155,15 +156,15 @@ export default function CategoriesPage() {
       
       if (editingCategory) {
         await categoriesApi.update(editingCategory._id, data);
-        toast.success('✅ Category updated successfully');
+        notify.success('Category updated successfully');
       } else {
         await categoriesApi.create(data);
-        toast.success('✅ Category created successfully');
+        notify.success('Category created successfully');
       }
       setModalOpen(false);
       loadCategories();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save category');
+      notify.error(error?.response?.data?.message || 'Failed to save category');
     } finally {
       setSaving(false);
     }
@@ -174,10 +175,10 @@ export default function CategoriesPage() {
       const currentlyActive = category.isActive !== false;
       const nextActive = !currentlyActive;
       await categoriesApi.update(category._id, { isActive: nextActive });
-      toast.success(nextActive ? '✅ Category activated' : '🚫 Category marked inactive');
+      notify.success(nextActive ? 'Category activated' : 'Category marked inactive');
       loadCategories();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to update category status');
+      notify.error(error?.response?.data?.message || 'Failed to update category status');
     }
   };
 
@@ -215,14 +216,14 @@ export default function CategoriesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={() => openCreateModal(cat._id)}>
-              + Sub
+            <Button size="sm" variant="ghost" onClick={() => openCreateModal(cat._id)} aria-label={`Add subcategory for ${cat.name}`} title="Add Subcategory">
+              <PlusIcon />
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => openEditModal(cat)}>
-              Edit
+            <Button size="sm" variant="ghost" onClick={() => openEditModal(cat)} aria-label={`Edit ${cat.name}`} title="Edit">
+              <EditIcon />
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => handleToggleActive(cat)}>
-              {cat.isActive === false ? 'Set Active' : 'Set Inactive'}
+            <Button size="sm" variant="ghost" onClick={() => handleToggleActive(cat)} aria-label={cat.isActive === false ? `Set ${cat.name} active` : `Set ${cat.name} inactive`} title={cat.isActive === false ? 'Set Active' : 'Set Inactive'}>
+              <ToggleIcon />
             </Button>
           </div>
         </div>
@@ -245,7 +246,7 @@ export default function CategoriesPage() {
         title="Categories"
         subtitle="Organize your products into categories"
         actions={
-          <Button onClick={() => openCreateModal()}>+ Add Category</Button>
+          <Button onClick={() => openCreateModal()} aria-label="Add Category" title="Add Category"><PlusIcon /></Button>
         }
       />
       <PageContent>

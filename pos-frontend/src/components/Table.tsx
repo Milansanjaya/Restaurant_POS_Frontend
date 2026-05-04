@@ -56,14 +56,6 @@ export default function Table<T extends Record<string, any>>({
 
   const safeData = Array.isArray(data) ? data : [];
 
-  if (safeData.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white">
-        <p className="text-slate-500">{emptyMessage}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <div className="overflow-x-auto">
@@ -81,26 +73,37 @@ export default function Table<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {safeData.map((item) => (
-              <tr
-                key={keyExtractor(item)}
-                onClick={() => onRowClick?.(item)}
-                className={`${
-                  onRowClick
-                    ? 'cursor-pointer hover:bg-slate-50 transition-colors'
-                    : ''
-                }`}
-              >
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={`whitespace-normal px-3 py-3 text-sm text-slate-700 sm:whitespace-nowrap sm:px-4 ${col.className || ''}`}
-                  >
-                    {col.render ? col.render(item) : item[col.key]}
-                  </td>
-                ))}
+            {safeData.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={Math.max(columns.length, 1)}
+                  className="px-3 py-10 text-center text-sm text-slate-500 sm:px-4"
+                >
+                  {emptyMessage}
+                </td>
               </tr>
-            ))}
+            ) : (
+              safeData.map((item) => (
+                <tr
+                  key={keyExtractor(item)}
+                  onClick={() => onRowClick?.(item)}
+                  className={`${
+                    onRowClick
+                      ? 'cursor-pointer hover:bg-slate-50 transition-colors'
+                      : ''
+                  }`}
+                >
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`whitespace-normal px-3 py-3 text-sm text-slate-700 sm:whitespace-nowrap sm:px-4 ${col.className || ''}`}
+                    >
+                      {col.render ? col.render(item) : item[col.key]}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

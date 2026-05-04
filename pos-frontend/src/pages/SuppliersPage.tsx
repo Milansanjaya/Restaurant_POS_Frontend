@@ -3,7 +3,7 @@ import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, Co
 import { suppliersApi } from '../api';
 import type { Supplier, SupplierFormData, SupplierTransaction } from '../types';
 import { formatMoney } from '../money';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 
 type Numberish = number | '';
 
@@ -35,6 +35,7 @@ export default function SuppliersPage() {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
   const [ledgerData, setLedgerData] = useState<SupplierTransaction[]>([]);
+  const [ledgerLoadingId, setLedgerLoadingId] = useState<string | null>(null);
   
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<Numberish>('');
@@ -59,8 +60,9 @@ export default function SuppliersPage() {
       setLoading(true);
       const res = await suppliersApi.getAll({ search });
       setSuppliers(res.suppliers || []);
-    } catch (error) {
-      console.error('Failed to load suppliers:', error);
+    } catch (err: any) {
+      console.error('Failed to load suppliers:', err);
+      notify.error(err?.response?.data?.message || 'Failed to load suppliers');
     } finally {
       setLoading(false);
     }
@@ -119,15 +121,15 @@ export default function SuppliersPage() {
       };
       if (editingSupplier) {
         await suppliersApi.update(editingSupplier._id, payload);
-        toast.success('✅ Supplier updated successfully');
+        notify.success('Supplier updated successfully');
       } else {
         await suppliersApi.create(payload);
-        toast.success('✅ Supplier created successfully');
+        notify.success('Supplier created successfully');
       }
       setModalOpen(false);
       loadSuppliers();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save supplier');
+      notify.error(error?.response?.data?.message || 'Failed to save supplier');
     } finally {
       setSaving(false);
     }
@@ -136,11 +138,14 @@ export default function SuppliersPage() {
   const openLedger = async (supplier: Supplier) => {
     setLedgerSupplier(supplier);
     try {
+      setLedgerLoadingId(supplier._id);
       const transactions = await suppliersApi.getLedger(supplier._id);
       setLedgerData(transactions);
       setLedgerOpen(true);
     } catch (error) {
       console.error('Failed to load ledger:', error);
+    } finally {
+      setLedgerLoadingId(null);
     }
   };
 
@@ -152,18 +157,18 @@ export default function SuppliersPage() {
   };
 
   const handlePayment = async () => {
-    if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) {
-      toast.error('Enter a valid payment amount');
+      if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) {
+      notify.error('Enter a valid payment amount');
       return;
     }
 
-    if (ledgerSupplier.outstandingBalance <= 0) {
-      toast.error('No outstanding balance to pay');
+      if (ledgerSupplier.outstandingBalance <= 0) {
+      notify.error('No outstanding balance to pay');
       return;
     }
 
-    if (paymentAmount > ledgerSupplier.outstandingBalance) {
-      toast.error('Payment amount cannot exceed outstanding balance');
+      if (paymentAmount > ledgerSupplier.outstandingBalance) {
+      notify.error('Payment amount cannot exceed outstanding balance');
       return;
     }
 
@@ -174,9 +179,9 @@ export default function SuppliersPage() {
       });
       setPaymentOpen(false);
       loadSuppliers();
-      toast.success('✅ Payment recorded successfully');
+      notify.success('Payment recorded successfully');
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to record payment');
+      notify.error(error?.response?.data?.message || 'Failed to record payment');
     }
   };
 
@@ -190,12 +195,12 @@ export default function SuppliersPage() {
     try {
       setDeleting(true);
       await suppliersApi.delete(deletingSupplier._id);
-      toast.success('🗑️ Supplier deleted successfully');
+      notify.success('Supplier deleted successfully');
       setDeleteConfirmOpen(false);
       setDeletingSupplier(null);
       loadSuppliers();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to delete supplier');
+      notify.error(error?.response?.data?.message || 'Failed to delete supplier');
     } finally {
       setDeleting(false);
     }
@@ -229,20 +234,31 @@ export default function SuppliersPage() {
       header: 'Actions',
       render: (item: Supplier) => (
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)}>
-            View
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)} aria-label={`View ${item.name}`} title="View">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-            Edit
+          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M11 5h7m-7 0v7m0-7L4 16v4h4l7-7" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openLedger(item)}>
-            Payment History
+          <Button size="sm" variant="ghost" onClick={() => openLedger(item)} loading={ledgerLoadingId === item._id} aria-label={`Payment history for ${item.name}`} title="Payment History">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openPayment(item)}>
-            Pay
+          <Button size="sm" variant="ghost" onClick={() => openPayment(item)} aria-label={`Pay ${item.name}`} title="Pay">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 8c-2.21 0-4 1.12-4 2.5S9.79 13 12 13s4 1.12 4 2.5S14.21 18 12 18m0-10c1.5 0 2.78.58 3.42 1.5M12 8V6m0 2v10m0 0v2m0-2c-1.5 0-2.78-.58-3.42-1.5" />
+            </svg>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)}>
-            Delete
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)} aria-label={`Delete ${item.name}`} title="Delete">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+            </svg>
           </Button>
         </div>
       ),
@@ -254,7 +270,13 @@ export default function SuppliersPage() {
       <PageHeader
         title="Suppliers"
         subtitle="Manage your suppliers"
-        actions={<Button onClick={openCreateModal}>+ Add Supplier</Button>}
+        actions={
+          <Button onClick={openCreateModal} aria-label="Add Supplier" title="Add Supplier">
+            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </Button>
+        }
       />
       <PageContent>
         <div className="mb-4">

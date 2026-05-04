@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Card } from '../components';
+import { PlusIcon, EditIcon, TrashIcon, DollarIcon } from '../components/ActionIcons';
 import { tablesApi } from '../api/tables.api';
 import type { RestaurantTable, TableFormData, TableStatus } from '../types';
 
@@ -50,21 +51,21 @@ export default function TablesPage() {
 
   const handleCreateTable = async () => {
     try {
-      if (editingTable) {
+        if (editingTable) {
         // Update existing table
         await tablesApi.update(editingTable._id, formData);
-        toast.success('✅ Table updated successfully');
+        notify.success('Table updated successfully');
       } else {
         // Create new table
         await tablesApi.create(formData);
-        toast.success('✅ Table created successfully');
+        notify.success('Table created successfully');
       }
       setShowModal(false);
       setFormData({ tableNumber: '', capacity: 2, section: '' });
       setEditingTable(null);
       loadTables();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to save table');
+      notify.error(err?.response?.data?.message || 'Failed to save table');
     }
   };
 
@@ -87,22 +88,22 @@ export default function TablesPage() {
     if (!selectedTable) return;
     try {
       await tablesApi.delete(selectedTable._id);
-      toast.success('✅ Table deleted successfully');
+      notify.success('Table deleted successfully');
       setShowDeleteModal(false);
       setSelectedTable(null);
       loadTables();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to delete table');
+      notify.error(err?.response?.data?.message || 'Failed to delete table');
     }
   };
 
   const handleStatusChange = async (table: RestaurantTable, status: TableStatus) => {
     try {
       await tablesApi.updateStatus(table._id, status);
-      toast.success('✅ Table status updated');
+      notify.success('Table status updated');
       loadTables();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update status');
+      notify.error(err?.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -135,7 +136,7 @@ export default function TablesPage() {
     <Layout>
       <PageHeader
         title="Tables"
-        actions={<Button onClick={() => setShowModal(true)}>Add Table</Button>}
+        actions={<Button onClick={() => setShowModal(true)} aria-label="Add Table" title="Add Table"><PlusIcon /></Button>}
       />
 
       <PageContent>
@@ -200,17 +201,19 @@ export default function TablesPage() {
                       <button
                         onClick={() => openEditModal(table)}
                         className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-blue-600"
+                        aria-label={`Edit table ${table.tableNumber}`}
                         title="Edit table"
                       >
-                        ✏️
+                        <EditIcon />
                       </button>
                       <button
                         onClick={() => openDeleteModal(table)}
                         className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-red-600"
+                        aria-label={`Delete table ${table.tableNumber}`}
                         title="Delete table"
                         disabled={table.status === 'OCCUPIED'}
                       >
-                        🗑️
+                        <TrashIcon />
                       </button>
                     </div>
 
@@ -246,8 +249,10 @@ export default function TablesPage() {
                           size="sm"
                           className="w-full"
                           onClick={() => openCloseModal(table)}
+                          aria-label={`Close and pay table ${table.tableNumber}`}
+                          title="Close & Pay"
                         >
-                          Close & Pay
+                          <DollarIcon />
                         </Button>
                       )}
                     </div>

@@ -5,7 +5,7 @@ import { returnsApi } from '../api/returns.api';
 import { suppliersApi } from '../api/suppliers.api';
 import { grnApi } from '../api/grn.api';
 import { formatMoney } from '../money';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { useAuthStore } from '../store/auth.store';
 import { PERMISSIONS } from '../types';
 import type { Supplier, GRN, SupplierReturn, SupplierReturnItem, ReturnStatus } from '../types';
@@ -285,7 +285,7 @@ function CustomerReturnsPanel() {
       setReturns(res.orderReturns);
       setPnlSummary(res.pnlSummary ?? null);
     } catch {
-      toast.error('Failed to load returns');
+      notify.error('Failed to load returns');
     } finally {
       setLoadingReturns(false);
     }
@@ -302,13 +302,13 @@ function CustomerReturnsPanel() {
     try {
       const results = await orderReturnsApi.searchSales(searchQuery.trim());
       setSearchResults(results);
-      if (results.length === 0) toast.error('No completed orders found for that ID.');
+      if (results.length === 0) notify.error('No completed orders found for that ID.');
       // If only one result, auto-select it
       if (results.length === 1) {
         handleSelectSale(results[0]);
       }
     } catch {
-      toast.error('Search failed. Check backend connection.');
+      notify.error('Search failed. Check backend connection.');
     } finally {
       setSearching(false);
     }
@@ -466,17 +466,17 @@ function CustomerReturnsPanel() {
 
       await Promise.all(tasks);
       if (selectedCustomerItems.length > 0 && selectedInternalItems.length > 0) {
-        toast.success(`✅ Returns created! Refund: ${formatMoney(totalRefund)} (plus internal wastage)`);
+        notify.success(`Returns created! Refund: ${formatMoney(totalRefund)} (plus internal wastage)`);
       } else if (selectedCustomerItems.length > 0) {
-        toast.success(`✅ Customer return created! Refund: ${formatMoney(totalRefund)}`);
+        notify.success(`Customer return created! Refund: ${formatMoney(totalRefund)}`);
       } else {
-        toast.success('✅ Internal return created!');
+        notify.success('Internal return created!');
       }
       // Reset form
       resetForm();
       setActiveTab('view');
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create return');
+      notify.error(err?.response?.data?.message || 'Failed to create return');
     } finally {
       setSaving(false);
     }
@@ -941,7 +941,7 @@ function SupplierReturnsPanel() {
       const res = await suppliersApi.getAll();
       setSuppliers(res.suppliers || []);
     } catch {
-      toast.error('Failed to load suppliers');
+      notify.error('Failed to load suppliers');
     } finally {
       setLoadingSuppliers(false);
     }
@@ -961,7 +961,7 @@ function SupplierReturnsPanel() {
       const res = await grnApi.getAll({ status: 'APPROVED', supplierId });
       setGrns(res.grns || []);
     } catch {
-      toast.error('Failed to load approved GRNs');
+      notify.error('Failed to load approved GRNs');
       setGrns([]);
     } finally {
       setLoadingGrns(false);
@@ -981,7 +981,7 @@ function SupplierReturnsPanel() {
       const list = (res?.returns ?? (res as any)?.supplierReturns ?? []) as SupplierReturn[];
       setReturns(Array.isArray(list) ? list : []);
     } catch {
-      toast.error('Failed to load supplier returns');
+      notify.error('Failed to load supplier returns');
       setReturns([]);
     } finally {
       setLoadingReturns(false);
@@ -1144,10 +1144,10 @@ function SupplierReturnsPanel() {
     setGrnSearching(true);
     try {
       // If user pasted GRN _id
-      if (isLikelyObjectId(q)) {
+        if (isLikelyObjectId(q)) {
         const full = await grnApi.getById(q);
         if (full.status !== 'APPROVED') {
-          toast.error('GRN is not Approved');
+          notify.error('GRN is not Approved');
           setGrnSearchResults([]);
           return;
         }
@@ -1163,7 +1163,7 @@ function SupplierReturnsPanel() {
       const matches = all.filter((g) => (g.grnNumber || '').toLowerCase().includes(needle));
 
       if (matches.length === 0) {
-        toast.error('No Approved GRN found');
+        notify.error('No Approved GRN found');
         setGrnSearchResults([]);
         return;
       }
@@ -1173,7 +1173,7 @@ function SupplierReturnsPanel() {
         await selectGrnFromResult(matches[0]);
       }
     } catch {
-      toast.error('GRN search failed');
+      notify.error('GRN search failed');
       setGrnSearchResults([]);
     } finally {
       setGrnSearching(false);
@@ -1199,7 +1199,7 @@ function SupplierReturnsPanel() {
       const full = await grnApi.getById(grnId);
       applySelectedGrn(full);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to load GRN details');
+      notify.error(err?.response?.data?.message || 'Failed to load GRN details');
     }
   };
 
@@ -1249,11 +1249,11 @@ function SupplierReturnsPanel() {
         notes: notes.trim() || undefined,
       });
 
-      toast.success('✅ Supplier return created');
+      notify.success('Supplier return created');
       resetCreateForm();
       setActiveTab('view');
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to create supplier return');
+      notify.error(err?.response?.data?.message || 'Failed to create supplier return');
     } finally {
       setSaving(false);
     }
@@ -1261,13 +1261,13 @@ function SupplierReturnsPanel() {
 
   const handleApprove = async (id: string) => {
     if (!confirm('Approve supplier return?')) return;
-    try {
-      await returnsApi.approve(id);
-      toast.success('✅ Return approved');
-      loadSupplierReturns();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to approve return');
-    }
+      try {
+        await returnsApi.approve(id);
+        notify.success('Return approved');
+        loadSupplierReturns();
+      } catch (err: any) {
+        notify.error(err?.response?.data?.message || 'Failed to approve return');
+      }
   };
 
   const columns = [

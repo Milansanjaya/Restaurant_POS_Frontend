@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
+import { PlusIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import { couponsApi } from '../api/coupons.api';
 import type { Coupon, CouponFormData, DiscountType } from '../types';
 import { formatMoney } from '../money';
@@ -198,11 +199,11 @@ export default function CouponsPage() {
     )},
     { key: 'actions', header: 'Actions', render: (c: Coupon) => (
       <div className="flex gap-1">
-        <Button size="sm" variant="ghost" onClick={() => openEditModal(c)}>
-          Edit
+        <Button size="sm" variant="ghost" onClick={() => openEditModal(c)} aria-label={`Edit ${c.code}`} title="Edit">
+          <EditIcon />
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => requestDelete(c)}>
-          Delete
+        <Button size="sm" variant="ghost" onClick={() => requestDelete(c)} aria-label={`Delete ${c.code}`} title="Delete">
+          <TrashIcon />
         </Button>
       </div>
     )},
@@ -212,7 +213,7 @@ export default function CouponsPage() {
     <Layout>
       <PageHeader
         title="Coupons"
-        actions={<Button onClick={openCreateModal}>+ Add Coupon</Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Coupon" title="Add Coupon"><PlusIcon /></Button>}
       />
 
       <PageContent>

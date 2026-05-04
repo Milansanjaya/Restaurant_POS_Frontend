@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Badge } from '../components';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
@@ -69,17 +69,17 @@ const SalesPage: React.FC = () => {
 
   const handleVoidSale = async () => {
     if (!selectedSale || !voidReason.trim()) {
-      toast.error('Please provide a reason for voiding the sale');
+      notify.error('Please provide a reason for voiding the sale');
       return;
     }
 
     try {
       await salesApi.voidSale(selectedSale._id, voidReason);
-      toast.success('✅ Sale voided successfully');
+      notify.success('Sale voided successfully');
       setShowVoidModal(false);
       loadSales();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to void sale');
+      notify.error(error.response?.data?.message || 'Failed to void sale');
     }
   };
 
@@ -92,13 +92,13 @@ const SalesPage: React.FC = () => {
 
   const handleRefund = async () => {
     if (!selectedSale || !refundReason.trim()) {
-      toast.error('Please provide a reason for the refund');
+      notify.error('Please provide a reason for the refund');
       return;
     }
 
     const amount = Number(refundAmount);
     if (!Number.isFinite(amount) || amount <= 0 || amount > selectedSale.paidAmount) {
-      toast.error('Please enter a valid refund amount');
+      notify.error('Please enter a valid refund amount');
       return;
     }
 
@@ -107,11 +107,11 @@ const SalesPage: React.FC = () => {
         reason: refundReason,
         amount,
       });
-      toast.success('💰 Refund processed successfully');
+      notify.success('Refund processed successfully');
       setShowRefundModal(false);
       loadSales();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to process refund');
+      notify.error(error.response?.data?.message || 'Failed to process refund');
     }
   };
 
@@ -139,7 +139,7 @@ const SalesPage: React.FC = () => {
     // Open immediately (avoids popup blockers), then fill once invoice data arrives.
     const printWindow = window.open('', '_blank', 'width=420,height=680');
     if (!printWindow) {
-      toast.error('Popup blocked. Please allow popups to print.');
+      notify.error('Popup blocked. Please allow popups to print.');
       return;
     }
 
@@ -199,7 +199,7 @@ const SalesPage: React.FC = () => {
       printWindow.print();
     } catch (error) {
       console.error('Print invoice failed:', error);
-      toast.error('Failed to print invoice');
+      notify.error('Failed to print invoice');
       try {
         printWindow.close();
       } catch {
@@ -210,7 +210,7 @@ const SalesPage: React.FC = () => {
 
   // ── Download Invoice (saves as HTML file) ────────────────────────────────
   const handleDownloadInvoice = async (sale: Sale) => {
-    const toastId = toast.loading('Preparing download...');
+    const toastId = notify.loading('Preparing download...');
     try {
       const [invoice, config] = await Promise.all([
         salesApi.getInvoice(sale._id).catch(() => null as Invoice | null),
@@ -265,10 +265,10 @@ const SalesPage: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success('Invoice downloaded!', { id: toastId });
+      notify.success('Invoice downloaded!', { id: toastId });
     } catch (error) {
       console.error('Download invoice failed:', error);
-      toast.error('Failed to download invoice', { id: toastId });
+      notify.error('Failed to download invoice', { id: toastId });
     }
   };
 
