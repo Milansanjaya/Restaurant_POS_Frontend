@@ -53,6 +53,7 @@ export default function GRNPage() {
   // Filter states
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
+  const [search, setSearch] = useState('');
 
   const [formData, setFormData] = useState<GRNFormState>({
     purchaseOrder_id: '',
@@ -101,6 +102,29 @@ export default function GRNPage() {
   useEffect(() => {
     loadData();
   }, [filterStatus, filterSupplier]);
+
+  const filteredGrns = grns.filter((grn) => {
+    if (!search.trim()) return true;
+    const term = search.toLowerCase();
+    const grnNumber = grn.grnNumber.toLowerCase();
+    const supplierName = (grn.supplier_id && typeof grn.supplier_id === 'object')
+      ? grn.supplier_id.name.toLowerCase()
+      : '';
+    const status = grn.status.toLowerCase();
+    const paymentStatus = (grn.paymentStatus || '').toLowerCase();
+    const poNumber = (grn.purchaseOrder_id && typeof grn.purchaseOrder_id === 'object')
+      ? grn.purchaseOrder_id.poNumber.toLowerCase()
+      : '';
+
+    return (
+      grnNumber.includes(term) ||
+      supplierName.includes(term) ||
+      status.includes(term) ||
+      paymentStatus.includes(term) ||
+      poNumber.includes(term) ||
+      String(grn.totalAmount).includes(term)
+    );
+  });
 
   const getPaidAmount = (grn: GRN) => Math.max(Number(grn.paidAmount ?? 0) || 0, 0);
   const getRemainingAmount = (grn: GRN) => Math.max((Number(grn.totalAmount || 0) || 0) - getPaidAmount(grn), 0);
@@ -601,6 +625,14 @@ export default function GRNPage() {
       <PageContent>
         {/* Filters */}
         <div className="mb-6 flex flex-wrap gap-4">
+          <div className="flex-1 min-w-64">
+            <Input
+              placeholder="Search by GRN ID, supplier, PO number, or amount..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full"
+            />
+          </div>
           <div className="w-48">
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
             <select
@@ -656,7 +688,7 @@ export default function GRNPage() {
 
         <Table
           columns={columns}
-          data={grns}
+          data={filteredGrns}
           keyExtractor={(item) => item._id}
           loading={loading}
           emptyMessage="No GRNs found"

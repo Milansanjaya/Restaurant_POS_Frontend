@@ -274,6 +274,7 @@ export interface SupplierTransaction {
 export interface SupplierPaymentData {
   amount: number;
   paymentMethod: string;
+  grnId?: string;
   reference?: string;
   notes?: string;
 }

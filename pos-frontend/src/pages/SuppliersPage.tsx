@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, ConfirmDialog } from '../components';
-import { suppliersApi } from '../api';
-import type { Supplier, SupplierFormData, SupplierTransaction } from '../types';
+import { suppliersApi, grnApi } from '../api';
+import type { Supplier, SupplierFormData, SupplierTransaction, GRN, GRNPaymentMethod } from '../types';
 import { formatMoney } from '../money';
 import notify from '../utils/notify';
 
@@ -39,7 +39,10 @@ export default function SuppliersPage() {
   
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<Numberish>('');
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<GRNPaymentMethod>('CASH');
+  const [paymentGrns, setPaymentGrns] = useState<GRN[]>([]);
+  const [selectedGrnId, setSelectedGrnId] = useState('');
+  const [loadingPaymentGrns, setLoadingPaymentGrns] = useState(false);
   const currentOutstanding = ledgerSupplier?.outstandingBalance || 0;
 
   const [formData, setFormData] = useState<SupplierFormState>({
@@ -151,33 +154,89 @@ export default function SuppliersPage() {
 
   const openPayment = (supplier: Supplier) => {
     setLedgerSupplier(supplier);
+    setSelectedGrnId('');
     setPaymentAmount(supplier.outstandingBalance > 0 ? supplier.outstandingBalance : '');
     setPaymentMethod('CASH');
     setPaymentOpen(true);
+    setPaymentGrns([]);
+
+    void loadSupplierGrns(supplier._id);
+  };
+
+  const getSelectedPaymentGrn = () => paymentGrns.find((grn) => grn._id === selectedGrnId) || null;
+
+  const getOutstandingBalance = () => {
+    const selected = getSelectedPaymentGrn();
+    if (selected) {
+      return Math.max(selected.totalAmount - (selected.paidAmount || 0), 0);
+    }
+    return currentOutstanding;
+  };
+
+  const loadSupplierGrns = async (supplierId: string) => {
+    try {
+      setLoadingPaymentGrns(true);
+      const res = await grnApi.getAll({ supplierId, status: 'APPROVED' });
+      const grns = (res.grns || []).filter((grn: GRN) => {
+        const paymentStatus = grn.paymentStatus || (grn.paidAmount && grn.paidAmount > 0 ? (grn.paidAmount >= grn.totalAmount ? 'FULLY_PAID' : 'PARTIALLY_PAID') : 'PENDING');
+        return paymentStatus === 'PENDING' || paymentStatus === 'PARTIALLY_PAID';
+      });
+      setPaymentGrns(grns);
+    } catch (error) {
+      console.error('Failed to load GRNs:', error);
+      setPaymentGrns([]);
+    } finally {
+      setLoadingPaymentGrns(false);
+    }
   };
 
   const handlePayment = async () => {
-      if (!ledgerSupplier || typeof paymentAmount !== 'number' || paymentAmount <= 0) {
+    const selectedGrn = getSelectedPaymentGrn();
+    const outstanding = getOutstandingBalance();
+
+    if (!ledgerSupplier) {
+      notify.error('Select a supplier');
+      return;
+    }
+
+    if (!selectedGrnId) {
+      notify.error('Select a GRN');
+      return;
+    }
+
+    if (typeof paymentAmount !== 'number' || paymentAmount <= 0) {
       notify.error('Enter a valid payment amount');
       return;
     }
 
-      if (ledgerSupplier.outstandingBalance <= 0) {
+    if (!paymentMethod) {
+      notify.error('Select payment type');
+      return;
+    }
+
+    if (!selectedGrn) {
+      notify.error('Selected GRN is no longer available');
+      return;
+    }
+
+    if (outstanding <= 0) {
       notify.error('No outstanding balance to pay');
       return;
     }
 
-      if (paymentAmount > ledgerSupplier.outstandingBalance) {
-      notify.error('Payment amount cannot exceed outstanding balance');
+    if (paymentAmount > outstanding) {
+      notify.error('Payment amount cannot exceed remaining balance');
       return;
     }
 
     try {
-      await suppliersApi.recordPayment(ledgerSupplier._id, {
+      await grnApi.recordPayment(selectedGrn._id, {
         amount: paymentAmount,
         paymentMethod,
       });
       setPaymentOpen(false);
+      setSelectedGrnId('');
+      setPaymentGrns([]);
       loadSuppliers();
       notify.success('Payment recorded successfully');
     } catch (error: any) {
@@ -509,18 +568,27 @@ export default function SuppliersPage() {
       {/* Payment Modal */}
       <Modal
         isOpen={paymentOpen}
-        onClose={() => setPaymentOpen(false)}
+        onClose={() => {
+          setPaymentOpen(false);
+          setSelectedGrnId('');
+          setPaymentGrns([]);
+        }}
         title={`Record Payment: ${ledgerSupplier?.name || ''}`}
         footer={
           <>
-            <Button variant="outline" onClick={() => setPaymentOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setPaymentOpen(false);
+              setSelectedGrnId('');
+              setPaymentGrns([]);
+            }}>Cancel</Button>
             <Button
               onClick={handlePayment}
               disabled={
                 typeof paymentAmount !== 'number' ||
                 paymentAmount <= 0 ||
-                paymentAmount > currentOutstanding ||
-                currentOutstanding <= 0
+                paymentAmount > getOutstandingBalance() ||
+                getOutstandingBalance() <= 0 ||
+                !selectedGrnId
               }
             >
               Record Payment
@@ -529,9 +597,44 @@ export default function SuppliersPage() {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Outstanding: {formatMoney(ledgerSupplier?.outstandingBalance || 0)}
-          </p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            Supplier Outstanding: <span className="font-semibold text-slate-900">{formatMoney(ledgerSupplier?.outstandingBalance || 0)}</span>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">GRN</label>
+            <select
+              value={selectedGrnId}
+              onChange={(e) => {
+                const grnId = e.target.value;
+                setSelectedGrnId(grnId);
+                const selected = paymentGrns.find((grn) => grn._id === grnId) || null;
+                const remaining = selected ? Math.max(selected.totalAmount - (selected.paidAmount || 0), 0) : currentOutstanding;
+                setPaymentAmount(remaining > 0 ? remaining : '');
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={loadingPaymentGrns}
+            >
+              <option value="">Select GRN</option>
+              {paymentGrns.map((grn) => {
+                const remaining = Math.max(grn.totalAmount - (grn.paidAmount || 0), 0);
+                return (
+                  <option key={grn._id} value={grn._id}>
+                    {grn.grnNumber} - {formatMoney(remaining)} remaining
+                  </option>
+                );
+              })}
+            </select>
+            {loadingPaymentGrns ? <p className="mt-1 text-xs text-slate-500">Loading GRNs...</p> : null}
+            {!loadingPaymentGrns && paymentGrns.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-500">No pending or partially paid GRNs for this supplier.</p>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Remaining Balance: <span className="font-semibold text-amber-950">{formatMoney(getOutstandingBalance())}</span>
+          </div>
+
           <Input
             label="Amount"
             type="number"
@@ -551,19 +654,22 @@ export default function SuppliersPage() {
                 setPaymentAmount(0);
                 return;
               }
-              setPaymentAmount(Math.min(n, currentOutstanding));
+              setPaymentAmount(Math.min(n, getOutstandingBalance()));
             }}
             min={0}
-            max={currentOutstanding}
-            helperText={`Maximum payable: ${formatMoney(currentOutstanding)}`}
+            max={getOutstandingBalance()}
+            required
+            helperText={`Maximum payable: ${formatMoney(getOutstandingBalance())}`}
           />
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Method</label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Payment Type</label>
             <select
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              onChange={(e) => setPaymentMethod(e.target.value as GRNPaymentMethod)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              required
             >
+              <option value="">Select payment type</option>
               <option value="CASH">Cash</option>
               <option value="BANK_TRANSFER">Bank Transfer</option>
               <option value="CHEQUE">Cheque</option>

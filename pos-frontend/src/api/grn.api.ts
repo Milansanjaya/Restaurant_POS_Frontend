@@ -53,7 +53,7 @@ export const grnApi = {
   },
 
   getAllPayments: async (
-    params?: PaginationParams & { supplierId?: string; from?: string; to?: string }
+    params?: PaginationParams & { supplierId?: string; from?: string; to?: string; grnId?: string; search?: string }
   ) => {
     const res = await api.get('/grn/payments', { params });
     return res.data;
