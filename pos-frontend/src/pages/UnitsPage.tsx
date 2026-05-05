@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal } from '../components';
+import { EditIcon, TrashIcon, ToggleIcon } from '../components/ActionIcons';
 import { unitsApi } from '../api';
 import type { Unit, UnitFormData, UnitType } from '../types';
 
@@ -176,18 +177,20 @@ export default function UnitsPage() {
       header: 'Actions',
       render: (item: Unit) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)}>
-            Edit
+          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">
+            <EditIcon />
           </Button>
           <Button 
             size="sm" 
             variant="ghost" 
             onClick={() => handleToggleActive(item)}
+            aria-label={`${item.isActive ? 'Deactivate' : 'Activate'} ${item.name}`}
+            title={item.isActive ? 'Deactivate' : 'Activate'}
           >
-            {item.isActive ? 'Deactivate' : 'Activate'}
+            <ToggleIcon />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)}>
-            Delete
+          <Button size="sm" variant="ghost" onClick={() => handleDelete(item._id)} aria-label={`Delete ${item.name}`} title="Delete">
+            <TrashIcon />
           </Button>
         </div>
       ),

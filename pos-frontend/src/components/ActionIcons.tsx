@@ -90,3 +90,12 @@ export function ToggleIcon(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+export function HandIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon className={props.className || base} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden {...props}>
+      <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M10 9V3h8v6m0 0v8a2 2 0 01-2 2h-4a2 2 0 01-2-2v-8m4 0h4v-6H10v6" />
+      <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M2 10a1 1 0 011-1h6m0 0H3" />
+    </Icon>
+  );
+}

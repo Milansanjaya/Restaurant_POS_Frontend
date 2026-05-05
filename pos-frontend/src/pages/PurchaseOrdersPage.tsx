@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card } from '../components';
-import { PlusIcon, EyeIcon, PrinterIcon, EditIcon, CheckIcon, XIcon, TrashIcon } from '../components/ActionIcons';
+import { PlusIcon, EyeIcon, PrinterIcon, EditIcon, XIcon, TrashIcon, HandIcon } from '../components/ActionIcons';
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
 import { formatMoney } from '../money';
@@ -23,6 +23,10 @@ export default function PurchaseOrdersPage() {
   const [printLoadingId, setPrintLoadingId] = useState<string | null>(null);
   const [approveLoadingId, setApproveLoadingId] = useState<string | null>(null);
   const [cancelLoadingId, setCancelLoadingId] = useState<string | null>(null);
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [orderToApprove, setOrderToApprove] = useState<PurchaseOrder | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<PurchaseOrder | null>(null);
 
   const [formData, setFormData] = useState<PurchaseOrderFormData>({
     supplier_id: '',
@@ -314,25 +318,46 @@ export default function PurchaseOrdersPage() {
   };
 
   const handleApprove = async (id: string) => {
-    if (!confirm('Are you sure you want to approve this PO?')) return;
-    try {
-      setApproveLoadingId(id);
-      await purchaseOrdersApi.approve(id);
-      notify.success('Purchase order approved successfully. Procurement is now ready for the next step.');
-      loadData();
-    } catch (error: any) {
-      notify.error(error?.response?.data?.message || 'Failed to approve PO');
-    } finally {
-      setApproveLoadingId(null);
+      const order = orders.find(o => o._id === id);
+      if (order) {
+        setOrderToApprove(order);
+        setApprovalModalOpen(true);
+      }
+    };
+
+    const confirmApproval = async () => {
+      if (!orderToApprove) return;
+      try {
+        setApproveLoadingId(orderToApprove._id);
+        await purchaseOrdersApi.approve(orderToApprove._id);
+        notify.success(`PO ${orderToApprove.poNumber} approved successfully! Ready for procurement.`);
+        setApprovalModalOpen(false);
+        setOrderToApprove(null);
+        loadData();
+      } catch (error: any) {
+        notify.error(error?.response?.data?.message || 'Failed to approve PO');
+      } finally {
+        setApproveLoadingId(null);
+      }
+    };
+
+  const handleCancel = async (id: string) => {
+    const order = orders.find((item) => item._id === id);
+    if (order) {
+      setOrderToCancel(order);
+      setCancelModalOpen(true);
     }
   };
 
-  const handleCancel = async (id: string) => {
-    if (!confirm('Are you sure you want to cancel this PO?')) return;
+  const confirmCancel = async () => {
+    if (!orderToCancel) return;
+
     try {
-      setCancelLoadingId(id);
-      await purchaseOrdersApi.cancel(id);
-      notify.success('Purchase order cancelled');
+      setCancelLoadingId(orderToCancel._id);
+      await purchaseOrdersApi.cancel(orderToCancel._id);
+      notify.success(`PO ${orderToCancel.poNumber} has been cancelled.`);
+      setCancelModalOpen(false);
+      setOrderToCancel(null);
       loadData();
     } catch (error: any) {
       notify.error(error?.response?.data?.message || 'Failed to cancel PO');
@@ -390,7 +415,7 @@ export default function PurchaseOrdersPage() {
           {item.status === 'PENDING' && (
             <>
               <Button size="sm" variant="ghost" onClick={() => handleApprove(item._id)} loading={approveLoadingId === item._id} aria-label={`Approve purchase order ${item.poNumber}`} title="Approve">
-                <CheckIcon />
+                 <HandIcon />
               </Button>
               <Button size="sm" variant="ghost" onClick={() => handleCancel(item._id)} loading={cancelLoadingId === item._id} aria-label={`Cancel purchase order ${item.poNumber}`} title="Cancel">
                 <XIcon />
@@ -637,6 +662,110 @@ export default function PurchaseOrdersPage() {
           <div className="p-4 text-sm text-slate-600">No data</div>
         )}
       </Modal>
+
+        <Modal
+          isOpen={approvalModalOpen}
+          onClose={() => {
+            setApprovalModalOpen(false);
+            setOrderToApprove(null);
+          }}
+          title="Approve Purchase Order"
+          footer={
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setApprovalModalOpen(false);
+                  setOrderToApprove(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmApproval} loading={approveLoadingId === orderToApprove?._id}>
+                Approve Order
+              </Button>
+            </>
+          }
+        >
+          {orderToApprove && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-700">Approve PO? This will move it into the approved procurement flow.</p>
+                <p className="mt-2 text-sm text-slate-600">Use this only when the order is ready to proceed.</p>
+              </div>
+              <div className="space-y-2 border-t border-slate-200 pt-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">PO Number:</span>
+                  <span className="font-medium">{orderToApprove.poNumber}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Supplier:</span>
+                  <span className="font-medium">
+                    {orderToApprove.supplier_id && typeof orderToApprove.supplier_id === 'object'
+                      ? orderToApprove.supplier_id.name
+                      : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Total Amount:</span>
+                  <span className="font-medium text-emerald-600">{formatMoney(orderToApprove.totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          isOpen={cancelModalOpen}
+          onClose={() => {
+            setCancelModalOpen(false);
+            setOrderToCancel(null);
+          }}
+          title="Cancel Purchase Order"
+          footer={
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCancelModalOpen(false);
+                  setOrderToCancel(null);
+                }}
+              >
+                Close
+              </Button>
+              <Button onClick={confirmCancel} loading={cancelLoadingId === orderToCancel?._id}>
+                Cancel PO
+              </Button>
+            </>
+          }
+        >
+          {orderToCancel && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-rose-50 p-4">
+                <p className="text-sm font-medium text-rose-700">Cancel PO? This will remove it from the active workflow.</p>
+                <p className="mt-2 text-sm text-rose-600">This action should be used only when the order is no longer needed.</p>
+              </div>
+              <div className="space-y-2 border-t border-slate-200 pt-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">PO Number:</span>
+                  <span className="font-medium">{orderToCancel.poNumber}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Supplier:</span>
+                  <span className="font-medium">
+                    {orderToCancel.supplier_id && typeof orderToCancel.supplier_id === 'object'
+                      ? orderToCancel.supplier_id.name
+                      : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Total Amount:</span>
+                  <span className="font-medium text-rose-600">{formatMoney(orderToCancel.totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
     </Layout>
   );
 }

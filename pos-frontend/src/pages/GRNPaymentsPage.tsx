@@ -13,6 +13,7 @@ import {
   Modal,
   getStatusBadgeVariant,
 } from '../components';
+import { DollarIcon } from '../components/ActionIcons';
 import { grnApi, suppliersApi } from '../api';
 import type { GRN, GRNPayment, GRNPaymentMethod, Supplier } from '../types';
 import { formatMoney } from '../money';
@@ -156,6 +157,7 @@ export default function GRNPaymentsPage() {
     setPaymentAmount(getRemainingAmount(grn));
     setPaymentMethod('CASH');
     setPaymentOpen(true);
+    notify.info(`Recording payment for ${grn.grnNumber}`);
   };
 
   const selectedSupplierGrns = useMemo(() => {
@@ -282,7 +284,7 @@ export default function GRNPaymentsPage() {
           title="Make Payment"
           disabled={getRemainingAmount(grn) <= 0}
         >
-          Make Payment
+          <DollarIcon />
         </Button>
       ),
     },

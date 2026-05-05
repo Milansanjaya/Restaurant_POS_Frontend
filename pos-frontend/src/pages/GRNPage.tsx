@@ -49,6 +49,10 @@ export default function GRNPage() {
   const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
   const [printLoadingId, setPrintLoadingId] = useState<string | null>(null);
   const [approveLoadingId, setApproveLoadingId] = useState<string | null>(null);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [grnToApprove, setGrnToApprove] = useState<GRN | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [grnToDelete, setGrnToDelete] = useState<GRN | null>(null);
   
   // Filter states
   const [filterStatus, setFilterStatus] = useState('');
@@ -338,15 +342,25 @@ export default function GRNPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this GRN? This cannot be undone.')) return;
+    const grn = grns.find((item) => item._id === id);
+    if (grn) {
+      setGrnToDelete(grn);
+      setDeleteModalOpen(true);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!grnToDelete) return;
+
     try {
-      await grnApi.delete(id);
-      notify.success('GRN deleted successfully');
+      await grnApi.delete(grnToDelete._id);
+      notify.success(`GRN ${grnToDelete.grnNumber} deleted successfully.`);
+      setDeleteModalOpen(false);
+      setGrnToDelete(null);
       loadData();
     } catch (error: any) {
       if (error?.response?.status === 404) {
         notify.error('GRN not found (already deleted)');
-        // Refresh the list to remove the stale item
         loadData();
       } else {
         notify.error(error?.response?.data?.message || 'Failed to delete GRN');
@@ -355,11 +369,22 @@ export default function GRNPage() {
   };
 
   const handleApprove = async (id: string) => {
-    if (!confirm('Approve GRN? This will update inventory and supplier balance.')) return;
+    const grn = grns.find((item) => item._id === id);
+    if (grn) {
+      setGrnToApprove(grn);
+      setApproveModalOpen(true);
+    }
+  };
+
+  const confirmApprove = async () => {
+    if (!grnToApprove) return;
+
     try {
-      setApproveLoadingId(id);
-      await grnApi.approve(id);
-      notify.success('GRN approved successfully. Inventory and supplier balance have been updated.');
+      setApproveLoadingId(grnToApprove._id);
+      await grnApi.approve(grnToApprove._id);
+      notify.success(`GRN ${grnToApprove.grnNumber} approved successfully.`);
+      setApproveModalOpen(false);
+      setGrnToApprove(null);
       loadData();
     } catch (error: any) {
       notify.error(error?.response?.data?.message || 'Failed to approve GRN');
@@ -1126,6 +1151,110 @@ export default function GRNPage() {
               onChange={(e) => setPaymentNotes(e.target.value)}
               placeholder="Any notes about this payment"
             />
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={approveModalOpen}
+        onClose={() => {
+          setApproveModalOpen(false);
+          setGrnToApprove(null);
+        }}
+        title="Approve GRN"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApproveModalOpen(false);
+                setGrnToApprove(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmApprove} loading={approveLoadingId === grnToApprove?._id}>
+              Approve GRN
+            </Button>
+          </>
+        }
+      >
+        {grnToApprove && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-700">Approve GRN? This will update inventory and supplier balance.</p>
+              <p className="mt-2 text-sm text-slate-600">Use this only when the received goods have been verified.</p>
+            </div>
+            <div className="space-y-2 border-t border-slate-200 pt-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">GRN Number:</span>
+                <span className="font-medium">{grnToApprove.grnNumber}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Supplier:</span>
+                <span className="font-medium">
+                  {grnToApprove.supplier_id && typeof grnToApprove.supplier_id === 'object'
+                    ? grnToApprove.supplier_id.name
+                    : '-'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Total Amount:</span>
+                <span className="font-medium text-emerald-600">{formatMoney(grnToApprove.totalAmount)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setGrnToDelete(null);
+        }}
+        title="Delete GRN"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setGrnToDelete(null);
+              }}
+            >
+              Close
+            </Button>
+            <Button onClick={confirmDelete} loading={grnToDelete ? false : false}>
+              Delete GRN
+            </Button>
+          </>
+        }
+      >
+        {grnToDelete && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-rose-50 p-4">
+              <p className="text-sm font-medium text-rose-700">Delete GRN? This cannot be undone.</p>
+              <p className="mt-2 text-sm text-rose-600">This will permanently remove the GRN from the system.</p>
+            </div>
+            <div className="space-y-2 border-t border-slate-200 pt-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">GRN Number:</span>
+                <span className="font-medium">{grnToDelete.grnNumber}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Supplier:</span>
+                <span className="font-medium">
+                  {grnToDelete.supplier_id && typeof grnToDelete.supplier_id === 'object'
+                    ? grnToDelete.supplier_id.name
+                    : '-'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Total Amount:</span>
+                <span className="font-medium text-rose-600">{formatMoney(grnToDelete.totalAmount)}</span>
+              </div>
+            </div>
           </div>
         )}
       </Modal>
