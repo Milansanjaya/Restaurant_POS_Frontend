@@ -293,32 +293,11 @@ export default function SuppliersPage() {
       header: 'Actions',
       render: (item: Supplier) => (
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)} aria-label={`View ${item.name}`} title="View">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
-            </svg>
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M11 5h7m-7 0v7m0-7L4 16v4h4l7-7" />
-            </svg>
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => openLedger(item)} loading={ledgerLoadingId === item._id} aria-label={`Payment history for ${item.name}`} title="Payment History">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => openPayment(item)} aria-label={`Pay ${item.name}`} title="Pay">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 8c-2.21 0-4 1.12-4 2.5S9.79 13 12 13s4 1.12 4 2.5S14.21 18 12 18m0-10c1.5 0 2.78.58 3.42 1.5M12 8V6m0 2v10m0 0v2m0-2c-1.5 0-2.78-.58-3.42-1.5" />
-            </svg>
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)} aria-label={`Delete ${item.name}`} title="Delete">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
-            </svg>
-          </Button>
+          <Button size="sm" variant="ghost" onClick={() => openViewModal(item)} aria-label={`View ${item.name}`} title="View">View</Button>
+          <Button size="sm" variant="ghost" onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} title="Edit">Edit</Button>
+          <Button size="sm" variant="ghost" onClick={() => openLedger(item)} loading={ledgerLoadingId === item._id} aria-label={`Payment history for ${item.name}`} title="Payment History">History</Button>
+          <Button size="sm" variant="ghost" onClick={() => openPayment(item)} aria-label={`Pay ${item.name}`} title="Pay">Pay</Button>
+          <Button size="sm" variant="ghost" onClick={() => requestDelete(item)} aria-label={`Delete ${item.name}`} title="Delete">Delete</Button>
         </div>
       ),
     },
@@ -330,11 +309,7 @@ export default function SuppliersPage() {
         title="Suppliers"
         subtitle="Manage your suppliers"
         actions={
-          <Button onClick={openCreateModal} aria-label="Add Supplier" title="Add Supplier">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </Button>
+          <Button onClick={openCreateModal} aria-label="Add Supplier" title="Add Supplier">Add Supplier</Button>
         }
       />
       <PageContent>

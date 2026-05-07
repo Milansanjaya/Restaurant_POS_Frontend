@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, getStatusBadgeVariant, Modal, Card } from '../components';
-import { PlusIcon, EyeIcon, PrinterIcon, EditIcon, XIcon, TrashIcon, HandIcon } from '../components/ActionIcons';
+import { EyeIcon, PrinterIcon, EditIcon, XIcon, TrashIcon, HandIcon } from '../components/ActionIcons';
 import { purchaseOrdersApi, suppliersApi, productsApi } from '../api';
 import type { PurchaseOrder, PurchaseOrderFormData, PurchaseOrderItem, Supplier, Product } from '../types';
 import { formatMoney } from '../money';
@@ -432,7 +432,7 @@ export default function PurchaseOrdersPage() {
       <PageHeader
         title="Purchase Orders"
         subtitle="Manage procurement orders"
-        actions={<Button onClick={openCreateModal} aria-label="Create Purchase Order" title="Create PO"><PlusIcon /></Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Create Purchase Order" title="Create PO">Create PO</Button>}
       />
       <PageContent>
         <div className="mb-4">
@@ -542,7 +542,7 @@ export default function PurchaseOrdersPage() {
                   })
                 }
               />
-              <Button onClick={addItem} aria-label="Add item" title="Add"><PlusIcon /></Button>
+              <Button onClick={addItem} aria-label="Add item" title="Add">Add</Button>
             </div>
           </Card>
 
@@ -769,3 +769,4 @@ export default function PurchaseOrdersPage() {
     </Layout>
   );
 }
+

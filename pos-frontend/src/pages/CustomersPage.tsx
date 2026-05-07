@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent, Button, Input, Table, Badge, Modal, ConfirmDialog } from '../components';
-import { PlusIcon, EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
+import { EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import { customersApi } from '../api';
 import type { Customer, CustomerFormData } from '../types';
 import { formatMoney } from '../money';
@@ -246,7 +246,7 @@ export default function CustomersPage() {
       <PageHeader
         title="Customers"
         subtitle="Manage your customer database"
-        actions={<Button onClick={openCreateModal} aria-label="Add Customer" title="Add Customer"><PlusIcon /></Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Customer" title="Add Customer">Add Customer</Button>}
       />
       <PageContent>
         <div className="mb-4 flex gap-4">
@@ -336,7 +336,7 @@ export default function CustomersPage() {
             autoComplete="new-password"
             data-lpignore="true"
             inputMode="tel"
-            helperText="Digits only (10–15). Use + for country code if needed."
+            helperText="Digits only (10-15). Use + for country code if needed."
             required
           />
           <Input
@@ -475,3 +475,4 @@ export default function CustomersPage() {
     </Layout>
   );
 }
+

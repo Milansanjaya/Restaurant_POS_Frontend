@@ -1377,13 +1377,6 @@ export default function PosPage() {
     }
   }, [selectedCategory, inactiveCategoryIds]);
 
-  const getCategoryName = (product: Product) => {
-    if (!product.category) return "General";
-    if (typeof product.category === "object") return product.category.name;
-    const cat = flatCategories.find((c) => c._id === product.category);
-    return cat?.name || "General";
-  };
-
   const getCategoryId = (product: Product) => {
     if (!product.category) return "";
     if (typeof product.category === "object") return product.category._id;
@@ -2079,10 +2072,6 @@ const handleCreateSale = async () => {
                         </span>
                       ) : null}
                     </div>
-
-                    <p className="mb-2 text-xs text-slate-500 truncate">
-                      {getCategoryName(product)}
-                    </p>
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">

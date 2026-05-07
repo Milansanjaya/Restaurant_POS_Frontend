@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Input, Modal, Card, PageLoader, Badge } from '../components';
-import { PlusIcon, EditIcon, ToggleIcon } from '../components/ActionIcons';
 import { categoriesApi } from '../api';
 import type { Category, CategoryFormData } from '../types';
 
@@ -216,15 +215,9 @@ export default function CategoriesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={() => openCreateModal(cat._id)} aria-label={`Add subcategory for ${cat.name}`} title="Add Subcategory">
-              <PlusIcon />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => openEditModal(cat)} aria-label={`Edit ${cat.name}`} title="Edit">
-              <EditIcon />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => handleToggleActive(cat)} aria-label={cat.isActive === false ? `Set ${cat.name} active` : `Set ${cat.name} inactive`} title={cat.isActive === false ? 'Set Active' : 'Set Inactive'}>
-              <ToggleIcon />
-            </Button>
+            <Button size="sm" variant="ghost" onClick={() => openCreateModal(cat._id)} aria-label={`Add subcategory for ${cat.name}`} title="Add Subcategory">Add Subcategory</Button>
+            <Button size="sm" variant="ghost" onClick={() => openEditModal(cat)} aria-label={`Edit ${cat.name}`} title="Edit">Edit</Button>
+            <Button size="sm" variant="ghost" onClick={() => handleToggleActive(cat)} aria-label={cat.isActive === false ? `Set ${cat.name} active` : `Set ${cat.name} inactive`} title={cat.isActive === false ? 'Set Active' : 'Set Inactive'}>{cat.isActive === false ? 'Activate' : 'Deactivate'}</Button>
           </div>
         </div>
         {cat.children?.length ? renderCategoryTree(cat.children, level + 1) : null}
@@ -246,7 +239,7 @@ export default function CategoriesPage() {
         title="Categories"
         subtitle="Organize your products into categories"
         actions={
-          <Button onClick={() => openCreateModal()} aria-label="Add Category" title="Add Category"><PlusIcon /></Button>
+          <Button onClick={() => openCreateModal()} aria-label="Add Category" title="Add Category">Add Category</Button>
         }
       />
       <PageContent>

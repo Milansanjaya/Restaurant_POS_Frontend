@@ -168,11 +168,7 @@ const RolesPage: React.FC = () => {
       header: 'Actions',
       render: (role: Role) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => handleOpenModal(role)} aria-label={`Edit ${role.name}`} title="Edit">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M11 5h7m-7 0v7m0-7L4 16v4h4l7-7" />
-            </svg>
-          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handleOpenModal(role)} aria-label={`Edit ${role.name}`} title="Edit">Edit</Button>
           <Button 
             size="sm" 
             variant="ghost" 
@@ -181,9 +177,7 @@ const RolesPage: React.FC = () => {
             aria-label={`Delete ${role.name}`}
             title="Delete"
           >
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
-            </svg>
+            Delete
           </Button>
         </div>
       ),
@@ -196,11 +190,7 @@ const RolesPage: React.FC = () => {
         title="Role Management"
         subtitle="Manage roles and assign permissions"
         actions={
-          <Button onClick={() => handleOpenModal()} aria-label="Create Role" title="Create Role">
-            <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-              <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </Button>
+          <Button onClick={() => handleOpenModal()} aria-label="Create Role" title="Create Role">Create Role</Button>
         }
       />
       

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, StatCard, Table, Badge, getStatusBadgeVariant, Button, Modal, Input, PageLoader, ConfirmDialog } from '../components';
-import { PlusIcon, ToggleIcon, TrashIcon } from '../components/ActionIcons';
+import { ToggleIcon, TrashIcon } from '../components/ActionIcons';
 import { batchesApi, productsApi } from '../api';
 import type { Batch, ExpiryDashboard, Product } from '../types';
 import type { CreateBatchData } from '../api/batches.api';
@@ -264,7 +264,7 @@ export default function BatchesPage() {
       <PageHeader
         title="Batch & Expiry Management"
         subtitle="Track product batches and expiry dates"
-        actions={<Button onClick={openCreateModal} aria-label="Create Batch" title="Create Batch"><PlusIcon /></Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Create Batch" title="Create Batch">Create Batch</Button>}
       />
       <PageContent>
         {/* Dashboard Stats */}
@@ -389,3 +389,4 @@ export default function BatchesPage() {
     </Layout>
   );
 }
+

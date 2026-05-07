@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Card } from '../components';
-import { PlusIcon, EditIcon, TrashIcon, DollarIcon } from '../components/ActionIcons';
 import { tablesApi } from '../api/tables.api';
 import type { RestaurantTable, TableFormData, TableStatus } from '../types';
 
@@ -136,7 +135,11 @@ export default function TablesPage() {
     <Layout>
       <PageHeader
         title="Tables"
-        actions={<Button onClick={() => setShowModal(true)} aria-label="Add Table" title="Add Table"><PlusIcon /></Button>}
+        actions={
+          <Button onClick={() => setShowModal(true)} aria-label="Add Table" title="Add Table">
+            Add Table
+          </Button>
+        }
       />
 
       <PageContent>
@@ -200,20 +203,20 @@ export default function TablesPage() {
                     <div className="absolute top-2 right-2 flex gap-1">
                       <button
                         onClick={() => openEditModal(table)}
-                        className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-blue-600"
+                        className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-600"
                         aria-label={`Edit table ${table.tableNumber}`}
                         title="Edit table"
                       >
-                        <EditIcon />
+                        Edit
                       </button>
                       <button
                         onClick={() => openDeleteModal(table)}
-                        className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-red-600"
+                        className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`Delete table ${table.tableNumber}`}
                         title="Delete table"
                         disabled={table.status === 'OCCUPIED'}
                       >
-                        <TrashIcon />
+                        Delete
                       </button>
                     </div>
 
@@ -252,7 +255,7 @@ export default function TablesPage() {
                           aria-label={`Close and pay table ${table.tableNumber}`}
                           title="Close & Pay"
                         >
-                          <DollarIcon />
+                          Close & Pay
                         </Button>
                       )}
                     </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table } from '../components';
-import { PlusIcon, SeatIcon } from '../components/ActionIcons';
+import { SeatIcon } from '../components/ActionIcons';
 import { reservationsApi } from '../api/reservations.api';
 import { tablesApi } from '../api/tables.api';
 import type { Reservation, ReservationFormData, ReservationStatus, RestaurantTable } from '../types';
@@ -235,7 +235,7 @@ export default function ReservationsPage() {
       <PageHeader
         title="Reservations"
         actions={
-          <Button onClick={() => setShowModal(true)} aria-label="New Reservation" title="New Reservation"><PlusIcon /></Button>
+          <Button onClick={() => setShowModal(true)} aria-label="New Reservation" title="New Reservation">New Reservation</Button>
         }
       />
 

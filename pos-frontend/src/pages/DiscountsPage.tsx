@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import notify from '../utils/notify';
 import { Layout, PageHeader, PageContent, Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
-import { PlusIcon, EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
+import { EyeIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
 import { discountsApi, productsApi } from '../api';
 import type { Discount, DiscountFormData, DiscountType, Product, ProductFormData } from '../types';
 import { formatMoney } from '../money';
@@ -337,9 +337,9 @@ export default function DiscountsPage() {
     )},
     { key: 'value', header: 'Value', render: (d: Discount) => formatDiscountValue(d) },
     { key: 'period', header: 'Valid', render: (d: Discount) => {
-      const from = d.validFrom ? new Date(d.validFrom).toLocaleDateString() : '—';
-      const to = d.validTo ? new Date(d.validTo).toLocaleDateString() : '—';
-      return <span className="text-sm text-slate-700">{from} → {to}</span>;
+      const from = d.validFrom ? new Date(d.validFrom).toLocaleDateString() : '--';
+      const to = d.validTo ? new Date(d.validTo).toLocaleDateString() : '--';
+      return <span className="text-sm text-slate-700">{from} {'->'} {to}</span>;
     }},
     { key: 'status', header: 'Status', render: (d: Discount) => {
       const activeInTime = isWithinRange(now, d.validFrom, d.validTo);
@@ -378,7 +378,7 @@ export default function DiscountsPage() {
       <PageHeader
         title="Discounts"
         subtitle="Create discounts and assign them to products"
-        actions={<Button onClick={openCreateModal} aria-label="Add Discount" title="Add Discount"><PlusIcon /></Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Discount" title="Add Discount">Add Discount</Button>}
       />
 
       <PageContent>
@@ -513,7 +513,7 @@ export default function DiscountsPage() {
                       >
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-slate-900 truncate">{p.name}</div>
-                          <div className="text-xs text-slate-500 truncate">SKU: {p.sku} · Price: {formatMoney(p.price)}</div>
+                          <div className="text-xs text-slate-500 truncate">SKU: {p.sku} | Price: {formatMoney(p.price)}</div>
                         </div>
                         <input
                           type="checkbox"
@@ -563,12 +563,12 @@ export default function DiscountsPage() {
               <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-700">
                 <Badge variant={viewDiscount.discountType === 'FLAT' ? 'info' : 'warning'}>{viewDiscount.discountType}</Badge>
                 <span className="font-semibold">{formatDiscountValue(viewDiscount)}</span>
-                <span className="text-slate-500">·</span>
+                <span className="text-slate-500">|</span>
                 <span className="text-slate-600">{viewDiscount.isActive ? 'Active' : 'Inactive'}</span>
               </div>
               <div className="mt-2 text-sm text-slate-600">
-                Valid: {viewDiscount.validFrom ? new Date(viewDiscount.validFrom).toLocaleDateString() : '—'} →{' '}
-                {viewDiscount.validTo ? new Date(viewDiscount.validTo).toLocaleDateString() : '—'}
+                Valid: {viewDiscount.validFrom ? new Date(viewDiscount.validFrom).toLocaleDateString() : '--'} {'->'}{' '}
+                {viewDiscount.validTo ? new Date(viewDiscount.validTo).toLocaleDateString() : '--'}
               </div>
             </div>
 
@@ -586,7 +586,7 @@ export default function DiscountsPage() {
                   viewProducts.map((p) => (
                     <div key={p._id} className="px-4 py-3 border-b border-slate-100 last:border-b-0">
                       <div className="text-sm font-medium text-slate-900">{p.name}</div>
-                      <div className="text-xs text-slate-500">SKU: {p.sku} · Price: {formatMoney(p.price)}</div>
+                      <div className="text-xs text-slate-500">SKU: {p.sku} | Price: {formatMoney(p.price)}</div>
                     </div>
                   ))
                 )}
@@ -629,3 +629,4 @@ export default function DiscountsPage() {
     </Layout>
   );
 }
+

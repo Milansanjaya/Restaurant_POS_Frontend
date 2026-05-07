@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Select, Modal, Badge, Table, ConfirmDialog } from '../components';
-import { PlusIcon, EditIcon, TrashIcon } from '../components/ActionIcons';
+import { EditIcon, TrashIcon } from '../components/ActionIcons';
 import { couponsApi } from '../api/coupons.api';
 import type { Coupon, CouponFormData, DiscountType } from '../types';
 import { formatMoney } from '../money';
@@ -182,7 +182,7 @@ export default function CouponsPage() {
       </span>
     )},
     { key: 'usage', header: 'Usage', render: (c: Coupon) => (
-      c.usageLimit ? `${c.timesUsed}/${c.usageLimit}` : `${c.timesUsed}/∞`
+      c.usageLimit ? `${c.timesUsed}/${c.usageLimit}` : `${c.timesUsed}/Infinity`
     )},
     { key: 'status', header: 'Status', render: (c: Coupon) => (
       <button
@@ -213,7 +213,7 @@ export default function CouponsPage() {
     <Layout>
       <PageHeader
         title="Coupons"
-        actions={<Button onClick={openCreateModal} aria-label="Add Coupon" title="Add Coupon"><PlusIcon /></Button>}
+        actions={<Button onClick={openCreateModal} aria-label="Add Coupon" title="Add Coupon">Add Coupon</Button>}
       />
 
       <PageContent>
@@ -375,3 +375,4 @@ export default function CouponsPage() {
     </Layout>
   );
 }
+
