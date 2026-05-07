@@ -100,6 +100,11 @@ const navGroups: NavGroup[] = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    title: 'Shifts',
+    items: [
       {
         label: 'Shifts',
         path: '/shifts',
@@ -333,6 +338,7 @@ export default function Sidebar({
   const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({
     Sales: true,
     Operations: true,
+    Shifts: true,
     Promotions: true,
     'Product Management': true,
     Inventory: true,
@@ -358,10 +364,10 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="flex h-screen w-56 flex-col border-r border-slate-800 bg-slate-950 text-slate-100">
+      <aside className="flex h-screen w-56 flex-col border-r border-slate-200 bg-white text-slate-900">
         {/* Logo */}
-        <div className="flex h-16 items-center border-b border-slate-800 px-6">
-          <h1 className="text-lg font-bold text-white">Restaurant POS</h1>
+        <div className="flex h-16 items-center border-b border-slate-200 px-6">
+          <h1 className="text-lg font-bold text-slate-900">Restaurant POS</h1>
         </div>
 
         {/* Navigation */}
@@ -369,11 +375,11 @@ export default function Sidebar({
           <div className="space-y-5">
             {visibleNavGroups.map((group) => (
               <section key={group.title || group.items[0].path}>
-                {group.title && (
+                {group.title && !['Shifts', 'Reports', 'Settings'].includes(group.title) && (
                   <button
                     type="button"
                     onClick={() => setOpenGroups((prev) => ({ ...prev, [group.title!]: !prev[group.title!] }))}
-                    className="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition hover:bg-slate-900 hover:text-slate-200"
+                    className="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-700"
                   >
                     <span>{group.title}</span>
                     <svg
@@ -386,7 +392,7 @@ export default function Sidebar({
                     </svg>
                   </button>
                 )}
-                <ul className={`space-y-1 ${group.title && !openGroups[group.title] ? 'hidden' : ''}`}>
+                <ul className={`space-y-1 ${group.title && !['Shifts', 'Reports', 'Settings'].includes(group.title) && !openGroups[group.title] ? 'hidden' : ''}`}>
                   {group.items.map((item) => (
                     <li key={item.path}>
                       <NavLink
@@ -395,8 +401,8 @@ export default function Sidebar({
                         className={({ isActive }) =>
                           `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                             isActive
-                              ? 'bg-white text-slate-950 shadow-sm'
-                              : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                              ? 'bg-slate-100 text-slate-950 shadow-sm'
+                              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
                           }`
                         }
                       >
@@ -412,22 +418,22 @@ export default function Sidebar({
         </nav>
 
         {/* User section */}
-        <div className="border-t border-slate-800 p-4">
+        <div className="border-t border-slate-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-medium text-slate-950">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-medium text-slate-900">
               {user?.name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium text-white">
+              <p className="truncate text-sm font-medium text-slate-900">
                 {user?.name || 'User'}
               </p>
-              <p className="truncate text-xs text-slate-400">
+              <p className="truncate text-xs text-slate-500">
                 {user?.role?.name || 'User'}
               </p>
             </div>
             <button
               onClick={() => setShowLogoutConfirm(true)}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-900 hover:text-white"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               title="Logout"
             >
               <svg
