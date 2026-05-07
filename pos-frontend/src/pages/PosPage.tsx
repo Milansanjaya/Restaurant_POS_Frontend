@@ -2431,34 +2431,38 @@ const handleCreateSale = async () => {
                       </div>
 
                       {/* Qty controls */}
-                      <div className="flex items-center gap-1 justify-center w-20 shrink-0">
-                        <button
-                          onClick={() => decreaseQty(item._id)}
-                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
-                          aria-label="Decrease quantity"
-                        >
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            const next = raw === '' ? 1 : parseInt(raw, 10);
-                            setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
-                          }}
-                          className="w-14 h-11 rounded-xl border border-slate-300 text-center text-base md:w-12 md:h-9 md:rounded-lg md:text-sm"
-                          aria-label="Quantity"
-                        />
-                        <button
-                          onClick={() => increaseQty(item._id)}
-                          className="touch-manipulation h-11 w-11 rounded-xl border border-slate-300 bg-white text-base font-bold hover:bg-slate-50 active:scale-[0.97] md:h-9 md:w-9 md:rounded-lg"
-                          aria-label="Increase quantity"
-                        >
-                          +
-                        </button>
+                      <div className="flex items-center justify-center w-20 shrink-0">
+                        <div className="inline-flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white">
+                          <button
+                            onClick={() => decreaseQty(item._id)}
+                            className="touch-manipulation flex h-8 w-6 items-center justify-center text-sm font-bold text-slate-700 hover:bg-slate-50 active:bg-slate-100 md:h-7 md:w-6"
+                            aria-label="Decrease quantity"
+                            title="Decrease"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const next = raw === '' ? 1 : parseInt(raw, 10);
+                              setQty(item._id, Number.isFinite(next) ? Math.max(1, next) : 1);
+                            }}
+                            className="qty-stepper-input h-8 w-8 border-x border-slate-300 bg-white text-center text-sm text-slate-800 outline-none md:h-7 md:w-8"
+                            aria-label="Quantity"
+                          />
+                          <button
+                            onClick={() => increaseQty(item._id)}
+                            className="touch-manipulation flex h-8 w-6 items-center justify-center text-sm font-bold text-slate-700 hover:bg-slate-50 active:bg-slate-100 md:h-7 md:w-6"
+                            aria-label="Increase quantity"
+                            title="Increase"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
 
                       {/* DIS (line discount) */}

@@ -79,6 +79,18 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Qty stepper: hide number spinners for clean alignment */
+.qty-stepper-input::-webkit-outer-spin-button,
+.qty-stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qty-stepper-input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
