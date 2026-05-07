@@ -126,6 +126,7 @@ export default function PosPage() {
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
   const [closingCash, setClosingCash] = useState<string>("");
   const [processingCloseShift, setProcessingCloseShift] = useState(false);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Logout confirmation
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -903,6 +904,42 @@ export default function PosPage() {
       setProcessingCloseShift(false);
     }
   };
+
+  useEffect(() => {
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+
+    if (!currentShift || currentShift.status !== 'OPEN') {
+      return;
+    }
+
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const delay = nextMidnight.getTime() - now.getTime();
+
+    autoCloseTimerRef.current = setTimeout(async () => {
+      try {
+        const closingAmount = currentShift.expectedCash ?? currentShift.openingCash ?? 0;
+        const closedShift = await shiftsApi.close(closingAmount);
+        setCurrentShift(closedShift);
+        setShowCloseShiftModal(false);
+        setClosingCash("");
+        notify.success("Shift auto-closed at 12:00 AM");
+      } catch (error: any) {
+        notify.error(error?.response?.data?.message || "Failed to auto-close shift");
+      }
+    }, delay);
+
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+    };
+  }, [currentShift]);
 
   // Create new customer from POS
   const handleCreateCustomer = async () => {
@@ -4147,6 +4184,7 @@ const handleCreateSale = async () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Close Shift</h3>
+            <p className="mb-4 text-xs text-slate-500">Auto closes at 12:00 AM if still open.</p>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-700 mb-1">

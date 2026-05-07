@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Layout, PageHeader, PageContent } from '../components/Layout';
 import { Button, Input, Card, Table, Badge, Modal } from '../components';
 import { shiftsApi } from '../api';
@@ -22,6 +22,7 @@ export default function ShiftsPage() {
 
   const [viewShiftOpen, setViewShiftOpen] = useState(false);
   const [viewShift, setViewShift] = useState<Shift | null>(null);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load current shift on page mount
   useEffect(() => {
@@ -48,6 +49,42 @@ export default function ShiftsPage() {
   useEffect(() => {
     loadShiftHistory();
   }, [historyPage, statusFilter]);
+
+  useEffect(() => {
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+
+    if (!currentShift || currentShift.status !== 'OPEN') {
+      return;
+    }
+
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const delay = nextMidnight.getTime() - now.getTime();
+
+    autoCloseTimerRef.current = setTimeout(async () => {
+      try {
+        const closingAmount = currentShift.expectedCash ?? currentShift.openingCash ?? 0;
+        const closedShift = await shiftsApi.close(closingAmount);
+        setCurrentShift(closedShift);
+        loadShiftHistory();
+        notify.success('Shift auto-closed at 12:00 AM');
+      } catch (err: any) {
+        console.error('Failed to auto-close shift:', err);
+        notify.error(err?.response?.data?.message || 'Failed to auto-close shift');
+      }
+    }, delay);
+
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+    };
+  }, [currentShift]);
 
   const loadCurrentShift = async () => {
     try {
@@ -254,6 +291,7 @@ export default function ShiftsPage() {
 
               <div className="border-t pt-4">
                 <h3 className="mb-3 font-medium text-slate-900">Close Shift</h3>
+                  <p className="mb-3 text-xs text-slate-500">Auto closes at 12:00 AM if still open.</p>
                 <div className="space-y-4">
                   <Input
                     label="Closing Cash Amount"
