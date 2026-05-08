@@ -1828,7 +1828,7 @@ const handleCreateSale = async () => {
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          openQuickView("Returns", "/returns");
+          openQuickView("Returns", "/returns?posOnly=1");
         }}
         className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
       >
@@ -3006,7 +3006,7 @@ const handleCreateSale = async () => {
                 {/* Returns */}
                 <button
                   type="button"
-                  onClick={() => { openQuickView('Returns', '/returns'); setShowMobileMoreMenu(false); }}
+                  onClick={() => { openQuickView('Returns', '/returns?posOnly=1'); setShowMobileMoreMenu(false); }}
                   className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
                 >
                   <span className="text-2xl">↩️</span>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Layout, PageHeader, PageContent, Button, Table, Badge, getStatusBadgeVariant, Modal } from '../components';
 import { orderReturnsApi, type OrderReturn } from '../api/orderReturns.api';
 import { returnsApi } from '../api/returns.api';
@@ -1616,6 +1617,8 @@ function SupplierReturnsPanel() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReturnsPage() {
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const location = useLocation();
+  const posOnly = new URLSearchParams(location.search).get('posOnly') === '1';
 
   // VIEW_CUSTOMER_RETURNS → Customer Return tab (Cashiers have this)
   const canViewCustomerReturns = hasPermission(PERMISSIONS.VIEW_CUSTOMER_RETURNS);
@@ -1624,15 +1627,19 @@ export default function ReturnsPage() {
   const canViewSupplierReturns = hasPermission(PERMISSIONS.VIEW_SUPPLIER_RETURNS);
 
   const [mainTab, setMainTab] = useState<'customer' | 'supplier'>(
-    canViewCustomerReturns ? 'customer' : 'supplier'
+    posOnly ? 'customer' : (canViewCustomerReturns ? 'customer' : 'supplier')
   );
 
-  // Auto-switch away from supplier tab if permission is lost
+  // Auto-switch away from supplier tab if permission is lost or when opened from POS
   useEffect(() => {
+    if (posOnly && mainTab !== 'customer') {
+      setMainTab('customer');
+      return;
+    }
     if (mainTab === 'supplier' && !canViewSupplierReturns) {
       setMainTab('customer');
     }
-  }, [canViewSupplierReturns, mainTab]);
+  }, [canViewSupplierReturns, mainTab, posOnly]);
 
   return (
     <Layout>
@@ -1651,7 +1658,7 @@ export default function ReturnsPage() {
                 🧾 Customer Return
               </button>
             )}
-            {canViewSupplierReturns && (
+            {!posOnly && canViewSupplierReturns && (
               <button
                 onClick={() => setMainTab('supplier')}
                 className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${
