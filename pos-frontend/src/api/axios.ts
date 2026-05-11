@@ -1,7 +1,10 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth.store";
 
-const baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const railwayBaseURL = "https://restaurantposbackend-production.up.railway.app/api";
+const baseURL = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_URL || "http://localhost:5000/api")
+  : railwayBaseURL;
 
 const api = axios.create({
   baseURL,
