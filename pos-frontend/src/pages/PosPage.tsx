@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import notify from "../utils/notify";
 import { useAuthStore } from "../store/auth.store";
 import { useCartStore } from "../store/cart.store";
+import Sidebar from "../components/Sidebar";
 import api from "../api/axios";
 import { createSale, getSaleById, getInvoice, paySale } from "../api/sales.api";
 import { categoriesApi, configApi, inventoryApi } from "../api";
@@ -256,21 +257,32 @@ export default function PosPage() {
 
     return `
       <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Receipt - ${escapeHtml(sale.invoiceNumber)}</title>
-          <style>
-            @page { size: 80mm auto; margin: 6mm; }
-            html, body { padding: 0; margin: 0; }
-            body {
-              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-              color: #000;
-              font-size: 12px;
-              line-height: 1.25;
-            }
-            .receipt { width: 100%; }
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-slate-100 px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all hover-lift active:scale-95 shadow-sm border border-slate-200"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setIsFullscreen((value) => !value)}
+        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-slate-100 px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all hover-lift active:scale-95 shadow-sm border border-slate-200"
+      >
+        {isFullscreen ? (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m-6 6h6m3-12v3m0 0h-3m3 0l-4 4m-8 0l4-4m-4 0h3m-3 0V3m0 18v-3m0 0h3m-3 0l4-4m8 0l-4 4m4 0h-3m3 0v3" />
+          </svg>
+        ) : (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        )}
+      </button>
             .muted { color: #111; opacity: 0.85; }
             .divider { border-top: 1px dashed #000; margin: 10px 0; }
             .company { text-align: center; }
@@ -440,6 +452,7 @@ export default function PosPage() {
   const [isLgLayout, setIsLgLayout] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [mobileTab, setMobileTab] = useState<'products' | 'cart' | 'tables' | 'orders'>('products');
   const [showMobileMoreMenu, setShowMobileMoreMenu] = useState(false);
+  const [showSidebarMenu, setShowSidebarMenu] = useState(false);
 
   const kitchenDailySequenceMap = useMemo(() => buildDailyKitchenSequenceMap(kitchenOrders), [kitchenOrders]);
 
@@ -1712,6 +1725,18 @@ const handleCreateSale = async () => {
         </button>
       )}
 
+      <button
+        type="button"
+        onClick={() => setShowSidebarMenu(true)}
+        className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
+        aria-label="Open sidebar menu"
+        title="Open sidebar menu"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
       {currentShift && (
         <button
           type="button"
@@ -1748,20 +1773,22 @@ const handleCreateSale = async () => {
         )}
       </button>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigate("/dashboard");
-        }}
-        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-100 transition-all hover-lift active:scale-95 shadow-sm border border-indigo-100"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-        Dashboard
-      </button>
+      {hasPermission(PERMISSIONS.VIEW_DASHBOARD) && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate("/dashboard");
+          }}
+          className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-100 transition-all hover-lift active:scale-95 shadow-sm border border-indigo-100"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          Dashboard
+        </button>
+      )}
 
       <button
         onClick={() => setShowLogoutConfirm(true)}
@@ -1777,17 +1804,19 @@ const handleCreateSale = async () => {
 
   const quickNavContent = (
     <div className="flex w-full flex-wrap gap-2 pb-1 2xl:flex-nowrap 2xl:overflow-x-auto no-scrollbar scroll-smooth">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          openQuickView("Sale Summary", "/dashboard");
-        }}
-        className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
-      >
-        📊 Summary
-      </button>
+      {hasPermission(PERMISSIONS.VIEW_DASHBOARD) && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openQuickView("Sale Summary", "/dashboard");
+          }}
+          className="touch-manipulation shrink-0 whitespace-nowrap rounded-xl sm:rounded-2xl bg-slate-900 px-3 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-bold text-white shadow-sm sm:shadow-lg hover:bg-slate-800 transition-all active:scale-95"
+        >
+          📊 Summary
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
@@ -1875,6 +1904,20 @@ const handleCreateSale = async () => {
 
       {/* Quick Navigation Bar — desktop only (lg+), mobile now uses 'More' sheet */}
       {false && !isLgLayout && null}
+
+      {showSidebarMenu && (
+        <div className="fixed inset-0 z-[60]">
+          <button
+            type="button"
+            aria-label="Close sidebar menu"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+            onClick={() => setShowSidebarMenu(false)}
+          />
+          <div className="relative h-full w-64 max-w-[85vw] shadow-2xl">
+            <Sidebar onNavigate={() => setShowSidebarMenu(false)} />
+          </div>
+        </div>
+      )}
 
       <main className="flex flex-1 min-h-0 flex-col md:flex-row overflow-hidden">
         <aside className="hidden w-56 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col lg:min-h-0">
@@ -3059,18 +3102,19 @@ const handleCreateSale = async () => {
                   </div>
                 </button>
 
-                {/* Dashboard */}
-                <button
-                  type="button"
-                  onClick={() => { setShowMobileMoreMenu(false); navigate('/dashboard'); }}
-                  className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
-                >
-                  <span className="text-2xl">🏠</span>
-                  <div>
-                    <div className="text-sm font-extrabold text-slate-900">Dashboard</div>
-                    <div className="text-[11px] text-slate-500">Main menu</div>
-                  </div>
-                </button>
+                {hasPermission(PERMISSIONS.VIEW_DASHBOARD) && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowMobileMoreMenu(false); navigate('/dashboard'); }}
+                    className="touch-manipulation flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left hover:bg-slate-100 active:scale-[0.98] transition-all"
+                  >
+                    <span className="text-2xl">🏠</span>
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">Dashboard</div>
+                      <div className="text-[11px] text-slate-500">Main menu</div>
+                    </div>
+                  </button>
+                )}
 
               </div>
 
