@@ -31,6 +31,24 @@ export default function LoginPage() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await authApi.demoLogin();
+      
+      // Login with token and temporary user info
+      login(data.token, data.user);
+      // Demo users are always CASHIER role, go to POS
+      navigate("/pos");
+    } catch (error: any) {
+      setError(error?.response?.data?.message || "Demo login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleLogin();
@@ -89,12 +107,30 @@ export default function LoginPage() {
           >
             {loading ? "Signing in..." : "Login"}
           </button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-2 text-slate-500">or try demo</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleDemoLogin}
+            disabled={loading}
+            className="w-full rounded-xl bg-blue-600 px-4 py-3 font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+          >
+            {loading ? "Loading Demo..." : "Demo Login"}
+          </button>
         </div>
 
         <div className="mt-6 text-center text-xs text-slate-500">
           <p>Demo credentials:</p>
           <p className="mt-1">Email: admin@test.com</p>
           <p>Password: admin123</p>
+          <p className="mt-3 font-semibold text-blue-600">Or click "Demo Login" above to get isolated demo session!</p>
         </div>
       </div>
     </div>
