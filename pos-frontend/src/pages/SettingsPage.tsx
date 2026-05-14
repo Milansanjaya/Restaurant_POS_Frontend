@@ -4,6 +4,7 @@ import { configApi } from '../api';
 import notify from '../utils/notify';
 import type { TaxSetting } from '../types';
 import { formatMoneyValue } from '../money';
+import { useAuthStore } from '../store/auth.store';
 
 type Numberish = number | '';
 
@@ -15,6 +16,7 @@ const toNumber = (v: Numberish, fallback = 0) => {
 };
 
 export default function SettingsPage() {
+  const isSuperAdmin = useAuthStore((s) => s.user?.role?.name === 'SUPER_ADMIN');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -50,6 +52,7 @@ export default function SettingsPage() {
   const [businessLogo, setBusinessLogo] = useState('');
 
   const [kitchenBillPrintingEnabled, setKitchenBillPrintingEnabled] = useState(true);
+  const [enableDemoLogin, setEnableDemoLogin] = useState(false);
 
   const [pointsPerDollar, setPointsPerDollar] = useState<Numberish>(0);
   const [pointsExpiryDays, setPointsExpiryDays] = useState<Numberish>(0);
@@ -94,6 +97,12 @@ export default function SettingsPage() {
       setBusinessLogo(data.businessDetails?.logo || data.logo || '');
 
       setKitchenBillPrintingEnabled(typeof data.kitchenBillPrintingEnabled === 'boolean' ? data.kitchenBillPrintingEnabled : true);
+      const savedDemoLoginFlag = localStorage.getItem('enable_demo_login');
+      setEnableDemoLogin(
+        typeof data.enableDemoLogin === 'boolean'
+          ? data.enableDemoLogin
+          : savedDemoLoginFlag === 'true'
+      );
 
       setPointsPerDollar(typeof data.pointsPerDollar === 'number' ? data.pointsPerDollar : 0);
       setPointsExpiryDays(typeof data.pointsExpiryDays === 'number' ? data.pointsExpiryDays : 0);
@@ -219,9 +228,11 @@ export default function SettingsPage() {
         serviceChargeType,
         packagingCharge: toNumber(packagingCharge, 0),
         packagingChargeType,
+        enableDemoLogin,
       });
 
       try {
+        localStorage.setItem('enable_demo_login', String(enableDemoLogin));
         localStorage.setItem(
           'pos_print_settings',
           JSON.stringify({
@@ -803,6 +814,26 @@ export default function SettingsPage() {
                 checked={kitchenBillPrintingEnabled}
                 onChange={(e) => setKitchenBillPrintingEnabled(e.target.checked)}
                 className="h-5 w-5"
+              />
+            </label>
+          </Card>
+
+          <Card>
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Demo Access</h3>
+            <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Enable demo login</div>
+                <div className="text-sm text-slate-500">Show the demo login button on the login page.</div>
+                {!isSuperAdmin && (
+                  <div className="mt-1 text-xs font-medium text-amber-600">Only super admin can change this setting.</div>
+                )}
+              </div>
+              <input
+                type="checkbox"
+                checked={enableDemoLogin}
+                onChange={(e) => setEnableDemoLogin(e.target.checked)}
+                disabled={!isSuperAdmin}
+                className="h-5 w-5 disabled:cursor-not-allowed"
               />
             </label>
           </Card>

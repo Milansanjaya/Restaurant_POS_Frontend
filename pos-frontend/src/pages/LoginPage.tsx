@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api";
 import { useAuthStore } from "../store/auth.store";
@@ -6,11 +6,21 @@ import { useAuthStore } from "../store/auth.store";
 export default function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const [showDemoLogin, setShowDemoLogin] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      const savedFlag = localStorage.getItem("enable_demo_login");
+      setShowDemoLogin(savedFlag === "true");
+    } catch {
+      setShowDemoLogin(false);
+    }
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -108,30 +118,36 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-white px-2 text-slate-500">or try demo</span>
-            </div>
+          {showDemoLogin && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-2 text-slate-500">or try demo</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleDemoLogin}
+                disabled={loading}
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+              >
+                {loading ? "Loading Demo..." : "Demo Login"}
+              </button>
+            </>
+          )}
+        </div>
+
+        {showDemoLogin && (
+          <div className="mt-6 text-center text-xs text-slate-500">
+            <p>Demo credentials:</p>
+            <p className="mt-1">Email: admin@test.com</p>
+            <p>Password: admin123</p>
+            <p className="mt-3 font-semibold text-blue-600">Or click "Demo Login" above to get isolated demo session!</p>
           </div>
-
-          <button
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full rounded-xl bg-blue-600 px-4 py-3 font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Loading Demo..." : "Demo Login"}
-          </button>
-        </div>
-
-        <div className="mt-6 text-center text-xs text-slate-500">
-          <p>Demo credentials:</p>
-          <p className="mt-1">Email: admin@test.com</p>
-          <p>Password: admin123</p>
-          <p className="mt-3 font-semibold text-blue-600">Or click "Demo Login" above to get isolated demo session!</p>
-        </div>
+        )}
       </div>
     </div>
   );
