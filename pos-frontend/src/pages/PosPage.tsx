@@ -1725,17 +1725,19 @@ const handleCreateSale = async () => {
         </button>
       )}
 
-      <button
-        type="button"
-        onClick={() => setShowSidebarMenu(true)}
-        className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
-        aria-label="Open sidebar menu"
-        title="Open sidebar menu"
-      >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
+      {!hasPermission(PERMISSIONS.VIEW_DASHBOARD) && (
+        <button
+          type="button"
+          onClick={() => setShowSidebarMenu(true)}
+          className="touch-manipulation flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-all hover-lift active:scale-95 shadow-sm"
+          aria-label="Open sidebar menu"
+          title="Open sidebar menu"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
 
       {currentShift && (
         <button
@@ -1914,7 +1916,7 @@ const handleCreateSale = async () => {
             onClick={() => setShowSidebarMenu(false)}
           />
           <div className="relative h-full w-64 max-w-[85vw] shadow-2xl">
-            <Sidebar onNavigate={() => setShowSidebarMenu(false)} />
+            <Sidebar onNavigate={() => setShowSidebarMenu(false)} hideDashboard={!hasPermission(PERMISSIONS.VIEW_DASHBOARD)} />
           </div>
         </div>
       )}

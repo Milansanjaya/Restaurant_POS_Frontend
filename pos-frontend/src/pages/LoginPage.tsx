@@ -41,7 +41,7 @@ export default function LoginPage() {
       // Login with token and temporary user info
       login(data.token, data.user);
       // Demo users are always CASHIER role, go to POS
-      navigate("/pos");
+      navigate("/dashboard");
     } catch (error: any) {
       setError(error?.response?.data?.message || "Demo login failed");
     } finally {

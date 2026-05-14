@@ -327,8 +327,10 @@ const navGroups: NavGroup[] = [
 
 export default function Sidebar({
   onNavigate,
+  hideDashboard = false,
 }: {
   onNavigate?: () => void;
+  hideDashboard?: boolean;
 }) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -353,6 +355,9 @@ export default function Sidebar({
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        if (hideDashboard && item.path === '/dashboard') {
+          return false;
+        }
         if (item.permissions?.length) {
           return item.permissions.some((permission) => hasPermission(permission));
         }
@@ -368,19 +373,6 @@ export default function Sidebar({
         {/* Logo */}
         <div className="flex h-16 items-center border-b border-slate-200 px-6">
           <h1 className="text-lg font-bold text-slate-900">Restaurant POS</h1>
-        </div>
-
-        <div className="border-b border-slate-200 p-3">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            <span>Back</span>
-          </button>
         </div>
 
         {/* Navigation */}
