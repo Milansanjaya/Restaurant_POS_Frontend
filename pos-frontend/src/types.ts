@@ -718,7 +718,6 @@ export interface SystemConfig {
   logo?: string;
   businessDetails?: BusinessDetails;
   kitchenBillPrintingEnabled?: boolean;
-  enableDemoLogin?: boolean;
   pointsPerDollar: number;
   pointsExpiryDays: number;
   pointsMultiplierByTier?: Partial<Record<CustomerTier, number>>;
