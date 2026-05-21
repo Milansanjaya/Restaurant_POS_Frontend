@@ -94,7 +94,6 @@ export default function SettingsPage() {
       setBusinessLogo(data.businessDetails?.logo || data.logo || '');
 
       setKitchenBillPrintingEnabled(typeof data.kitchenBillPrintingEnabled === 'boolean' ? data.kitchenBillPrintingEnabled : true);
-      // no demo login flag
 
       setPointsPerDollar(typeof data.pointsPerDollar === 'number' ? data.pointsPerDollar : 0);
       setPointsExpiryDays(typeof data.pointsExpiryDays === 'number' ? data.pointsExpiryDays : 0);
@@ -222,7 +221,7 @@ export default function SettingsPage() {
         packagingChargeType,
       });
 
-        try {
+      try {
         localStorage.setItem(
           'pos_print_settings',
           JSON.stringify({
@@ -807,8 +806,6 @@ export default function SettingsPage() {
               />
             </label>
           </Card>
-
-          
 
           {/* Other Settings */}
           <Card>

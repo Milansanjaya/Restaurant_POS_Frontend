@@ -137,6 +137,11 @@ export default function PosPage() {
   const [printingReceipt, setPrintingReceipt] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printingKitchen, setPrintingKitchen] = useState(false);
+  const [showCollectCashModal, setShowCollectCashModal] = useState(false);
+  const [collectAmountDue, setCollectAmountDue] = useState<number | null>(null);
+  const [collectCashReceived, setCollectCashReceived] = useState<string>('');
+  const [collectContext, setCollectContext] = useState<'TABLE' | 'IMMEDIATE' | null>(null);
+  const [processingCollect, setProcessingCollect] = useState(false);
 
   const escapeHtml = (value: unknown) => {
     const str = String(value ?? '');
@@ -854,6 +859,8 @@ export default function PosPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [items, currentShift, selectedTableForPayment, orderType, selectedTable, showCartDrawer]);
 
+  
+
   const handleOpenShift = async () => {
     const openingCashNumber = openingCash === "" ? 0 : Number(openingCash);
 
@@ -1182,8 +1189,10 @@ export default function PosPage() {
     setSelectedTableForPayment({ ...table, currentSale: table.currentSale ?? saleId } as any);
   };
 
+
+
   // Handle payment for table
-  const handleTablePayment = async () => {
+  const completeTablePayment = async (amountDueParam: number, method: PaymentMethod) => {
     if (!selectedTableForPayment || items.length === 0) {
       notify.error("No items to pay for");
       return;
@@ -1207,15 +1216,15 @@ export default function PosPage() {
 
       if (saleId) {
         const existing = await getSaleById(saleId);
-        const cartTotal = finalTotal();
-        const amountToPay =
+        const cartTotal = amountDueParam;
+        const amountToCharge =
           (typeof existing?.balanceAmount === 'number' && existing.balanceAmount > 0)
             ? existing.balanceAmount
             : ((typeof existing?.grandTotal === 'number' && existing.grandTotal > 0)
               ? existing.grandTotal
               : cartTotal);
 
-        sale = await paySale(saleId, { amount: amountToPay, paymentMethod });
+        sale = await paySale(saleId, { amount: amountToCharge, paymentMethod: method });
       } else {
         // Fallback: Create the sale with all items and payment
         const payload: any = {
@@ -1225,7 +1234,7 @@ export default function PosPage() {
             price: item.price,
             originalPrice: item.originalPrice
           })),
-          paymentMethod: paymentMethod,
+          paymentMethod: method,
           orderType: 'DINE_IN',
           tableId: selectedTableForPayment._id,
         };
@@ -1330,6 +1339,21 @@ export default function PosPage() {
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  const handleTablePayment = async () => {
+    const amountDue = Math.max(finalTotal(), 0);
+
+    if (paymentMethod === 'CASH') {
+      setCollectAmountDue(amountDue);
+      setCollectCashReceived(String(amountDue));
+      setCollectContext('TABLE');
+      setProcessingPayment(true);
+      setShowCollectCashModal(true);
+      return;
+    }
+
+    await completeTablePayment(amountDue, paymentMethod);
   };
 
   // Get occupied tables (show tables with OCCUPIED status OR in local tableOrders)
@@ -1642,6 +1666,16 @@ const handleCreateSale = async () => {
     }
     if (getPackagingCharge() > 0) {
       payload.packagingCharge = getPackagingCharge();
+    }
+
+    const amountDue = Math.max(finalTotal(), 0);
+    if (paymentMethod === 'CASH') {
+      // Defer actual create until cashier collects cash via modal
+      setCollectAmountDue(amountDue);
+      setCollectCashReceived(String(amountDue));
+      setCollectContext('IMMEDIATE');
+      setShowCollectCashModal(true);
+      return;
     }
 
     const sale = (await createSale(payload)) as Sale;
@@ -2785,7 +2819,7 @@ const handleCreateSale = async () => {
             </div>
 
             {/* Payment Method (immediate pay + table bill pay) */}
-            {!postPaymentSale && (isPayingTable || !(orderType === 'DINE_IN' && selectedTable)) && (
+            {!postPaymentSale && (
               <div className="pt-2">
                 <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 mb-1">
                   Payment Method
@@ -2838,29 +2872,44 @@ const handleCreateSale = async () => {
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={
-                    isPayingTable
-                      ? handleTablePayment
-                      : (orderType === 'DINE_IN' && selectedTable ? handleAddToTable : handleCreateSale)
-                  }
-                  disabled={
-                    !currentShift ||
-                    items.length === 0 ||
-                    (!isPayingTable && orderType === 'DINE_IN' && !selectedTable) ||
-                    isProcessing
-                  }
-                  className="touch-manipulation w-full rounded-2xl bg-slate-900 px-8 py-4 text-base font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] flex items-center justify-center gap-2"
-                >
-                  <span>
-                    {isPayingTable
-                      ? (processingPayment ? 'Processing…' : 'Pay Bill')
-                      : (orderType === 'DINE_IN' && selectedTable
-                        ? (addingToTable ? 'Adding…' : 'Add to Table')
-                        : (creatingSale ? 'Processing…' : `Pay ${formatMoney(finalTotal())}`))}
-                  </span>
-                  {!isProcessing && <span>→</span>}
-                </button>
+                isPayingTable ? (
+                  <button
+                    onClick={handleTablePayment}
+                    disabled={!currentShift || items.length === 0 || isProcessing}
+                    className="touch-manipulation w-full rounded-2xl bg-slate-900 px-8 py-4 text-base font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] flex items-center justify-center gap-2"
+                  >
+                    <span>{processingPayment ? 'Processing…' : 'Pay Bill'}</span>
+                    {!isProcessing && <span>→</span>}
+                  </button>
+                ) : (
+                  (orderType === 'DINE_IN' && (selectedTable || selectedTableForPayment)) ? (
+                    <div className="w-full flex gap-2">
+                      <button
+                        onClick={handleAddToTable}
+                        disabled={!currentShift || items.length === 0 || addingToTable}
+                        className="flex-1 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {addingToTable ? 'Adding…' : 'Add to Table'}
+                      </button>
+                      <button
+                        onClick={handleCreateSale}
+                        disabled={!currentShift || items.length === 0 || creatingSale}
+                        className="flex-1 rounded-2xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {creatingSale ? 'Processing…' : `Pay ${formatMoney(finalTotal())}`}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleCreateSale}
+                      disabled={!currentShift || items.length === 0 || isProcessing}
+                      className="touch-manipulation w-full rounded-2xl bg-slate-900 px-8 py-4 text-base font-bold text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] flex items-center justify-center gap-2"
+                    >
+                      <span>{creatingSale ? 'Processing…' : `Pay ${formatMoney(finalTotal())}`}</span>
+                      {!isProcessing && <span>→</span>}
+                    </button>
+                  )
+                )
               )}
             </div>
           </div>
@@ -4383,6 +4432,183 @@ const handleCreateSale = async () => {
                   {processingPayment ? 'Processing...' : `Pay ${formatMoney(finalTotal())}`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Collect Cash Modal (in-app) */}
+      {showCollectCashModal && collectAmountDue !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Collect Cash</h3>
+              <button
+                onClick={() => {
+                  setShowCollectCashModal(false);
+                  setCollectCashReceived('');
+                  setCollectAmountDue(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-sm text-slate-600">Total due</div>
+              <div className="text-2xl font-bold text-slate-900 mt-2">{formatMoney(collectAmountDue)}</div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Amount given</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={collectCashReceived}
+                onChange={(e) => setCollectCashReceived(e.target.value)}
+                className="w-full rounded-lg border border-amber-400 px-4 py-3 outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const received = Number(collectCashReceived || 0);
+                    const due = collectAmountDue || 0;
+                    if (Number.isFinite(received) && received >= due) {
+                      (e.target as HTMLElement).blur();
+                    }
+                  }
+                }}
+                placeholder="Enter amount received from customer"
+              />
+            </div>
+
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm text-slate-600">Change</div>
+              <div className="font-semibold text-slate-900">{formatMoney(Math.max((Number(collectCashReceived) || 0) - (collectAmountDue || 0), 0))}</div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCollectCashModal(false);
+                  setCollectCashReceived('');
+                  setCollectAmountDue(null);
+                  if (collectContext === 'TABLE') {
+                    setProcessingPayment(false);
+                  } else if (collectContext === 'IMMEDIATE') {
+                    setCreatingSale(false);
+                    creatingSaleRef.current = false;
+                  }
+                  setCollectContext(null);
+                }}
+                disabled={processingCollect}
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const received = Number(collectCashReceived || 0);
+                  const due = collectAmountDue || 0;
+                  if (!Number.isFinite(received) || received < due) {
+                    notify.error('Enter an amount equal to or greater than total due');
+                    return;
+                  }
+                  setProcessingCollect(true);
+
+                  if (collectContext === 'TABLE') {
+                    await completeTablePayment(due, 'CASH');
+                  } else if (collectContext === 'IMMEDIATE') {
+                    try {
+                      const payload: any = {
+                        items: items.map((item) => ({
+                          product: item._id,
+                          quantity: item.quantity,
+                          price: item.price,
+                          originalPrice: item.originalPrice
+                        })),
+                        paymentMethod: 'CASH',
+                        orderType,
+                      };
+
+                      if (selectedCustomerId) payload.customerId = selectedCustomerId;
+
+                      const discountAmount = Number(discountValue);
+                      if (discountType && Number.isFinite(discountAmount) && discountAmount > 0) {
+                        payload.discountType = discountType;
+                        payload.discountValue = discountAmount;
+                      }
+
+                      if (couponCode.trim()) payload.couponCode = couponCode.trim();
+                      if (getServiceCharge() > 0) payload.serviceCharge = getServiceCharge();
+                      if (getPackagingCharge() > 0) payload.packagingCharge = getPackagingCharge();
+
+                      const sale = (await createSale(payload)) as Sale;
+                      setPostPaymentSale(sale);
+                      setShowPrintModal(true);
+
+                      if (selectedCustomerId && usePoints && pointsToUse > 0) {
+                        try {
+                          await loyaltyApi.redeemPoints({
+                            customer_id: selectedCustomerId,
+                            points: pointsToUse,
+                            sale_id: sale._id,
+                          });
+                          notify.success(`Redeemed ${pointsToUse} loyalty points! (${formatMoney(calculatePointsDiscount())} off)`, { duration: 3000 });
+                        } catch (redeemError: any) {
+                          console.log("Points redemption failed:", redeemError);
+                        }
+                      }
+
+                      if (selectedCustomerId && sale.grandTotal > 0 && !usePoints) {
+                        try {
+                          const tier = customers.find((c) => c._id === selectedCustomerId)?.tier as 'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM' | undefined;
+                          const multiplier = tier ? (pointsMultiplierByTier[tier] ?? 1) : 1;
+                          const adjustedAmount = sale.grandTotal * multiplier;
+                          await loyaltyApi.earnPoints(selectedCustomerId, adjustedAmount, sale._id);
+                          const pointsEarned = Math.floor(adjustedAmount / 10);
+                          if (pointsEarned > 0) notify.success(`Customer earned ${pointsEarned} loyalty points!`, { duration: 3000 });
+                        } catch (loyaltyError) {
+                          console.log("Loyalty points earning failed:", loyaltyError);
+                        }
+                      }
+
+                        // Clear cart and reset UI state similar to handleCreateSale
+                        clearCart();
+                        setDiscountType('');
+                        setDiscountValue('');
+                        setCouponCode('');
+                        setCouponValidation(null);
+                        setSelectedCustomerId('');
+                        setSelectedCustomerLoyalty(null);
+                        setUsePoints(false);
+                        setPointsToUse(0);
+                        // ensure creatingSale flag cleared
+                        setCreatingSale(false);
+                        creatingSaleRef.current = false;
+                      } catch (err: any) {
+                        notify.error(err?.response?.data?.message || 'Failed to create sale');
+                      }
+                    }
+
+                    // After operation completes, reset modal and processing state
+                    setProcessingCollect(false);
+                    setShowCollectCashModal(false);
+                    setCollectCashReceived('');
+                    setCollectAmountDue(null);
+                    if (collectContext === 'TABLE') {
+                      setProcessingPayment(false);
+                    } else if (collectContext === 'IMMEDIATE') {
+                      // creatingSale cleared above
+                    }
+                    setCollectContext(null);
+                }}
+                disabled={processingCollect || !(Number.isFinite(Number(collectCashReceived || 0)) && Number(collectCashReceived || 0) >= (collectAmountDue || 0))}
+                className="flex-1 rounded-xl bg-slate-900 px-4 py-3 font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingCollect ? 'Processing...' : 'Confirm'}
+              </button>
             </div>
           </div>
         </div>
