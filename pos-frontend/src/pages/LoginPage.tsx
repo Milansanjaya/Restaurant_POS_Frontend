@@ -31,24 +31,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await authApi.demoLogin();
-      
-      // Login with token and temporary user info
-      login(data.token, data.user);
-      // Demo users are always CASHIER role, go to POS
-      navigate("/dashboard");
-    } catch (error: any) {
-      setError(error?.response?.data?.message || "Demo login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleLogin();
