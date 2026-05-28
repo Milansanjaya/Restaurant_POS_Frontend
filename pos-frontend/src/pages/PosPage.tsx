@@ -34,8 +34,7 @@ type Product = {
 };
 
 type PaymentMethod = 'CASH' | 'CARD' | 'BANK' | 'UPI' | 'WALLET' | 'SPLIT';
-type ManualDiscountType = 'PERCENTAGE' | 'FLAT' | '';  // Changed FIXED to FLAT to match backend
-
+type ManualDiscountType = 'PERCENTAGE' | 'FLAT' | '';
 type CustomerOption = {
   _id: string;
   name: string;
@@ -43,8 +42,9 @@ type CustomerOption = {
   tier: string;
   loyaltyPoints?: number;
 };
-
+  
 export default function PosPage() {
+
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
@@ -80,10 +80,6 @@ export default function PosPage() {
   } as Record<'BASIC' | 'SILVER' | 'GOLD' | 'PLATINUM', number>);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Coupon validation
-  const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null);
-  const [validatingCoupon, setValidatingCoupon] = useState(false);
-  
   // Customer selection & Loyalty
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -98,6 +94,10 @@ export default function PosPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [pointsToUse, setPointsToUse] = useState<number>(0);
   
+  // Coupon validation
+  const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   // Table orders (tracking items for occupied tables before creating sale)
   type TableOrder = {
     tableId: string;
@@ -260,115 +260,99 @@ export default function PosPage() {
       ? footerLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
       : '<div>Thank you!</div><div class="muted">Please come again</div>';
 
-    return `
-      <!DOCTYPE html>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-slate-100 px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all hover-lift active:scale-95 shadow-sm border border-slate-200"
-      >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back
-      </button>
+    return `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Receipt</title>
+          <style>
+            @page { size: 80mm auto; margin: 6mm; }
+            html, body { margin: 0; padding: 0; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; color: #111; }
+            .container { width: 320px; max-width: 320px; margin: 0 auto; }
+            .company { text-align: center; padding-top: 6px; }
+            .logo img { max-width: 120px; max-height: 60px; object-fit: contain; margin: 0 auto; }
+            .company-name { font-weight: 900; font-size: 18px; letter-spacing: 0.6px; margin-top: 6px; }
+            .company-sub { font-size: 11px; opacity: 0.7; margin-top: 4px; }
 
-      <button
-        type="button"
-        onClick={() => setIsFullscreen((value) => !value)}
-        className="touch-manipulation hidden sm:flex items-center gap-2 rounded-2xl bg-slate-100 px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all hover-lift active:scale-95 shadow-sm border border-slate-200"
-      >
-        {isFullscreen ? (
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m-6 6h6m3-12v3m0 0h-3m3 0l-4 4m-8 0l4-4m-4 0h3m-3 0V3m0 18v-3m0 0h3m-3 0l4-4m8 0l-4 4m4 0h-3m3 0v3" />
-          </svg>
-        ) : (
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        )}
-      </button>
-            .muted { color: #111; opacity: 0.85; }
-            .divider { border-top: 1px dashed #000; margin: 10px 0; }
-            .company { text-align: center; }
-            .header { text-align: center; font-weight: 900; letter-spacing: 0.4px; margin-top: 6px; }
-            .company-name { font-weight: 800; font-size: 14px; margin-top: 4px; }
-            .logo img { max-width: 160px; max-height: 60px; object-fit: contain; }
-            .order-block { border: 2px solid #000; padding: 10px 8px; margin: 10px 0; text-align: center; }
-            .order-label { font-weight: 800; letter-spacing: 0.5px; }
-            .order-number { font-size: 28px; font-weight: 900; margin-top: 4px; }
-            .meta { margin-top: 8px; }
-            .meta .row { display: flex; justify-content: space-between; gap: 8px; }
-            .meta .row span:last-child { text-align: right; }
-            .items-header { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; font-weight: 800; }
-            .item { margin-top: 8px; }
-            .item-top { display: grid; grid-template-columns: 1fr 44px 72px; gap: 8px; }
-            .item-top .qty, .item-top .amt { text-align: right; }
-            .item-sub { font-size: 11px; opacity: 0.85; margin-top: 2px; }
-            .totals { margin-top: 8px; }
-            .totals .row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-            .total-due { border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-weight: 900; font-size: 14px; }
-            .footer { margin-top: 12px; text-align: center; }
+            .order-box { background: #000; color: #fff; padding: 14px 10px; margin: 12px 0; text-align: center; }
+            .order-box .label { font-size: 11px; opacity: 0.8; letter-spacing: 1px; }
+            .order-box .number { font-size: 34px; font-weight: 900; margin-top: 6px; }
+
+            .meta { display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; }
+            .divider { height: 1px; background: #e6e6e6; margin: 10px 0; }
+
+            .items { margin-top: 8px; }
+            .item { display: flex; justify-content: space-between; align-items: flex-start; padding: 6px 0; }
+            .item .left { width: 65%; }
+            .item .name { font-weight: 700; }
+            .item .meta { font-size: 11px; opacity: 0.75; margin-top: 4px; }
+            .item .price { width: 35%; text-align: right; font-weight: 700; }
+
+            .totals { margin-top: 10px; }
+            .totals .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+            .totals .total { font-size: 20px; font-weight: 900; margin-top: 6px; }
+
+            .footer { text-align: center; font-size: 12px; opacity: 0.8; margin-top: 12px; }
+
+            /* Small print adjustments */
+            .muted { opacity: 0.75; font-size: 12px; }
           </style>
         </head>
         <body>
-          <div class="receipt">
-            ${companyHtml}
-            ${headerHtml}
-            <div class="divider"></div>
-            <div class="order-block">
-              <div class="order-label">ORDER NUMBER</div>
-              <div class="order-number">${escapeHtml(orderNumber || sale.invoiceNumber)}</div>
+          <div class="container">
+            <div class="company">
+              ${companyHtml}
+              ${headerHtml}
             </div>
+
+            <div class="order-box">
+              <div class="label">ORDER NUMBER</div>
+              <div class="number">${escapeHtml(orderNumber || sale.invoiceNumber)}</div>
+            </div>
+
             <div class="meta">
-              <div class="row"><span>Date</span><span>${escapeHtml(new Date(sale.createdAt).toLocaleString())}</span></div>
-              <div class="row"><span>Invoice</span><span>${escapeHtml(sale.invoiceNumber)}</span></div>
-              <div class="row"><span>Order Type</span><span>${escapeHtml(orderTypeLabel)}</span></div>
-              ${customerHtml}
-              ${tableHtml}
-            </div>
-            <div class="divider"></div>
-            <div class="items">
-              <div class="items-header">
-                <div>ITEM</div>
-                <div style="text-align:right;">QTY</div>
-                <div style="text-align:right;">AMT</div>
+              <div class="left-meta">
+                <div class="muted">${escapeHtml(new Date(sale.createdAt).toLocaleString())}</div>
+                <div class="muted">Invoice: ${escapeHtml(sale.invoiceNumber)}</div>
+                ${customerHtml}
               </div>
+              <div class="right-meta">
+                <div class="muted">${escapeHtml(orderTypeLabel)}</div>
+                ${tableHtml}
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="items">
               ${itemsHtml}
             </div>
+
             <div class="divider"></div>
+
             <div class="totals">
-              <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(sale.subtotal))}</span></div>
-              ${(sale.taxTotal || 0) > 0 ? `<div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(sale.taxTotal || 0))}</span></div>` : ''}
-              ${(sale.serviceCharge || 0) > 0 ? `<div class="row"><span>Service Charge</span><span>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</span></div>` : ''}
-              ${showPackagingCharge ? `<div class="row"><span>Packaging Charge</span><span>${escapeHtml(formatMoney(packagingChargeValue))}</span></div>` : ''}
-              ${sale.discount > 0 ? `<div class="row"><span>Discount</span><span>- ${escapeHtml(formatMoney(sale.discount))}</span></div>` : ''}
-              <div class="row total-due"><span>TOTAL DUE</span><span>${escapeHtml(formatMoney(sale.grandTotal))}</span></div>
-              <div class="row"><span>Paid</span><span>${escapeHtml(formatMoney(sale.paidAmount))}</span></div>
-              ${sale.balanceAmount > 0 ? `<div class="row"><span>Balance</span><span>${escapeHtml(formatMoney(sale.balanceAmount))}</span></div>` : ''}
+              <div class="row"><div>Subtotal</div><div>${escapeHtml(formatMoney(sale.subtotal))}</div></div>
+              ${(sale.taxTotal || 0) > 0 ? `<div class="row"><div>Tax</div><div>${escapeHtml(formatMoney(sale.taxTotal || 0))}</div></div>` : ''}
+              ${(sale.serviceCharge || 0) > 0 ? `<div class="row"><div>Service</div><div>${escapeHtml(formatMoney(sale.serviceCharge || 0))}</div></div>` : ''}
+              ${showPackagingCharge ? `<div class="row"><div>Packaging</div><div>${escapeHtml(formatMoney(packagingChargeValue))}</div></div>` : ''}
+              ${sale.discount > 0 ? `<div class="row"><div>Discount</div><div>- ${escapeHtml(formatMoney(sale.discount))}</div></div>` : ''}
+              <div class="row total"><div>TOTAL</div><div>${escapeHtml(formatMoney(sale.grandTotal))}</div></div>
+              <div class="row"><div>Paid</div><div>${escapeHtml(formatMoney(sale.paidAmount))}</div></div>
+              ${sale.balanceAmount > 0 ? `<div class="row"><div>Balance</div><div>${escapeHtml(formatMoney(sale.balanceAmount))}</div></div>` : ''}
             </div>
-            <div class="divider"></div>
+
             <div class="footer">${footerHtml}</div>
           </div>
         </body>
-      </html>
-    `;
+      </html>`;
   };
 
   const handlePrintReceipt = async () => {
     if (!postPaymentSale || printingReceipt) return;
 
     setPrintingReceipt(true);
-    const printWindow = window.open('', '_blank', 'width=420,height=680');
-    if (!printWindow) {
-      notify.error('Popup blocked. Please allow popups to print.');
-      setPrintingReceipt(false);
-      return;
-    }
-
-    printWindow.document.write(`<!doctype html><html><head><title>Loading...</title></head><body>Loading...</body></html>`);
-    printWindow.document.close();
-
     try {
       const [invoice, config] = await Promise.all([
         getInvoice(postPaymentSale._id).catch(() => null as Invoice | null),
@@ -406,21 +390,54 @@ export default function PosPage() {
       const footerText = invoiceFormat?.footer || '';
 
       const html = generateThermalReceiptHtml((invoice?.sale as Sale) ?? postPaymentSale, company || undefined, headerText, footerText);
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.onafterprint = () => {
-        try { printWindow.close(); } catch { /* ignore */ }
-      };
-      printWindow.print();
+
+      await printHtmlInIframe(html);
     } catch (error) {
       console.error('Print receipt failed:', error);
       notify.error('Failed to print receipt');
-      try { printWindow.close(); } catch { /* ignore */ }
     } finally {
       setPrintingReceipt(false);
     }
+  };
+
+  const printHtmlInIframe = async (html: string) => {
+    return new Promise<void>((resolve) => {
+      try {
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.opacity = '0';
+        iframe.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentWindow?.document;
+        if (!doc || !iframe.contentWindow) {
+          try { document.body.removeChild(iframe); } catch { /* ignore */ }
+          notify.error('Unable to start printing');
+          resolve();
+          return;
+        }
+
+        doc.open();
+        doc.write(html);
+        doc.close();
+
+        iframe.contentWindow.focus();
+        try { iframe.contentWindow.print(); } catch (e) { /* ignore */ }
+
+        window.setTimeout(() => {
+          try { document.body.removeChild(iframe); } catch { /* ignore */ }
+          resolve();
+        }, 1000);
+      } catch (e) {
+        console.error('printHtmlInIframe failed', e);
+        resolve();
+      }
+    });
   };
 
   // Touch/quick actions
@@ -837,7 +854,7 @@ export default function PosPage() {
         case 'F3':
           e.preventDefault();
           if (!isTyping) {
-            setDiscountType(prev => prev ? '' : 'PERCENTAGE');
+            setDiscountType((prev: ManualDiscountType) => prev ? '' : 'PERCENTAGE');
           }
           break;
         case 'F4':
@@ -4784,6 +4801,94 @@ const handleCreateSale = async () => {
 
             {/* Print Options */}
             <div className="p-6 space-y-3">
+              {/* Print Both */}
+              <button
+                type="button"
+                disabled={printingReceipt || printingKitchen}
+                onClick={async () => {
+                  if (!postPaymentSale) return;
+                  setPrintingReceipt(true);
+                  setPrintingKitchen(true);
+                  try {
+                    const [invoice, config] = await Promise.all([
+                      getInvoice(postPaymentSale._id).catch(() => null as Invoice | null),
+                      configApi.get().catch(() => null),
+                    ]);
+
+                    let localPrintSettings: any = null;
+                    try {
+                      const raw = localStorage.getItem('pos_print_settings');
+                      localPrintSettings = raw ? JSON.parse(raw) : null;
+                    } catch {
+                      localPrintSettings = null;
+                    }
+
+                    const businessDetails = config?.businessDetails || localPrintSettings?.businessDetails;
+                    const invoiceFormat = config?.invoiceFormat || localPrintSettings?.invoiceFormat;
+
+                    const configCompany = businessDetails
+                      ? {
+                          name: businessDetails.name || '',
+                          address: businessDetails.address || '',
+                          phone: businessDetails.phone || '',
+                          email: businessDetails.email || '',
+                          logo:
+                            businessDetails.logo ||
+                            (businessDetails as any).logoUrl ||
+                            config?.logo ||
+                            localPrintSettings?.logo ||
+                            undefined,
+                        }
+                      : null;
+
+                    const company = configCompany || invoice?.company;
+                    const headerText = invoiceFormat?.header || '';
+                    const footerText = invoiceFormat?.footer || '';
+
+                    const html = generateThermalReceiptHtml((invoice?.sale as Sale) ?? postPaymentSale, company || undefined, headerText, footerText);
+
+                    await printHtmlInIframe(html);
+
+                    const kitchenOrder: any = {
+                      _id: postPaymentSale._id,
+                      orderNumber: deriveOrderNumber(postPaymentSale.invoiceNumber),
+                      sale: postPaymentSale,
+                      status: 'READY',
+                      createdAt: postPaymentSale.createdAt,
+                      tableNumber: typeof postPaymentSale.table === 'object'
+                        ? (postPaymentSale.table as any)?.tableNumber
+                        : undefined,
+                      section: typeof postPaymentSale.table === 'object'
+                        ? (postPaymentSale.table as any)?.section
+                        : undefined,
+                      items: (postPaymentSale.items || []).map((it: any) => ({
+                        name: typeof it.product === 'object' ? it.product?.name : 'Item',
+                        quantity: it.quantity,
+                      })),
+                    };
+
+                    await handlePrintKitchenOrder(kitchenOrder);
+                  } catch (e) {
+                    console.error('Print both failed', e);
+                    notify.error('Failed to print both receipts');
+                  } finally {
+                    setPrintingReceipt(false);
+                    setPrintingKitchen(false);
+                  }
+                }}
+                className="touch-manipulation w-full flex items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white px-5 py-4 text-left hover:border-slate-900 hover:bg-slate-50 transition-all active:scale-[0.99] disabled:opacity-60"
+              >
+                <span className="text-3xl shrink-0">🖨️</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-extrabold text-slate-900">
+                    {printingReceipt || printingKitchen ? 'Printing…' : 'Print Both'}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">Customer + Kitchen copies</div>
+                </div>
+                <svg className="ml-auto h-5 w-5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </button>
               {/* Customer Bill */}
               <button
                 type="button"
